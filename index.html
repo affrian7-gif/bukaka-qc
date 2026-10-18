@@ -32807,7 +32807,12 @@ function openDoc(o){
     frame.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;border:none;background:#fff;z-index:1;pointer-events:auto;';
     wrap.insertBefore(frame, wrap.firstChild);
   }
-  frame.src = embedUrl;
+  // Tambahkan parameter agar GDrive viewer tampil bersih full layar
+  let fullUrl = embedUrl;
+  if(!fullUrl.includes('rm=minimal')) {
+    fullUrl += (fullUrl.includes('?') ? '&' : '?') + 'rm=minimal&embedded=true';
+  }
+  frame.src = fullUrl;
   
   W = window.innerWidth > 1200 ? window.innerWidth * 0.85 : 1200;
   H = window.innerHeight > 900 ? window.innerHeight * 0.85 : 1600;
