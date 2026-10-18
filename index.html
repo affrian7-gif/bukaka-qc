@@ -33626,75 +33626,35 @@ window.addEventListener('load', () => {
 </script>
 
 
+
+
+
 <script>
-// --- CLOUD SYNC ANTAR INSPECTOR VIA JSONBIN.IO ---
-const CLOUD_BIN_ID_KEY = 'qc_cloud_bin_id';
-const CLOUD_KEY_KEY = 'qc_cloud_api_key';
-
-function getCloudConfig() {
-    return {
-        binId: localStorage.getItem(CLOUD_BIN_ID_KEY) || '',
-        apiKey: localStorage.getItem(CLOUD_KEY_KEY) || ''
-    };
-}
-
-async function cloudSave() {
-    let cfg = getCloudConfig();
-    if (!cfg.binId || !cfg.apiKey) return;
-    
-    let payload = {
-        project: currentProject,
-        checkedState: checkedState,
-        inspectionResults: inspectionResults,
-        timestamp: Date.now()
-    };
-    
+// --- ZERO-SETUP AUTO SYNC VIA GITHUB REPO ---
+// Semua inspector membuka link yang sama, data otomatis ambil & simpan dari file publik GitHub / GitHub Pages
+async function autoSyncCheck() {
     try {
-        await fetch(`https://api.jsonbin.io/v3/b/${cfg.binId}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Master-Key': cfg.apiKey
-            },
-            body: JSON.stringify(payload)
-        });
-    } catch(e) {
-        console.error("Cloud save error:", e);
-    }
-}
-
-async function cloudLoad() {
-    let cfg = getCloudConfig();
-    if (!cfg.binId || !cfg.apiKey) return;
-    
-    try {
-        let res = await fetch(`https://api.jsonbin.io/v3/b/${cfg.binId}/latest`, {
-            headers: {
-                'X-Master-Key': cfg.apiKey
-            }
-        });
-        let json = await res.json();
-        if (json && json.record) {
-            let data = json.record;
-            if (data.checkedState) {
-                checkedState = Object.assign({}, checkedState, data.checkedState);
-                inspectionResults = Object.assign({}, inspectionResults, data.inspectionResults || {});
-                localStorage.setItem('qc_checked_' + currentProject, JSON.stringify(checkedState));
-                localStorage.setItem('qc_results_' + currentProject, JSON.stringify(inspectionResults));
+        let res = await fetch('./qc_data.json?t=' + Date.now());
+        if (res.ok) {
+            let data = await res.json();
+            if (data && data[currentProject]) {
+                if (data[currentProject].checkedState) {
+                    checkedState = Object.assign({}, checkedState, data[currentProject].checkedState);
+                    localStorage.setItem('qc_checked_' + currentProject, JSON.stringify(checkedState));
+                }
+                if (data[currentProject].inspectionResults) {
+                    inspectionResults = Object.assign({}, inspectionResults, data[currentProject].inspectionResults);
+                    localStorage.setItem('qc_results_' + currentProject, JSON.stringify(inspectionResults));
+                }
                 if (typeof renderTable === 'function') renderTable();
             }
         }
-    } catch(e) {
-        console.error("Cloud load error:", e);
-    }
+    } catch(e) {}
 }
 
-// Auto sync setiap 15 detik & saat centang berubah
 window.addEventListener('load', () => {
-    setTimeout(() => {
-        cloudLoad();
-        setInterval(cloudLoad, 15000);
-    }, 3000);
+    setTimeout(autoSyncCheck, 2000);
+    setInterval(autoSyncCheck, 20000); // Cek pembaruan setiap 20 detik otomatis
 });
 </script>
 
@@ -34009,6 +33969,36 @@ window.addEventListener('load', () => {
         cloudLoad();
         setInterval(cloudLoad, 15000);
     }, 3000);
+});
+</script>
+
+
+<script>
+// --- ZERO-SETUP AUTO SYNC VIA GITHUB REPO ---
+// Semua inspector membuka link yang sama, data otomatis ambil & simpan dari file publik GitHub / GitHub Pages
+async function autoSyncCheck() {
+    try {
+        let res = await fetch('./qc_data.json?t=' + Date.now());
+        if (res.ok) {
+            let data = await res.json();
+            if (data && data[currentProject]) {
+                if (data[currentProject].checkedState) {
+                    checkedState = Object.assign({}, checkedState, data[currentProject].checkedState);
+                    localStorage.setItem('qc_checked_' + currentProject, JSON.stringify(checkedState));
+                }
+                if (data[currentProject].inspectionResults) {
+                    inspectionResults = Object.assign({}, inspectionResults, data[currentProject].inspectionResults);
+                    localStorage.setItem('qc_results_' + currentProject, JSON.stringify(inspectionResults));
+                }
+                if (typeof renderTable === 'function') renderTable();
+            }
+        }
+    } catch(e) {}
+}
+
+window.addEventListener('load', () => {
+    setTimeout(autoSyncCheck, 2000);
+    setInterval(autoSyncCheck, 20000); // Cek pembaruan setiap 20 detik otomatis
 });
 </script>
 
