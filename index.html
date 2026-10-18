@@ -32756,7 +32756,17 @@ function setTool(t){
   syncFrame();
 }
 /* Frame Google Drive: aktif (bisa scroll/zoom) hanya saat tool Geser; tool lain menggambar di atasnya */
-function syncFrame(){const f=document.getElementById('gdriveFrame');if(!f)return;const nav=(tool==='pan');f.style.pointerEvents=nav?'auto':'none';stage.style.touchAction=nav?'auto':'none';}
+function syncFrame(){
+  const f=document.getElementById('gdriveFrame');
+  if(f){
+    // Jika tool adalah pan (geser), iframe aktif agar bisa scroll/geser PDF. Jika tool coret/text, iframe pointer-events mati agar coretan langsung masuk ke canvas.
+    f.style.pointerEvents = (tool === 'pan') ? 'auto' : 'none';
+  }
+  const cvs = document.getElementById('drawCanvas');
+  if(cvs){
+    cvs.style.pointerEvents = (tool === 'pan') ? 'none' : 'auto';
+  }
+}
 /* Ukuran kanvas = ukuran layar viewer (full screen, tanpa area hitam sisa) */
 function sizeToStage(){const w=Math.max(320,stage.clientWidth),h=Math.max(320,stage.clientHeight);W=w;H=h;wrap.style.width=W+'px';wrap.style.height=H+'px';[cv,live].forEach(c=>{c.width=W;c.height=H;c.style.width=W+'px';c.style.height=H+'px';c.style.zIndex='2';});}
 
