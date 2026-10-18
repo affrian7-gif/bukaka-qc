@@ -32530,42 +32530,7 @@ async function getBytes(cid,link,say){
       // lanjut ke endpoint berikutnya
     }
   }
-  // Fallback pamungkas: jika fetch PDF mentah gagal karena pembatasan Google Drive, 
-  // gunakan render gambar beresolusi tinggi (lh3.googleusercontent.com) yang dijamin 100% langsung tembus tanpa set API Key!
-  try{
-    say('Memuat drawing beresolusi tinggi…');
-    const imgUrl = id ? `https://lh3.googleusercontent.com/d/${id}=w2400` : link;
-    const r = await fetch('https://corsproxy.io/?' + encodeURIComponent(imgUrl));
-    if(r.ok) {
-      const blob = await r.blob();
-      // Konversi gambar ke PDF menggunakan jsPDF otomatis di background
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = async function() {
-          const { jsPDF } = window.jspdf;
-          const img = new Image();
-          img.src = reader.result;
-          img.onload = function() {
-            const pdf = new jsPDF({
-              orientation: img.width > img.height ? 'landscape' : 'portrait',
-              unit: 'px',
-              format: [img.width, img.height]
-            });
-            pdf.addImage(img, 'JPEG', 0, 0, img.width, img.height);
-            const pdfArray = pdf.output('arraybuffer');
-            kvSet('pdf_'+cid, pdfArray);
-            resolve(pdfArray);
-          }
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-    }
-  }catch(err){
-    errs.push('Fallback Gambar: '+err.message);
-  }
-
-  const er=new Error('PDF belum bisa diambil otomatis');er.errs=errs;throw er;
+    const er=new Error('PDF belum bisa diambil otomatis');er.errs=errs;throw er;
 }
 
 /* ---------- pesan / panel sumber ---------- */
