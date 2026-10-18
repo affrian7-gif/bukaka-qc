@@ -32851,9 +32851,7 @@ async function saveAsPDF(){
 }
 
 function save(){
-  // Tampilkan pilihan dialog Save As (PNG atau PDF)
-  const choice = confirm("Pilih format simpan:\n[OK] = Simpan sebagai PNG (Anti-Blur)\n[Cancel] = Simpan sebagai PDF (Anti-Blur)");
-  if(choice) { saveAsPNG(); } else { saveAsPDF(); }
+  saveAsPDF();
 }
 
 /* ---------- API global ---------- */
