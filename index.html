@@ -32238,6 +32238,17 @@ function renderTable() {
 #canvasWrapper{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform;background:#fff;box-shadow:0 18px 70px #000c}
 #canvasWrapper img{display:block;max-width:none;pointer-events:none;-webkit-user-drag:none}
 #canvasWrapper canvas{position:absolute;left:0;top:0;pointer-events:none}
+#canvasWrapper iframe {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #fff;
+  z-index: 1;
+  pointer-events: auto;
+}
 #iqBrush{position:absolute;display:none;pointer-events:none;z-index:5;border:1.5px solid #fff;border-radius:50%;box-shadow:0 0 0 1px #000b,inset 0 0 0 1px #0007;transform:translate(-50%,-50%)}
 #iqBrush:after{content:"";position:absolute;left:50%;top:50%;width:3px;height:3px;margin:-1.5px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px #000a}
 #iqEditor{position:absolute;display:none;z-index:6;resize:none;overflow:hidden;outline:none;box-sizing:border-box;white-space:pre;border-radius:6px;border:2px solid #ff2d2d;font-family:"Segoe UI",Arial,sans-serif;font-weight:600;color:#fff;background:rgba(15,23,42,.97);line-height:1.25;box-shadow:0 8px 30px #000a}
