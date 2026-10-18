@@ -32801,8 +32801,9 @@ function openDoc(o){
   if(frame) frame.remove(); // Hapus iframe agar pakai gambar langsung yang full & responsif
 
   img.onload = function(){
-    W = img.naturalWidth || img.width || 1200;
-    H = img.naturalHeight || img.height || 1700;
+    // Set ukuran kanvas agar selayar penuh dan tajam
+    W = window.innerWidth > 1400 ? window.innerWidth : 1600;
+    H = window.innerHeight > 1000 ? window.innerHeight : 2200;
     img.style.width = W+'px'; img.style.height = H+'px';
     wrap.style.width = W+'px'; wrap.style.height = H+'px';
     [cv, live].forEach(c=>{ c.width = W; c.height = H; c.style.width = W+'px'; c.style.height = H+'px'; c.style.zIndex='2'; });
