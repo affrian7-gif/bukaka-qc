@@ -32791,35 +32791,41 @@ function openDoc(o){
   curKey=o.key;curTitle=o.title;curLink=o.rawLink||o.src;
   $('inspTitle').textContent=o.title;$('inspKeyBadge').textContent=o.key;
   
-  // Gunakan gambar beresolusi tinggi langsung jika link gdrive agar full layar dan anti-blur sempurna
-  let imgSrc = o.rawLink;
-  const m = imgSrc.match(/\/d\/([a-zA-Z0-9_-]+)/);
-  if(m) { imgSrc = `https://lh3.googleusercontent.com/d/${m[1]}=w2400`; }
+  let embedUrl = o.rawLink;
+  const m = o.rawLink.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if(m) { embedUrl = `https://drive.google.com/file/d/${m[1]}/preview`; }
 
   const wrap = document.getElementById('canvasWrapper');
-  let frame = document.getElementById('gdriveFrame');
-  if(frame) frame.remove(); // Hapus iframe agar pakai gambar langsung yang full & responsif
+  
+  // Sembunyikan img canvas biasa jika ada
+  img.style.display = 'none';
 
-  img.onload = function(){
-    // Set ukuran kanvas agar selayar penuh dan tajam
-    W = window.innerWidth > 1400 ? window.innerWidth : 1600;
-    H = window.innerHeight > 1000 ? window.innerHeight : 2200;
-    img.style.width = W+'px'; img.style.height = H+'px';
-    wrap.style.width = W+'px'; wrap.style.height = H+'px';
-    [cv, live].forEach(c=>{ c.width = W; c.height = H; c.style.width = W+'px'; c.style.height = H+'px'; c.style.zIndex='2'; });
-    items=[]; undoS=[]; redoS=[]; sel=null; mode=null; cur=null; pointers.clear(); cancelEditor();
-    ctx.clearRect(0,0,W,H); lctx.clearRect(0,0,W,H); setDirty(false); updUndo();
-    V.rot = V.rotT = 0; V.fitted = true; cancelAnim(); zt = null;
-    cfs = clamp(Math.round(W/60), 10, 160); $('iqFs').value = cfs; $('iqFsLbl').textContent = cfs;
-    modal.style.display = 'flex'; modal.setAttribute('aria-hidden', 'false'); document.body.style.overflow = 'hidden';
-    requestAnimationFrame(()=>{ const f = fitParams(0); V.s = f.s; V.tx = f.tx; V.ty = f.ty; applyNow(); });
-  };
-  img.onerror = function(){
-    if(!isOpen()) alert('Gagal memuat drawing. Pastikan file Drive dibagikan "Anyone with the link".');
-  };
-  img.crossOrigin = 'anonymous';
-  img.src = imgSrc;
-}
+  let frame = document.getElementById('gdriveFrame');
+  if(!frame){
+    frame = document.createElement('iframe');
+    frame.id = 'gdriveFrame';
+    frame.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;border:none;background:#fff;z-index:1;pointer-events:auto;';
+    wrap.insertBefore(frame, wrap.firstChild);
+  }
+  frame.src = embedUrl;
+  
+  W = window.innerWidth > 1200 ? window.innerWidth * 0.85 : 1200;
+  H = window.innerHeight > 900 ? window.innerHeight * 0.85 : 1600;
+  wrap.style.width = W+'px'; wrap.style.height = H+'px';
+  [cv, live].forEach(c=>{ 
+    c.width = W; c.height = H; 
+    c.style.width = W+'px'; c.style.height = H+'px'; 
+    c.style.zIndex='2'; 
+    c.style.pointerEvents = 'auto'; // Agar bisa dicoret-coret di atas iframe
+  });
+  
+  items=[]; undoS=[]; redoS=[]; sel=null; mode=null; cur=null; pointers.clear(); cancelEditor();
+  ctx.clearRect(0,0,W,H); lctx.clearRect(0,0,W,H); setDirty(false); updUndo();
+  V.rot = V.rotT = 0; V.fitted = true; cancelAnim(); zt = null;
+  cfs = 28; $('iqFs').value = cfs; $('iqFsLbl').textContent = cfs;
+  modal.style.display = 'flex'; modal.setAttribute('aria-hidden', 'false'); document.body.style.overflow = 'hidden';
+  requestAnimationFrame(()=>{ const f = fitParams(0); V.s = f.s; V.tx = f.tx; V.ty = f.ty; applyNow(); });
+};
 
 function close(){
   if(!isOpen())return;
