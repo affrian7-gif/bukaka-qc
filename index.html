@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- saved from url=(0084)file:///C:/Users/affrian/Documents/QC_Inspection_Checksheet_Complete_Inspected.html# -->
 <html lang="id"><head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover"><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     
     <title>QC Inspection &amp; Drawing Checksheet</title>
     <style>
@@ -358,296 +358,53 @@ tbody tr,.hm-kpi,.hm-proj,.hm-menu-card{transition:none!important}
 #docImg,#drawingCanvas,#liveCanvas,#drawingWrap img,#drawingWrap canvas{image-rendering:-webkit-optimize-contrast;image-rendering:crisp-edges}
 </style>
 
-<style>
-/* Responsive Mobile Adjustments for QC Dashboard */
-@media screen and (max-width: 768px) {
-    body { padding: 8px !important; }
-    .container, .dashboard-container, main { padding: 10px !important; margin: 0 auto !important; width: 100% !important; box-sizing: border-box !important; }
-    .metrics-grid, .stats-grid, .card-grid { display: flex !important; flex-direction: column !important; gap: 12px !important; }
-    header, .header-bar, .controls { flex-direction: column !important; align-items: stretch !important; gap: 10px !important; }
-    .banner, .hero-card { padding: 16px !important; text-align: center !important; }
-    h1, h2, h3 { font-size: 1.3rem !important; word-break: break-word; }
-    table { display: block; overflow-x: auto; white-space: nowrap; }
+<style id="mobile-fix">
+/* ===== Mobile layout (hanya aktif di layar kecil, desktop tidak berubah) ===== */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+@media (max-width:768px){
+  html,body{max-width:100%;overflow-x:hidden}
+  body{padding:10px;padding-left:max(10px,env(safe-area-inset-left));padding-right:max(10px,env(safe-area-inset-right));padding-bottom:max(10px,env(safe-area-inset-bottom))}
+  body>div[style*="display: flex"]{gap:10px!important;align-items:center!important;margin-bottom:10px!important}
+  body>div[style*="display: flex"] img{max-width:56px;height:auto;flex:0 0 auto}
+  body>div[style*="display: flex"] h1{font-size:1.1rem!important;line-height:1.25;white-space:normal;overflow-wrap:anywhere}
+  .subtitle{font-size:.75rem}
+  .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch}
+  .controls select,.controls button,.controls input{min-height:42px;font-size:16px;max-width:100%}
+  .controls button{flex:1 1 auto}
+  .controls label{width:auto}
+  .stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .main-layout{height:auto;min-height:0}
+  .card{min-height:0}
+  .card-header{flex-wrap:wrap;gap:6px}
+  .table-container{overflow:auto;-webkit-overflow-scrolling:touch;max-height:calc(100vh - 220px);max-height:calc(100dvh - 220px);min-height:320px}
+  #checkTable{min-width:720px}
+  #checkTable input[type=checkbox]{width:20px;height:20px}
+  td,th{padding:9px 8px}
+  button,select,input,textarea{touch-action:manipulation}
+  /* Modal Kelola Project */
+  #pmModal{padding:8px}
+  .pm-box{border-radius:14px}
+  /* Viewer drawing (modal lama) */
+  html body .drawing-modal{height:100vh;height:100dvh}
+  html body .drawing-modal-head,.drawing-modal-foot{padding-left:max(10px,env(safe-area-inset-left));padding-right:max(10px,env(safe-area-inset-right))}
+  html body .drawing-modal-foot{padding-bottom:max(10px,env(safe-area-inset-bottom))}
+  /* Editor inspeksi drawing */
+  html body .iq-modal{padding:0!important}
+  html body .iq-shell{border-radius:0;border:0;height:100vh;height:100dvh}
+  html body .iq-head{padding:8px 10px;padding-top:max(8px,env(safe-area-inset-top))}
+  html body .iq-title #inspTitle{max-width:55vw}
+  html body .iq-actions{width:100%;overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch}
+  html body .iq-actions .iq-btn{flex:0 0 auto;min-height:36px;white-space:nowrap}
+  html body .iq-toolbar{flex-wrap:nowrap;overflow-x:auto;padding:6px 10px;-webkit-overflow-scrolling:touch}
+  html body .iq-group{flex:0 0 auto}
+  html body .iq-t kbd{display:none}
+  html body .iq-modal .iq-t{padding:9px 10px;min-height:38px}
+  html body .iq-modal .iq-sw{width:28px;height:28px}
+  html body .iq-foot{padding:6px 10px;padding-bottom:max(6px,env(safe-area-inset-bottom))}
 }
-</style>
-
-<style>
-@media screen and (max-width: 768px) {
-    body { padding: 12px !important; background-color: #0f172a !important; }
-    .card, .banner, .metric-box, .stat-card { border-radius: 12px !important; padding: 14px !important; margin-bottom: 12px !important; }
-    .metrics-grid, .stats-grid { gap: 10px !important; margin: 10px 0 !important; }
-    h1 { font-size: 1.4rem !important; }
-    p, span, div { font-size: 0.95rem !important; }
-}
-</style>
-
-<style>
-/* Ultimate Flexible Mobile Viewport CSS */
-@media screen and (max-width: 768px) {
-    * { box-sizing: border-box !important; max-width: 100% !important; }
-    body {
-        margin: 0 !important;
-        padding: 8px !important;
-        background-color: #0b1120 !important;
-        color: #f8fafc !important;
-        font-size: 14px !important;
-        overflow-x: hidden !important;
-    }
-    .container, .dashboard-container, main, .content-wrapper {
-        width: 100% !important;
-        margin: 0 auto !important;
-        padding: 10px !important;
-    }
-    .banner, .hero-card, div[style*="background"] {
-        border-radius: 14px !important;
-        padding: 16px 12px !important;
-        margin-bottom: 12px !important;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
-    }
-    .metrics-grid, .stats-grid, div[style*="grid"] {
-        display: flex !important;
-        flex-direction: column !important;
-        gap: 10px !important;
-        width: 100% !important;
-    }
-    table {
-        display: block !important;
-        width: 100% !important;
-        overflow-x: auto !important;
-        white-space: nowrap !important;
-        -webkit-overflow-scrolling: touch;
-    }
-    h1 { font-size: 1.35rem !important; line-height: 1.3 !important; }
-    h2, h3 { font-size: 1.1rem !important; }
-    button, .btn {
-        width: 100% !important;
-        padding: 12px !important;
-        margin-top: 6px !important;
-        border-radius: 8px !important;
-        font-size: 1rem !important;
-    }
-}
-</style>
-
-<style>
-@media screen and (max-width: 768px) {
-    body, html {
-        width: 100% !important;
-        margin: 0 !important;
-        padding: 10px !important;
-        box-sizing: border-box !important;
-        overflow-x: hidden !important;
-    }
-    div, section, header, main, footer {
-        box-sizing: border-box !important;
-        max-width: 100% !important;
-    }
-    /* Pastikan kontainer utama punya jarak pinggir */
-    body > div, body > main, .container {
-        padding-left: 12px !important;
-        padding-right: 12px !important;
-    }
-}
-</style>
-
-<style>
-@media screen and (max-width: 768px) {
-    header, .header-bar, .controls, .nav-bar {
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: stretch !important;
-        width: 100% !important;
-        gap: 8px !important;
-        padding: 8px !important;
-    }
-    header h1, .header-bar h1, title-area h1 {
-        font-size: 1.15rem !important;
-        white-space: normal !important;
-        word-wrap: break-word !important;
-        overflow: visible !important;
-        text-align: center !important;
-    }
-    button, .btn, .controls button {
-        width: 100% !important;
-        font-size: 0.95rem !important;
-        padding: 10px !important;
-        box-sizing: border-box !important;
-    }
-}
-</style>
-
-<style>
-/* Responsive Font Sizing to prevent text overflow */
-header h1, .header-bar h1, .title-area h1, h1 {
-    font-size: clamp(1rem, 2.5vw, 2rem) !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-}
-.header-bar, header {
-    display: flex !important;
-    justify-content: space-between !important;
-    align-items: center !important;
-    flex-wrap: nowrap !important;
-}
-</style>
-
-<style>
-@media screen and (max-width: 768px) {
-    header, .header-bar, .nav-container, .top-nav {
-        flex-wrap: wrap !important;
-        flex-direction: column !important;
-        align-items: stretch !important;
-        gap: 8px !important;
-    }
-    header h1, .header-bar h1 {
-        white-space: normal !important;
-        font-size: 1.25rem !important;
-        text-align: center !important;
-    }
-    .project-nav, .nav-buttons {
-        display: flex !important;
-        flex-wrap: wrap !important;
-        justify-content: center !important;
-        gap: 6px !important;
-        width: 100% !important;
-    }
-}
-</style>
-
-<style>
-@media screen and (max-width: 768px) {
-    .controls {
-        flex-direction: column !important;
-        align-items: stretch !important;
-        gap: 10px !important;
-    }
-    .controls select, .controls button {
-        width: 100% !important;
-    }
-}
-</style>
-
-<style>
-/* Selective mobile stack for project resume / bottom cards */
-@media screen and (max-width: 1200px) {
-    .resume-grid, .project-cards, div[style*="grid-template-columns"] {
-        flex-wrap: wrap !important;
-    }
-}
-</style>
-
-<style>
-/* Mobile Optimized Drawing Viewer Modal */
-@media screen and (max-width: 768px) {
-    .modal-content, .drawing-modal, #drawingModal, .viewer-container {
-        width: 100vw !important;
-        height: 100vh !important;
-        max-width: 100% !important;
-        max-height: 100% !important;
-        border-radius: 0 !important;
-        padding: 5px !important;
-        margin: 0 !important;
-        top: 0 !important;
-        left: 0 !important;
-        transform: none !important;
-    }
-    .modal-close-btn, .close-drawing, .close-modal {
-        position: fixed !important;
-        top: 15px !important;
-        right: 15px !important;
-        width: 48px !important;
-        height: 48px !important;
-        font-size: 24px !important;
-        background: rgba(220, 38, 38, 0.9) !important;
-        color: white !important;
-        border-radius: 50% !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        z-index: 999999 !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
-        cursor: pointer !important;
-    }
-    img.drawing-preview, .modal-image, #activeDrawingImg {
-        width: 100% !important;
-        height: auto !important;
-        object-fit: contain !important;
-        touch-action: pan-x pan-y pinch-zoom !important;
-        -webkit-user-select: none;
-    }
-    .drawing-toolbar, .viewer-controls {
-        position: fixed !important;
-        bottom: 20px !important;
-        left: 50% !important;
-        transform: translateX(-50%) !important;
-        background: rgba(15, 23, 42, 0.95) !important;
-        padding: 10px 16px !important;
-        border-radius: 30px !important;
-        display: flex !important;
-        gap: 12px !important;
-        z-index: 999998 !important;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.6) !important;
-    }
-    .drawing-toolbar button, .viewer-controls button {
-        padding: 8px 14px !important;
-        font-size: 14px !important;
-        border-radius: 20px !important;
-        background: #0284c7 !important;
-        color: white !important;
-        border: none !important;
-    }
-}
-</style>
-
-<style>
-/* Specific Mobile Popup & Modal Optimization */
-@media screen and (max-width: 768px) {
-    .modal, .dialog-box, .popup-container, #drawingModal, .modal-dialog {
-        width: 100vw !important;
-        height: 100vh !important;
-        max-width: 100% !important;
-        max-height: 100% !important;
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        margin: 0 !important;
-        border-radius: 0 !important;
-        background: rgba(11, 17, 32, 0.98) !important;
-        display: flex !important;
-        flex-direction: column !important;
-        box-sizing: border-box !important;
-        z-index: 9999999 !important;
-        overflow: hidden !important;
-    }
-    .modal-body, .popup-body, .viewer-body {
-        flex: 1 !important;
-        width: 100% !important;
-        height: calc(100% - 70px) !important;
-        overflow: auto !important;
-        padding: 8px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-    }
-    .modal-header, .popup-header {
-        padding: 12px 16px !important;
-        background: #1e293b !important;
-        border-bottom: 1px solid #334155 !important;
-        display: flex !important;
-        justify-content: space-between !important;
-        align-items: center !important;
-        min-height: 50px !important;
-    }
-    .modal-header h3, .popup-header h2 {
-        font-size: 1rem !important;
-        margin: 0 !important;
-        color: #38bdf8 !important;
-        white-space: nowrap !important;
-        overflow: hidden !important;
-        text-overflow: ellipsis !important;
-        max-width: 80% !important;
-    }
+@media (max-width:420px){
+  .stat-value{font-size:1.25rem}
+  .controls button{flex-basis:100%}
 }
 </style>
 </head>
