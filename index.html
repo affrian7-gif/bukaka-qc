@@ -32505,14 +32505,31 @@ async function getBytes(cid,link,say){
       await kvSet('pdf_'+cid,buf);return buf;
     }catch(e){errs.push('API Key: '+e.message);}
   }
-  try{
-    say('Mencoba unduh melalui CORS Proxy…');
-    const u=id?'https://drive.usercontent.google.com/download?id='+id+'&export=download&confirm=t':link;
-    const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(u);
-    const r=await fetch(proxyUrl);if(!r.ok)throw new Error('HTTP '+r.status);
-    const buf=await r.arrayBuffer();if(!isPdfBytes(buf))throw new Error('bukan PDF');
-    await kvSet('pdf_'+cid,buf);return buf;
-  }catch(e){errs.push('CORS Proxy: '+e.message);}
+  // Coba berbagai endpoint GDrive langsung agar otomatis tembus tanpa tombol pilih file
+  const driveUrls = [];
+  if(id) {
+    driveUrls.push('https://lh3.googleusercontent.com/d/' + id);
+    driveUrls.push('https://drive.google.com/uc?export=download&id=' + id);
+    driveUrls.push('https://drive.usercontent.google.com/download?id=' + id + '&export=download&confirm=t');
+  }
+  driveUrls.push(link);
+
+  for(const targetUrl of driveUrls) {
+    try{
+      say('Mengambil otomatis dari Google Drive…');
+      const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(targetUrl);
+      const r = await fetch(proxyUrl);
+      if(r.ok) {
+        const buf = await r.arrayBuffer();
+        if(isPdfBytes(buf)) {
+          await kvSet('pdf_'+cid, buf);
+          return buf;
+        }
+      }
+    }catch(err){
+      // lanjut ke endpoint berikutnya
+    }
+  }
   const er=new Error('PDF belum bisa diambil otomatis');er.errs=errs;throw er;
 }
 
