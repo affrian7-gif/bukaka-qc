@@ -33464,8 +33464,7 @@ function clearInspectionResults() {
 }
 
 
-function uploadToOneDriveFolder() {
-    // Buat file PDF/JSON laporan inspeksi berlabel rapi sesuai project & drawing aktif
+async function uploadToOneDriveFolder() {
     let reportName = `Inspeksi_${currentProject}_${currentDrawing.name.replace(/[^a-zA-Z0-9-_]/g, '_')}_${Date.now()}.json`;
     let report = {
         project: currentProject,
@@ -33474,14 +33473,35 @@ function uploadToOneDriveFolder() {
         checkedItems: checkedState,
         inspectionResults: inspectionResults
     };
-    let dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(report, null, 2));
+    let jsonContent = JSON.stringify(report, null, 2);
+
+    try {
+        if (window.showDirectoryPicker) {
+            // Gunakan File System Access API agar langsung memilih folder OneDrive dan menyimpan file ke dalamnya secara otomatis
+            const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+            const fileHandle = await dirHandle.getFileHandle(reportName, { create: true });
+            const writable = await fileHandle.createWritable();
+            await writable.write(jsonContent);
+            await writable.close();
+            document.getElementById('saveStatus').innerText = "Berhasil tersimpan langsung ke folder OneDrive pilihan Papah!";
+            setTimeout(() => document.getElementById('saveStatus').innerText = "", 4000);
+            return;
+        }
+    } catch(err) {
+        if (err.name !== 'AbortError') {
+            console.error(err);
+        }
+    }
+
+    // Fallback jika browser belum mendukung / dibatalkan
+    let dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(jsonContent);
     let a = document.createElement('a');
     a.href = dataStr;
     a.download = reportName;
     document.body.appendChild(a);
     a.click();
     a.remove();
-    document.getElementById('saveStatus').innerText = "File siap! Simpan file ini ke folder OneDrive: 03_INSPECTED_DRAWINGS/" + currentProject;
+    document.getElementById('saveStatus').innerText = "Tersimpan via unduhan browser.";
 }
 
 </body></html>";function Hm(e,r){var t=e.match(/<table[\s\S]*?>[\s\S]*?<\/table>/gi);if(!t||t.length==0)throw new Error("Invalid HTML: could not find <table>");if(t.length==1)return La(Mm(t[0],r),r);var a=Nw();t.forEach(function(e,t){Dw(a,Mm(e,r),"Sheet"+(t+1))});return a}function zm(e,r,t){var a=[];return a.join("")+"<table"+(t&&t.id?' id="'+t.id+'"':"")+">"}function Vm(e,r){var t=r||{};var a=t.header!=null?t.header:Bm;var n=t.footer!=null?t.footer:Wm;var i=[a];var s=Ia(e["!ref"]);t.dense=Array.isArray(e);i.push(zm(e,s,t));for(var f=s.s.r;f<=s.e.r;++f)i.push(Um(e,s,f,t));i.push("</table>"+n);return i.join("")}function Gm(e,r,t){var a=t||{};if(g!=null)a.dense=g;var n=0,i=0;if(a.origin!=null){if(typeof a.origin=="number")n=a.origin;else{var s=typeof a.origin=="string"?Oa(a.origin):a.origin;n=s.r;i=s.c}}var f=r.getElementsByTagName("tr");
@@ -33677,8 +33697,7 @@ function clearInspectionResults() {
 }
 
 
-function uploadToOneDriveFolder() {
-    // Buat file PDF/JSON laporan inspeksi berlabel rapi sesuai project & drawing aktif
+async function uploadToOneDriveFolder() {
     let reportName = `Inspeksi_${currentProject}_${currentDrawing.name.replace(/[^a-zA-Z0-9-_]/g, '_')}_${Date.now()}.json`;
     let report = {
         project: currentProject,
@@ -33687,14 +33706,35 @@ function uploadToOneDriveFolder() {
         checkedItems: checkedState,
         inspectionResults: inspectionResults
     };
-    let dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(report, null, 2));
+    let jsonContent = JSON.stringify(report, null, 2);
+
+    try {
+        if (window.showDirectoryPicker) {
+            // Gunakan File System Access API agar langsung memilih folder OneDrive dan menyimpan file ke dalamnya secara otomatis
+            const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+            const fileHandle = await dirHandle.getFileHandle(reportName, { create: true });
+            const writable = await fileHandle.createWritable();
+            await writable.write(jsonContent);
+            await writable.close();
+            document.getElementById('saveStatus').innerText = "Berhasil tersimpan langsung ke folder OneDrive pilihan Papah!";
+            setTimeout(() => document.getElementById('saveStatus').innerText = "", 4000);
+            return;
+        }
+    } catch(err) {
+        if (err.name !== 'AbortError') {
+            console.error(err);
+        }
+    }
+
+    // Fallback jika browser belum mendukung / dibatalkan
+    let dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(jsonContent);
     let a = document.createElement('a');
     a.href = dataStr;
     a.download = reportName;
     document.body.appendChild(a);
     a.click();
     a.remove();
-    document.getElementById('saveStatus').innerText = "File siap! Simpan file ini ke folder OneDrive: 03_INSPECTED_DRAWINGS/" + currentProject;
+    document.getElementById('saveStatus').innerText = "Tersimpan via unduhan browser.";
 }
 
 </body>
