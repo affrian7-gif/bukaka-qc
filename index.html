@@ -32874,6 +32874,103 @@ window.loadInspectionDrawing=function(linksStr,title,key){
   if(!linksStr)return;
   let urls=String(linksStr).split(/[,\s]+/).map(x=>x.trim()).filter(x=>x.startsWith('http'));
   if(!urls.length)urls=[linksStr];
+  let embedUrl = linksStr;
+  const m = linksStr.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if(m) { embedUrl = `https://drive.google.com/file/d/${m[1]}/preview`; }
+  openDoc({src:embedUrl, rawLink:linksStr, title:'Inspeksi Drawing: '+title, key});
+};
+
+function openDoc(o){
+  curKey=o.key;curTitle=o.title;curLink=o.rawLink||o.src;
+  $('inspTitle').textContent=o.title;$('inspKeyBadge').textContent=o.key;
+  
+  const wrap = document.getElementById('canvasWrapper');
+  let frame = document.getElementById('gdriveFrame');
+  if(!frame){
+    frame = document.createElement('iframe');
+    frame.id = 'gdriveFrame';
+    frame.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;border:none;background:#fff;pointer-events:auto;z-index:1;';
+    wrap.insertBefore(frame, wrap.firstChild);
+  }
+  frame.src = o.src;
+  
+  // Ukuran kanvas full layar responsif
+  W = 1600; H = 2200;
+  wrap.style.width = W+'px'; wrap.style.height = H+'px';
+  [cv, live].forEach(c=>{ c.width = W; c.height = H; c.style.width = W+'px'; c.style.height = H+'px'; c.style.zIndex='2'; });
+  items=[]; undoS=[]; redoS=[]; sel=null; mode=null; cur=null; pointers.clear(); cancelEditor();
+  ctx.clearRect(0,0,W,H); lctx.clearRect(0,0,W,H); setDirty(false); updUndo();
+  V.rot = V.rotT = 0; V.fitted = true; cancelAnim(); zt = null;
+  cfs = 28; $('iqFs').value = cfs; $('iqFsLbl').textContent = cfs;
+  modal.style.display = 'flex'; modal.setAttribute('aria-hidden', 'false'); document.body.style.overflow = 'hidden';
+  requestAnimationFrame(()=>{ const f = fitParams(0); V.s = f.s; V.tx = f.tx; V.ty = f.ty; applyNow(); });
+};
+
+function close(){
+  if(!isOpen())return;
+  if(dirty&&!confirm('Ada coretan/komentar yang belum disimpan. Tutup tanpa menyimpan?'))return;
+  cancelEditor();modal.style.display='none';modal.setAttribute('aria-hidden','true');document.body.style.overflow='';
+  if(typeof renderTable==='function')renderTable();
+}
+function saveAsPNG(){
+  try{
+    commitEditor();
+    const rot=((Math.round(V.rotT/90)*90)%360+360)%360,sw=(rot===90||rot===270);
+    const out=document.createElement('canvas');out.width=sw?H:W;out.height=sw?W:H;
+    const c=out.getContext('2d');c.fillStyle='#fff';c.fillRect(0,0,out.width,out.height);
+    c.save();c.translate(out.width/2,out.height/2);c.rotate(rot*Math.PI/180);
+    c.drawImage(img,-W/2,-H/2,W,H);c.drawImage(cv,-W/2,-H/2,W,H);c.restore();
+    const url=out.toDataURL('image/png');
+    let stored=false;
+    try{localStorage.setItem('insp_'+curKey,url);stored=true;}catch(_){}
+    const a=document.createElement('a');
+    const safeTitle = String(curTitle||'Part').replace(/[^a-zA-Z0-9-_]/g,'_');
+    a.download=`Inspected_${safeTitle}.png`;a.href=url;
+    document.body.appendChild(a);a.click();a.remove();
+    setDirty(false);if(typeof renderTable==='function')renderTable();
+    toast('Tersimpan & Diunduh sebagai PNG (Anti-Blur) ✓');
+  }catch(err){alert('Gagal PNG: '+err.message);}
+}
+
+async function saveAsPDF(){
+  try{
+    commitEditor();
+    const rot=((Math.round(V.rotT/90)*90)%360+360)%360,sw=(rot===90||rot===270);
+    const out=document.createElement('canvas');out.width=sw?H:W;out.height=sw?W:H;
+    const c=out.getContext('2d');c.fillStyle='#fff';c.fillRect(0,0,out.width,out.height);
+    c.save();c.translate(out.width/2,out.height/2);c.rotate(rot*Math.PI/180);
+    c.drawImage(img,-W/2,-H/2,W,H);c.drawImage(cv,-W/2,-H/2,W,H);c.restore();
+    
+    const imgData = out.toDataURL('image/jpeg', 0.95);
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({
+      orientation: out.width > out.height ? 'landscape' : 'portrait',
+      unit: 'px',
+      format: [out.width, out.height]
+    });
+    pdf.addImage(imgData, 'JPEG', 0, 0, out.width, out.height);
+    
+    const safeTitle = String(curTitle||'Part').replace(/[^a-zA-Z0-9-_]/g,'_');
+    pdf.save(`Inspected_${safeTitle}.pdf`);
+    
+    const url=out.toDataURL('image/png');
+    try{localStorage.setItem('insp_'+curKey,url);}catch(_){}
+    setDirty(false);if(typeof renderTable==='function')renderTable();
+    toast('Tersimpan & Diunduh sebagai PDF (Anti-Blur) ✓');
+  }catch(err){alert('Gagal PDF: '+err.message);}
+}
+
+function save(){
+  saveAsPDF();
+}
+
+/* ---------- API global ---------- */
+window.iq={tool:setTool,undo,redo,clear:clearAll,zoom:zoomBtn,fit:()=>doFit(true),actual,rotate,close,save};
+window.closeInspModal=close;
+window.loadInspectionDrawing=function(linksStr,title,key){
+  if(!linksStr)return;
+  let urls=String(linksStr).split(/[,\s]+/).map(x=>x.trim()).filter(x=>x.startsWith('http'));
+  if(!urls.length)urls=[linksStr];
   // Ambil link ID untuk embed preview iframe gdrive asli
   let embedUrl = linksStr;
   const m = linksStr.match(/\/d\/([a-zA-Z0-9_-]+)/);
