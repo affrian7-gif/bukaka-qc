@@ -407,6 +407,7 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
   .controls button{flex-basis:100%}
 }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 
 
@@ -32801,7 +32802,7 @@ function close(){
   cancelEditor();modal.style.display='none';modal.setAttribute('aria-hidden','true');document.body.style.overflow='';
   if(typeof renderTable==='function')renderTable();
 }
-function save(){
+function saveAsPNG(){
   try{
     commitEditor();
     const rot=((Math.round(V.rotT/90)*90)%360+360)%360,sw=(rot===90||rot===270);
@@ -32809,15 +32810,50 @@ function save(){
     const c=out.getContext('2d');c.fillStyle='#fff';c.fillRect(0,0,out.width,out.height);
     c.save();c.translate(out.width/2,out.height/2);c.rotate(rot*Math.PI/180);
     c.drawImage(img,-W/2,-H/2,W,H);c.drawImage(cv,-W/2,-H/2,W,H);c.restore();
-    const url=out.toDataURL('image/png');let stored=false;
-    try{localStorage.setItem('insp_'+curKey,url);stored=true;}
-    catch(_){try{localStorage.setItem('insp_'+curKey,out.toDataURL('image/jpeg',.88));stored=true;}catch(__){}}
+    const url=out.toDataURL('image/png');
+    let stored=false;
+    try{localStorage.setItem('insp_'+curKey,url);stored=true;}catch(_){}
     const a=document.createElement('a');
-    a.download=`Inspected_${String(curTitle||'Part').replace(/[^a-zA-Z0-9-_]/g,'_')}.png`;a.href=url;
+    const safeTitle = String(curTitle||'Part').replace(/[^a-zA-Z0-9-_]/g,'_');
+    a.download=`Inspected_${safeTitle}.png`;a.href=url;
     document.body.appendChild(a);a.click();a.remove();
     setDirty(false);if(typeof renderTable==='function')renderTable();
-    toast(stored?'Tersimpan: PNG diunduh & hasil inspeksi tercatat ✓':'PNG diunduh (memori browser penuh, hasil tidak tercatat di tabel)');
-  }catch(err){alert('Gagal menyimpan: '+err.message);console.error(err);}
+    toast('Tersimpan & Diunduh sebagai PNG (Anti-Blur) ✓');
+  }catch(err){alert('Gagal PNG: '+err.message);}
+}
+
+async function saveAsPDF(){
+  try{
+    commitEditor();
+    const rot=((Math.round(V.rotT/90)*90)%360+360)%360,sw=(rot===90||rot===270);
+    const out=document.createElement('canvas');out.width=sw?H:W;out.height=sw?W:H;
+    const c=out.getContext('2d');c.fillStyle='#fff';c.fillRect(0,0,out.width,out.height);
+    c.save();c.translate(out.width/2,out.height/2);c.rotate(rot*Math.PI/180);
+    c.drawImage(img,-W/2,-H/2,W,H);c.drawImage(cv,-W/2,-H/2,W,H);c.restore();
+    
+    const imgData = out.toDataURL('image/jpeg', 0.95);
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({
+      orientation: out.width > out.height ? 'landscape' : 'portrait',
+      unit: 'px',
+      format: [out.width, out.height]
+    });
+    pdf.addImage(imgData, 'JPEG', 0, 0, out.width, out.height);
+    
+    const safeTitle = String(curTitle||'Part').replace(/[^a-zA-Z0-9-_]/g,'_');
+    pdf.save(`Inspected_${safeTitle}.pdf`);
+    
+    const url=out.toDataURL('image/png');
+    try{localStorage.setItem('insp_'+curKey,url);}catch(_){}
+    setDirty(false);if(typeof renderTable==='function')renderTable();
+    toast('Tersimpan & Diunduh sebagai PDF (Anti-Blur) ✓');
+  }catch(err){alert('Gagal PDF: '+err.message);}
+}
+
+function save(){
+  // Tampilkan pilihan dialog Save As (PNG atau PDF)
+  const choice = confirm("Pilih format simpan:\n[OK] = Simpan sebagai PNG (Anti-Blur)\n[Cancel] = Simpan sebagai PDF (Anti-Blur)");
+  if(choice) { saveAsPNG(); } else { saveAsPDF(); }
 }
 
 /* ---------- API global ---------- */
