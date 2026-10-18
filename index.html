@@ -32302,6 +32302,7 @@ function renderTable() {
         <button class="iq-t on" data-tool="pen" onclick="iq.tool('pen')" title="Pen">✏️</button>
         <button class="iq-t" data-tool="marker" onclick="iq.tool('marker')" title="Marker">🖍</button>
         <button class="iq-t" data-tool="text" onclick="iq.tool('text')" title="Teks/Komentar">💬</button>
+        <button class="iq-t" data-tool="rect" onclick="iq.tool('rect')" title="Kotak/Persegi">⬛</button>
         <button class="iq-t" data-tool="erase" onclick="iq.tool('erase')" title="Penghapus">🧽</button>
       </div>
 
@@ -32685,7 +32686,7 @@ function onDown(e){
   }
   if(tool==='text'){mode='textpending';cur={x:e.clientX,y:e.clientY};return;}
   mode='draw';
-  cur={type:tool==='erase'?'erase':tool==='marker'?'marker':'pen',color,size,pts:[[p.x,p.y]],ei:0};
+  cur={type:tool==='erase'?'erase':tool==='marker'?'marker':tool==='rect'?'rect':'pen',color,size,pts:[[p.x,p.y]],ei:0,x0:p.x,y0:p.y,x1:p.x,y1:p.y};
   if(cur.type==='erase')liveStep();else drawLive();
 }
 function onMove(e){
@@ -32887,12 +32888,15 @@ function saveAsPNG(){
 
 async function saveAsPDF(){
   try{
-    commitEditor();
-    const rot=((Math.round(V.rotT/90)*90)%360+360)%360,sw=(rot===90||rot===270);
-    const out=document.createElement('canvas');out.width=sw?H:W;out.height=sw?W:H;
-    const c=out.getContext('2d');c.fillStyle='#fff';c.fillRect(0,0,out.width,out.height);
-    c.save();c.translate(out.width/2,out.height/2);c.rotate(rot*Math.PI/180);
-    c.drawImage(img,-W/2,-H/2,W,H);c.drawImage(cv,-W/2,-H/2,W,H);c.restore();
+    if(typeof commitEditor==='function') commitEditor();
+    const markupC = document.getElementById('markupCanvas') || cv;
+    const out = document.createElement('canvas');
+    out.width = markupC.width || 1200;
+    out.height = markupC.height || 1700;
+    const c = out.getContext('2d');
+    c.fillStyle = '#ffffff';
+    c.fillRect(0, 0, out.width, out.height);
+    c.drawImage(markupC, 0, 0);
     
     const imgData = out.toDataURL('image/jpeg', 0.95);
     const { jsPDF } = window.jspdf;
@@ -32986,12 +32990,15 @@ function saveAsPNG(){
 
 async function saveAsPDF(){
   try{
-    commitEditor();
-    const rot=((Math.round(V.rotT/90)*90)%360+360)%360,sw=(rot===90||rot===270);
-    const out=document.createElement('canvas');out.width=sw?H:W;out.height=sw?W:H;
-    const c=out.getContext('2d');c.fillStyle='#fff';c.fillRect(0,0,out.width,out.height);
-    c.save();c.translate(out.width/2,out.height/2);c.rotate(rot*Math.PI/180);
-    c.drawImage(img,-W/2,-H/2,W,H);c.drawImage(cv,-W/2,-H/2,W,H);c.restore();
+    if(typeof commitEditor==='function') commitEditor();
+    const markupC = document.getElementById('markupCanvas') || cv;
+    const out = document.createElement('canvas');
+    out.width = markupC.width || 1200;
+    out.height = markupC.height || 1700;
+    const c = out.getContext('2d');
+    c.fillStyle = '#ffffff';
+    c.fillRect(0, 0, out.width, out.height);
+    c.drawImage(markupC, 0, 0);
     
     const imgData = out.toDataURL('image/jpeg', 0.95);
     const { jsPDF } = window.jspdf;
