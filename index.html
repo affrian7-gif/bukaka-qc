@@ -32506,12 +32506,16 @@ async function getBytes(cid,link,say){
     }catch(e){errs.push('API Key: '+e.message);}
   }
   try{
-    say('Mencoba unduh langsung…');
-    const u=id?'https://drive.usercontent.google.com/download?id='+id+'&export=download&confirm=t':link;
-    const r=await fetch(u);if(!r.ok)throw new Error('HTTP '+r.status);
-    const buf=await r.arrayBuffer();if(!isPdfBytes(buf))throw new Error('bukan PDF');
-    await kvSet('pdf_'+cid,buf);return buf;
-  }catch(e){errs.push('Unduh langsung: diblokir browser (CORS)');}
+    say('Mengambil otomatis via CORS Proxy…');
+    const u = id ? 'https://drive.usercontent.google.com/download?id=' + id + '&export=download&confirm=t' : link;
+    const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(u);
+    const r = await fetch(proxyUrl);
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    const buf = await r.arrayBuffer();
+    if(!isPdfBytes(buf)) throw new Error('Bukan file PDF');
+    await kvSet('pdf_'+cid, buf);
+    return buf;
+  }catch(e){ errs.push('CORS Proxy: ' + e.message); }
   const er=new Error('PDF belum bisa diambil otomatis');er.errs=errs;throw er;
 }
 
