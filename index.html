@@ -34609,5 +34609,42 @@ function setCheckFilter(mode) {
 }
 </script>
 
+
+<script>
+// --- PATCH FILTER CHECK & FULL TABLE LAYOUT ---
+window.originalRenderTable = window.renderTable || function(){};
+window.renderTable = function() {
+    // Jalankan fungsi asli jika ada, atau tangani filter baris tabel
+    const rows = projectData[currentProject] || [];
+    const filterMode = typeof currentCheckFilter !== 'undefined' ? currentCheckFilter : 'all';
+    
+    // Terapkan filter pada baris tabel (tr)
+    setTimeout(() => {
+        const trs = document.querySelectorAll('#tableBody tr');
+        trs.forEach(tr => {
+            const cb = tr.querySelector('input[type="checkbox"]');
+            if (cb) {
+                const isChecked = cb.checked;
+                if (filterMode === 'checked' && !isChecked) {
+                    tr.style.display = 'none';
+                } else if (filterMode === 'unchecked' && isChecked) {
+                    tr.style.display = 'none';
+                } else {
+                    tr.style.display = '';
+                }
+            }
+        });
+    }, 50);
+};
+
+// Pastikan tabel memenuhi panel
+const styleFix = document.createElement('style');
+styleFix.innerHTML = `
+    .table-container, table { width: 100% !important; max-width: 100% !important; }
+    table th, table td { white-space: nowrap; }
+`;
+document.head.appendChild(styleFix);
+</script>
+
 </body>
 </html>
