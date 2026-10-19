@@ -485,6 +485,38 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
     <button onclick="setCheckFilter('unchecked')" id="flt-unchecked" style="padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border, #ccc); background: transparent; color: inherit; cursor: pointer; font-size: 12px;">Belum Dicek</button>
     <button onclick="setCheckFilter('checked')" id="flt-checked" style="padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border, #ccc); background: transparent; color: inherit; cursor: pointer; font-size: 12px;">Sudah Dicek</button>
 </div>
+<script>
+let currentCheckFilter = 'all';
+function setCheckFilter(mode) {
+    currentCheckFilter = mode;
+    ['all', 'unchecked', 'checked'].forEach(m => {
+        let btn = document.getElementById('flt-' + m);
+        if (btn) {
+            if (m === mode) {
+                btn.style.background = 'var(--accent, #0284c7)';
+                btn.style.color = 'white';
+            } else {
+                btn.style.background = 'transparent';
+                btn.style.color = 'inherit';
+            }
+        }
+    });
+    // Sembunyikan/tampilkan baris berdasarkan status centang
+    const rows = document.querySelectorAll('#tableBody tr');
+    rows.forEach(tr => {
+        const cb = tr.querySelector('input[type="checkbox"]');
+        if (cb) {
+            const isChecked = cb.checked;
+            if (mode === 'checked' && !isChecked) tr.style.display = 'none';
+            else if (mode === 'unchecked' && isChecked) tr.style.display = 'none';
+            else tr.style.display = '';
+        }
+    });
+}
+</script>
+<style>
+    .table-container, table { width: 100% !important; max-width: 100% !important; }
+</style>
 
 <div class="table-container">
                 <table id="checkTable">
@@ -34585,65 +34617,6 @@ window.onload=async function(){
   return r;
 };
 })();
-</script>
-
-
-<script>
-let currentCheckFilter = 'all';
-
-function setCheckFilter(mode) {
-    currentCheckFilter = mode;
-    ['all', 'unchecked', 'checked'].forEach(m => {
-        let btn = document.getElementById('flt-' + m);
-        if (btn) {
-            if (m === mode) {
-                btn.style.background = 'var(--accent, #0284c7)';
-                btn.style.color = 'white';
-            } else {
-                btn.style.background = 'transparent';
-                btn.style.color = 'inherit';
-            }
-        }
-    });
-    if (typeof renderTable === 'function') renderTable();
-}
-</script>
-
-
-<script>
-// --- PATCH FILTER CHECK & FULL TABLE LAYOUT ---
-window.originalRenderTable = window.renderTable || function(){};
-window.renderTable = function() {
-    // Jalankan fungsi asli jika ada, atau tangani filter baris tabel
-    const rows = projectData[currentProject] || [];
-    const filterMode = typeof currentCheckFilter !== 'undefined' ? currentCheckFilter : 'all';
-    
-    // Terapkan filter pada baris tabel (tr)
-    setTimeout(() => {
-        const trs = document.querySelectorAll('#tableBody tr');
-        trs.forEach(tr => {
-            const cb = tr.querySelector('input[type="checkbox"]');
-            if (cb) {
-                const isChecked = cb.checked;
-                if (filterMode === 'checked' && !isChecked) {
-                    tr.style.display = 'none';
-                } else if (filterMode === 'unchecked' && isChecked) {
-                    tr.style.display = 'none';
-                } else {
-                    tr.style.display = '';
-                }
-            }
-        });
-    }, 50);
-};
-
-// Pastikan tabel memenuhi panel
-const styleFix = document.createElement('style');
-styleFix.innerHTML = `
-    .table-container, table { width: 100% !important; max-width: 100% !important; }
-    table th, table td { white-space: nowrap; }
-`;
-document.head.appendChild(styleFix);
 </script>
 
 </body>
