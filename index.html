@@ -460,6 +460,7 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
         <label>Project:</label>
         <select id="projectSelect" onchange="changeProject()"><option value="PALAU">PALAU (3530 items)</option><option value="SOETTA-14">SOETTA-14 (5745 items)</option></select>
         <input id="searchInput" class="search-input" type="search" placeholder="⌕  Cari part number, nama, drawing..." oninput="clearTimeout(window.__st);window.__st=setTimeout(function(){window.__lim=500;renderTable()},180)" aria-label="Cari komponen">
+        <select id="checkFilter" onchange="window.__cf=this.value;window.__lim=500;renderTable()" aria-label="Filter status centang" title="Short list berdasarkan status hasil inspeksi"><option value="all">☰ Semua status</option><option value="accept">✔ Accept</option><option value="special">★ Spesial Accepted</option><option value="reject">✖ Reject</option><option value="hold">⏸ Hold Inspect</option><option value="none">☐ Belum diinspeksi</option></select>
         <button class="primary" onclick="saveInspection()">💾 Save Report</button>
         <span id="saveStatus" style="color: #4ade80; font-size: 0.85rem;"></span>
         <button id="qcSyncBtn" onclick="QCSync.open()" title="Sinkronisasi antar inspector">🔄 Sinkron <span id="qcSyncDot" style="color:#64748b">●</span></button>
@@ -32034,6 +32035,8 @@ function renderTable() {
             let checkedNum = 0;
             let totalItems = rows.filter(row => !row.level.startsWith('▶')).length;
             const query = (document.getElementById('searchInput')?.value || '').trim().toLowerCase();
+            const cf = window.__cf || 'all';
+            const cfOK = i => { if (cf === 'all') return true; const k = currentProject + '_' + i, h = inspHas(k); return cf === 'none' ? !h : (h && window.__inspSt[k] === cf); };
             
             rows.forEach((row, idx) => { if (!row.level.startsWith('▶') && checkedState[currentProject + '_' + idx]) checkedNum++; });
 
@@ -32060,8 +32063,13 @@ function renderTable() {
                 let matchedChildren = g.children.filter(c => !query || [c.row.level, c.row.no, c.row.part_num, c.row.part_name, c.row.drawing_no, c.row.material].some(v => String(v || '').toLowerCase().includes(query)));
                 
                 if (query && !isMainMatch && matchedChildren.length === 0) return;
+                const kids = cf === 'all' ? g.children : g.children.filter(c => cfOK(c.idx));
+                if (cf !== 'all') {
+                    const mOK = g.mainIdx >= 0 && cfOK(g.mainIdx);
+                    if (showOnlyMainAssy ? !mOK : (!mOK && kids.length === 0)) return;
+                }
 
-                let isExpanded = expandedGroups[gIdx] || query.length > 0 || showOnlyMainAssy;
+                let isExpanded = expandedGroups[gIdx] || query.length > 0 || cf !== 'all' || showOnlyMainAssy;
                 
                 let trMain = document.createElement('tr');
                 trMain.className = 'main-row';
@@ -32081,7 +32089,7 @@ function renderTable() {
                 trMain.innerHTML = `
                     <td style="text-align: center;"><input type="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleCheck('${key}', this); event.stopPropagation();"></td>
                     <td colspan="3" style="cursor:pointer;" onclick="expandedGroups[${gIdx}] = !expandedGroups[${gIdx}]; renderTable();">
-                        <span style="display:inline-block; width:20px; font-weight:bold;">${isExpanded ? '▼' : '▶'}</span> <b>${mainRow.level}</b> (${g.children.length} items)
+                        <span style="display:inline-block; width:20px; font-weight:bold;">${isExpanded ? '▼' : '▶'}</span> <b>${mainRow.level}</b> (${cf === 'all' ? g.children.length : kids.length + ' / ' + g.children.length} items)
                     </td>
                     <td>-</td>
                     <td>-</td>
@@ -32091,7 +32099,7 @@ function renderTable() {
                 tbody.appendChild(trMain);
 
                 if (isExpanded && !showOnlyMainAssy) {
-                    g.children.forEach(c => {
+                    kids.forEach(c => {
                         if (__n >= __LIM) { __more++; return; } __n++;
                         let row = c.row;
                         let idx = c.idx;
@@ -32342,7 +32350,7 @@ function renderTable() {
         <button class="iq-t" data-tool="ellipse" onclick="iq.tool('ellipse')" title="Lingkaran / oval (O)">⭕</button>
         <button class="iq-t" data-tool="arrow" onclick="iq.tool('arrow')" title="Panah (A)">↗</button>
         <button class="iq-t" data-tool="erase" onclick="iq.tool('erase')" title="Penghapus coretan (E)">🧽</button>
-        <button class="iq-t" data-tool="stamp" onclick="iq.tool('stamp')" title="Atur posisi stempel Inspected (Q)">🔖</button>
+        <button class="iq-t" data-tool="stamp" onclick="iq.tool('stamp')" title="Atur posisi stempel Inspected + nama & tanggal (Q)">🔖</button>
       </div>
 
       <div class="iq-row2" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
@@ -32685,10 +32693,24 @@ function moveItem(it,dx,dy){
 function stampGeom(c,p){
   const fs=Math.max(8,Math.max(p.w,p.h)/75),pad=fs*.7;
   c.font='700 '+fs+'px '+FONT;
-  const w=c.measureText('Inspected').width+fs*1.4,h=fs*1.9;
+  const inf=stampInfo(),n=inf.lines.length;
+  let w=c.measureText('Inspected').width+fs*1.4;
+  c.font='600 '+(fs*.7)+'px '+FONT;
+  inf.lines.forEach(t=>{w=Math.max(w,c.measureText(t).width+fs*1.4);});
+  const h=n?fs*1.75+n*fs*.85+fs*.3:fs*1.9;
+  c.font='700 '+fs+'px '+FONT;
   let x=p.w-pad-w,y=p.h-pad-h;
   if(S.sp){x=Math.min(p.w-w,Math.max(0,S.sp.fx*p.w-w/2));y=Math.min(p.h-h,Math.max(0,S.sp.fy*p.h-h/2));}
-  return{fs,w,h,x,y};
+  return{fs,w,h,x,y,lines:inf.lines};
+}
+const BLN=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+function todayISO(){const d=new Date(),z=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate());}
+function fmtDate(iso){const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(iso||'');return m?(+m[3])+' '+BLN[+m[2]-1]+' '+m[1]:'';}
+function lastBy(){try{return localStorage.getItem('insp_by_last')||'';}catch(e){return '';}}
+function stampInfo(){
+  const by=(S.by||(S.approved?'':lastBy())||'').trim().slice(0,32),dt=S.date||(S.approved?'':todayISO());
+  const lines=[];const parts=[];if(by)parts.push('By '+by);if(dt)parts.push(fmtDate(dt));if(parts.length)lines.push(parts.join(', '));
+  return{lines};
 }
 function paintStamp(c,p,edit){
   c.save();c.textBaseline='middle';c.textAlign='center';
@@ -32696,7 +32718,11 @@ function paintStamp(c,p,edit){
   c.globalAlpha=.16;c.fillStyle=col;
   c.beginPath();c.roundRect?c.roundRect(g.x,g.y,g.w,g.h,g.fs*.35):c.rect(g.x,g.y,g.w,g.h);c.fill();
   c.globalAlpha=.65;c.strokeStyle=c.fillStyle=col;c.lineWidth=Math.max(g.fs*.12,.7);c.stroke();
-  c.fillText('Inspected',g.x+g.w/2,g.y+g.h/2+g.fs*.04);
+  if(g.lines.length){
+    c.fillText('Inspected',g.x+g.w/2,g.y+g.fs*.95);
+    c.font='600 '+(g.fs*.7)+'px '+FONT;
+    g.lines.forEach((t,i)=>c.fillText(t,g.x+g.w/2,g.y+g.fs*1.75+(i+.5)*g.fs*.85));
+  }else c.fillText('Inspected',g.x+g.w/2,g.y+g.h/2+g.fs*.04);
   if(edit){const k=1/S.zoom;c.globalAlpha=1;c.setLineDash([6*k,4*k]);c.lineWidth=2*k;c.strokeStyle='#22d3ee';c.strokeRect(g.x-4*k,g.y-4*k,g.w+8*k,g.h+8*k);}
   c.restore();
 }
@@ -33213,13 +33239,13 @@ function packItems(){
 }
 async function saveAnn(key){
   if(!items.length&&!S.approved){try{localStorage.removeItem('insp_'+key);localStorage.removeItem('inspst_'+key);}catch(e){}await kvDel('ann_'+key);return;}
-  const data={v:3,link:S.link,title:S.title,items:packItems(),approved:!!S.approved,status:S.status||'',stamp:S.sp||null,t:Date.now()};
+  const data={v:3,link:S.link,title:S.title,items:packItems(),approved:!!S.approved,status:S.status||'',stamp:S.sp||null,by:S.by||'',date:S.date||'',t:Date.now()};
   try{if(S.status)localStorage.setItem('inspst_'+key,S.status);else localStorage.removeItem('inspst_'+key);}catch(e){}
   const json=JSON.stringify(data);
   try{localStorage.setItem('insp_'+key,json);await kvDel('ann_'+key);}
   catch(e){
     await kvSet('ann_'+key,data);
-    try{localStorage.setItem('insp_'+key,JSON.stringify({v:3,idb:1,link:S.link,title:S.title,t:Date.now()}));}catch(e2){}
+    try{localStorage.setItem('insp_'+key,JSON.stringify({v:3,idb:1,link:S.link,title:S.title,status:S.status||'',by:S.by||'',date:S.date||'',t:Date.now()}));}catch(e2){}
   }
 }
 async function loadAnn(key){
@@ -33273,13 +33299,18 @@ function save(){
   const sb=k=>'<button class="iq-btn iq-st" data-st="'+k+'" onclick="iq.setSt(\''+k+'\')" style="padding:12px;font-size:.85rem;border:2px solid '+INSP_ST[k].c+';background:transparent;color:'+INSP_ST[k].c+'">'+INSP_ST[k].t+'</button>';
   showMsg('<h3>Simpan hasil inspeksi</h3>1. Pilih status:'+
     '<div class="row" style="flex-direction:column;margin-top:6px">'+sb('accept')+sb('special')+sb('reject')+sb('hold')+'</div>'+
-    '<div style="margin-top:12px">2. Simpan (stempel <b>Inspected</b> berwarna sesuai status; atur posisinya dengan tool 🔖):</div>'+
+    '<div style="margin-top:12px">2. Isi data stempel:</div>'+
+    '<div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">'+
+    '<label style="font-size:.78rem">Inspected By (nama inspector)<input id="iqBy" type="text" maxlength="32" placeholder="Nama inspector" value="'+escA(S.by||lastBy())+'" style="width:100%;box-sizing:border-box;margin-top:3px;padding:10px;border-radius:8px;border:1px solid #28466d;background:#0b1b33;color:#fff;font-size:.9rem"></label>'+
+    '<label style="font-size:.78rem">Tanggal<input id="iqDate" type="date" value="'+(S.date||todayISO())+'" style="width:100%;box-sizing:border-box;margin-top:3px;padding:10px;border-radius:8px;border:1px solid #28466d;background:#0b1b33;color:#fff;font-size:.9rem;color-scheme:dark"></label></div>'+
+    '<div style="margin-top:12px">3. Simpan (stempel <b>Inspected</b> berwarna sesuai status; atur posisinya dengan tool 🔖):</div>'+
     '<div class="row" style="flex-direction:column;margin-top:6px">'+
     '<button class="iq-btn primary" style="padding:13px" onclick="iq.saveDo(\'pdf\')">💾 Simpan &amp; download PDF</button>'+
     '<button class="iq-btn" style="padding:13px" onclick="iq.saveDo(\'only\')">✔ Simpan saja (tanpa download)</button>'+
     '<button class="iq-btn" style="padding:13px" onclick="iq.hideDlg()">Batal</button></div>');
   setSt(S.pend);
 }
+function escA(t){return String(t||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
 function setSt(k){
   S.pend=k;
   document.querySelectorAll('#iqMsg .iq-st').forEach(b=>{const on=b.dataset.st===k,c=INSP_ST[b.dataset.st].c;b.style.background=on?c:'transparent';b.style.color=on?'#fff':c;});
@@ -33287,7 +33318,10 @@ function setSt(k){
 async function saveDo(mode){
   if(saving||!S.pdf||!S.bytes)return;
   if(!S.pend){alert('Pilih status dulu: Accept, Spesial Accepted, Reject, atau Hold Inspect.');return;}
+  const byV=(($('iqBy')||{}).value||'').trim(),dtV=(($('iqDate')||{}).value||'')||todayISO();
+  if(!byV){alert('Isi dulu nama pada "Inspected By".');return;}
   hideMsg();
+  const wasBy=S.by,wasDt=S.date;S.by=byV;S.date=dtV;try{localStorage.setItem('insp_by_last',byV);}catch(e){}
   saving=true;const btn=$('iqSaveBtn'),old=btn.innerHTML,was=S.approved,wasSt=S.status;
   btn.disabled=true;btn.innerHTML='⏳<span class="lbl"> Menyimpan…</span>';
   try{
@@ -33299,10 +33333,12 @@ async function saveDo(mode){
       document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),20000);
     }
     await saveAnn(S.key);window.__inspSet=null;
+    if((S.status==='accept'||S.status==='special')&&S.key){try{checkedState[S.key]=true;if(typeof saveChecked==='function')saveChecked();}catch(e){}}
+    try{if(typeof renderTable==='function')renderTable();}catch(e){}
     setDirty(false);
     try{if(typeof recordInspectionResult==='function')recordInspectionResult('Inspeksi ['+INSP_ST[S.status].t+'] disimpan'+(mode==='pdf'?' + PDF':'')+': '+S.title+' ('+items.length+' coretan)');}catch(e){}
     toast(mode==='pdf'?'Tersimpan ✓ PDF ('+S.pages.length+' hal.) diunduh · '+INSP_ST[S.status].t:'Tersimpan ✓ (tanpa download) · '+INSP_ST[S.status].t);
-  }catch(err){console.error(err);S.approved=was;S.status=wasSt;scheduleRedraw();alert('Gagal menyimpan: '+(err&&err.message||err));}
+  }catch(err){console.error(err);S.approved=was;S.status=wasSt;S.by=wasBy;S.date=wasDt;scheduleRedraw();alert('Gagal menyimpan: '+(err&&err.message||err));}
   btn.disabled=false;btn.innerHTML=old;saving=false;
 }
 
@@ -33315,7 +33351,7 @@ async function delResult(){
   try{localStorage.removeItem('insp_'+key);}catch(e){}
   await kvDel('ann_'+key);window.__inspSet=null;
   try{if(typeof recordInspectionResult==='function')recordInspectionResult('Hasil inspeksi dihapus: '+S.title);}catch(e){}
-  S.approved=false;S.status='';S.sp=null;try{localStorage.removeItem('inspst_'+S.key);}catch(e){}items=[];undoS=[];redoS=[];sel=null;setDirty(false);updUndo();
+  S.approved=false;S.status='';S.sp=null;S.by='';S.date='';try{localStorage.removeItem('inspst_'+S.key);}catch(e){}items=[];undoS=[];redoS=[];sel=null;setDirty(false);updUndo();
   S.pages.forEach(p=>scheduleRedraw(p.i));
   close(true);
 }
@@ -33335,7 +33371,7 @@ async function openDoc(o){
   ['iqSidePanel','iqSrcPanel'].forEach(x=>{$(x).style.display='none';});
   setTool('pan');
   const ann=o.result?await loadAnn(S.key):null; /* View Drawing = mulai bersih; coretan lama hanya dimuat lewat tombol Hasil */
-  S.approved=!!(ann&&ann.approved);S.status=(ann&&ann.status)||'';S.sp=(ann&&ann.stamp)||null;
+  S.approved=!!(ann&&ann.approved);S.status=(ann&&ann.status)||'';S.sp=(ann&&ann.stamp)||null;S.by=(ann&&ann.by)||'';S.date=(ann&&ann.date)||'';
   if(ann&&ann.items)items=ann.items.map(it=>Object.assign({},it));
   else if(ann&&ann.legacy)toast('Hasil lama (format PNG) tidak bisa dimuat ulang; coretan baru akan menggantikannya saat disimpan');
   if(!S.cid){showMsg('<h3>Link drawing tidak valid</h3>Link untuk item ini kosong.<div class="row"><button class="iq-btn" onclick="iq.close(1)">✕ Tutup</button></div>');return;}
@@ -33533,6 +33569,13 @@ function toggleCompletenessView(){ openView('complete'); }
 const _renderTable = renderTable;
 renderTable = function(){
   _renderTable();
+  try{
+    const f=document.getElementById('checkFilter');
+    if(f){const rows=projectData[currentProject]||[],mn=currentView==='main',n={all:0,accept:0,special:0,reject:0,hold:0,none:0};
+      rows.forEach((r,i)=>{if(mn!==!!isMainRow(r)&&mn)return;n.all++;const k=currentProject+'_'+i;if(!inspHas(k))n.none++;else{const t=window.__inspSt[k];if(t in n)n[t]++;}});
+      const L={all:'☰ Semua status',accept:'✔ Accept',special:'★ Spesial Accepted',reject:'✖ Reject',hold:'⏸ Hold Inspect',none:'☐ Belum diinspeksi'};
+      Array.from(f.options).forEach(o=>{o.text=L[o.value]+' ('+fmt(n[o.value])+')';});f.value=window.__cf||'all';}
+  }catch(e){}
   if(currentView==='main'){
     const m=projStats(currentProject), set=(id,v)=>document.getElementById(id).innerText=v;
     set('totalStat',fmt(m.mainTotal)); set('checkedStat',fmt(m.mainChecked));
@@ -34576,6 +34619,201 @@ window.onload=async function(){
   try{if(discover()){refreshUI()}}catch(e){console.error(e)}
   return r;
 };
+})();
+</script>
+
+<style>
+.hm-stbar{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
+.hm-stbar span{font-size:.7rem;font-weight:700;padding:3px 8px;border-radius:99px;border:1px solid currentColor;background:#ffffff0a;white-space:nowrap}
+.hm-kpi .hm-kpi-n.st{font-size:.72rem;line-height:1.5}
+</style>
+<script>
+/* ===== Sinkron resume dashboard: status inspeksi per project & unit + auto-centang Accept ===== */
+(function(){
+  'use strict';
+  var ACC={accept:1,special:1};
+  function statusMap(){
+    var m={};
+    try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf('inspst_')===0)m[k.slice(7)]=localStorage.getItem(k);}}catch(e){}
+    return m;
+  }
+  /* Accept & Spesial Accepted otomatis tercentang (sekali paksa untuk data lama; sesudahnya hanya yang belum pernah diatur manual) */
+  function syncAccepted(){
+    var m=statusMap(),force=false,ch=false;
+    try{force=localStorage.getItem('qc_acc_sync_v1')!=='1';}catch(e){}
+    Object.keys(m).forEach(function(k){
+      if(!ACC[m[k]])return;
+      if(force?checkedState[k]!==true:!(k in checkedState)){checkedState[k]=true;ch=true;}
+    });
+    if(ch&&typeof saveChecked==='function')saveChecked();
+    try{if(force)localStorage.setItem('qc_acc_sync_v1','1');}catch(e){}
+  }
+  var _ps=projStats;
+  projStats=function(p){
+    var m=_ps(p),sm=statusMap(),rows=projectData[p]||[],c={accept:0,special:0,reject:0,hold:0,other:0};
+    rows.forEach(function(r,i){var t=sm[p+'_'+i];if(!t)return;if(t in c)c[t]++;else c.other++;});
+    m.st=c;m.pending=Math.max(0,rows.length-m.inspected);m.rows=rows.length;
+    return m;
+  };
+  function chips(c,pending){
+    var I=window.INSP_ST;
+    return '<span style="color:'+I.accept.c+'">✔ '+fmt(c.accept)+'</span><span style="color:'+I.special.c+'">★ '+fmt(c.special)+'</span><span style="color:'+I.reject.c+'">✖ '+fmt(c.reject)+'</span><span style="color:'+I.hold.c+'">⏸ '+fmt(c.hold)+'</span><span style="color:#94a3b8">☐ '+fmt(pending)+' belum</span>';
+  }
+  var _rh=renderHome;
+  renderHome=function(){
+    try{syncAccepted();}catch(e){console.error(e);}
+    _rh.apply(this,arguments);
+    try{
+      var root=document.getElementById('homeView');if(!root)return;
+      var names=Object.keys(projectData),T={accept:0,special:0,reject:0,hold:0,other:0},pend=0;
+      var cards=root.querySelectorAll('.hm-proj');
+      names.forEach(function(n,k){
+        var m=projStats(n);
+        Object.keys(T).forEach(function(x){T[x]+=m.st[x];});pend+=m.pending;
+        var card=cards[k];if(!card)return;
+        var old=card.querySelector('.hm-stbar');if(old)old.remove();
+        card.insertAdjacentHTML('beforeend','<div class="hm-stbar" title="Status hasil inspeksi (main assy + komponen)">'+chips(m.st,m.pending)+'</div>');
+      });
+      var re=/ - Unit \d+$/,units=names.length,projs=names.filter(function(n){return !re.test(n);}).length;
+      var chip=root.querySelector('.hm-chips span');
+      if(chip)chip.textContent='📁 '+projs+' Project · '+units+' Unit';
+      var kp=root.querySelectorAll('.hm-kpi');
+      if(kp[3]){var n=kp[3].querySelector('.hm-kpi-n');if(n){n.classList.add('st');n.innerHTML=chips(T,pend);}}
+    }catch(e){console.error(e);}
+  };
+})();
+</script>
+
+<style>
+/* ===== Aktivitas Inspeksi Hari Ini ===== */
+.ia-wrap{position:relative;z-index:1}
+.ia-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.ia-tools select,.ia-tools input{background:#102743;color:#eef7ff;border:1px solid #315476;padding:7px 10px;border-radius:9px;font-size:.78rem;color-scheme:dark;outline:none}
+.ia-tools button{padding:7px 10px;font-size:.78rem}
+.ia-card{border:1px solid #25486b;border-radius:18px;background:linear-gradient(155deg,#0f2542,#09182b);overflow:hidden}
+.ia-sum{display:flex;gap:8px;flex-wrap:wrap;padding:14px 16px;border-bottom:1px solid #1b3552}
+.ia-sum span{font-size:.74rem;font-weight:700;padding:4px 10px;border-radius:99px;border:1px solid currentColor;background:#ffffff0a;white-space:nowrap}
+.ia-list{max-height:380px;overflow:auto;scrollbar-width:thin;scrollbar-color:#315477 #09182b}
+.ia-row{display:grid;grid-template-columns:62px minmax(0,1fr) 150px 150px;gap:12px;align-items:center;padding:11px 16px;border-bottom:1px solid #1b3552;cursor:pointer;transition:background .15s}
+.ia-row:last-child{border-bottom:0}.ia-row:hover{background:#123353}
+.ia-time{font-size:.74rem;color:#7f9fc4;font-variant-numeric:tabular-nums}
+.ia-name{min-width:0}.ia-name b{display:block;font-size:.84rem;color:#eaf4ff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ia-name small{display:block;font-size:.7rem;color:#7f9fc4;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ia-by{font-size:.78rem;color:#b9d2ee;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ia-by:before{content:"Inspected by ";color:#6f8fb3;font-size:.68rem}
+.ia-st{font-size:.72rem;font-weight:800;padding:4px 10px;border-radius:99px;border:1px solid currentColor;text-align:center;white-space:nowrap}
+.ia-empty{padding:30px 16px;text-align:center;color:#6f8fb3;font-size:.82rem}
+@media(max-width:700px){.ia-row{grid-template-columns:1fr auto;grid-template-areas:"n s" "t b";gap:6px 10px}.ia-name{grid-area:n}.ia-st{grid-area:s}.ia-time{grid-area:t}.ia-by{grid-area:b;text-align:right}}
+</style>
+<script>
+(function(){
+  'use strict';
+  var F={date:'',status:'all',by:'all'};
+  var LBL={accept:'✔ Accept',special:'★ Spesial Accepted',reject:'✖ Reject',hold:'⏸ Hold Inspect'};
+  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+  function iso(t){var d=new Date(t),z=function(n){return String(n).padStart(2,'0')};return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate())}
+  function hhmm(t){if(!t)return '--:--';var d=new Date(t),z=function(n){return String(n).padStart(2,'0')};return z(d.getHours())+':'+z(d.getMinutes())}
+  function stColor(k){var I=window.INSP_ST||{};return (I[k]&&I[k].c)||'#94a3b8'}
+
+  /* kumpulkan semua hasil inspeksi tersimpan -> daftar aktivitas */
+  function collect(){
+    var out=[],names=Object.keys(projectData||{});
+    try{
+      for(var i=0;i<localStorage.length;i++){
+        var k=localStorage.key(i);
+        if(!k||k.indexOf('insp_')!==0||k==='insp_by_last')continue;
+        var raw=localStorage.getItem(k);if(!raw||raw.charAt(0)!=='{')continue;
+        var d;try{d=JSON.parse(raw)}catch(e){continue}
+        var key=k.slice(5),u=key.lastIndexOf('_'),proj=key.slice(0,u),idx=+key.slice(u+1);
+        var row=(projectData[proj]||[])[idx];
+        var st=d.status||localStorage.getItem('inspst_'+key)||'';
+        if(!st&&!d.approved)continue;
+        var nm=row?(row.part_name||row.level||''):'';nm=String(nm).replace(/^▶\s*/,'');
+        out.push({key:key,proj:proj,name:nm||d.title||key,drawing:row&&row.drawing_no||'',
+          by:d.by||'',date:d.date||(d.t?iso(d.t):''),t:d.t||0,status:st});
+      }
+    }catch(e){console.error(e)}
+    out.sort(function(a,b){return b.t-a.t});
+    return out;
+  }
+
+  function section(){
+    var all=collect(),today=(typeof todayISO==='function')?todayISO():iso(Date.now());
+    if(!F.date)F.date=today;
+    var day=all.filter(function(x){return x.date===F.date});
+    var inspectors=[];day.forEach(function(x){var b=x.by||'(tanpa nama)';if(inspectors.indexOf(b)<0)inspectors.push(b)});
+    if(F.by!=='all'&&inspectors.indexOf(F.by)<0)F.by='all';
+    var list=day.filter(function(x){return (F.status==='all'||x.status===F.status)&&(F.by==='all'||(x.by||'(tanpa nama)')===F.by)});
+    var c={accept:0,special:0,reject:0,hold:0};day.forEach(function(x){if(x.status in c)c[x.status]++});
+    var isToday=F.date===today;
+    var sum='<span style="color:#e2e8f0">Total '+day.length+'</span>'+Object.keys(c).map(function(k){return '<span style="color:'+stColor(k)+'">'+LBL[k]+' · '+c[k]+'</span>'}).join('');
+    var rows=list.length?list.map(function(x){
+      return '<div class="ia-row" data-key="'+esc(x.key)+'" title="Klik untuk membuka hasil inspeksi">'+
+        '<div class="ia-time">'+hhmm(x.t)+'</div>'+
+        '<div class="ia-name"><b>'+esc(x.name)+'</b><small>'+esc(x.proj)+(x.drawing?' · '+esc(x.drawing):'')+'</small></div>'+
+        '<div class="ia-by">'+esc(x.by||'-')+'</div>'+
+        '<div class="ia-st" style="color:'+stColor(x.status)+'">'+esc(LBL[x.status]||x.status||'-')+(isToday?' Today':'')+'</div></div>';
+    }).join(''):'<div class="ia-empty">'+(isToday?'Belum ada kegiatan inspeksi hari ini.':'Tidak ada kegiatan inspeksi pada tanggal ini.')+'</div>';
+    var selSt='<select data-f="status"><option value="all">Semua status</option>'+Object.keys(LBL).map(function(k){return '<option value="'+k+'"'+(F.status===k?' selected':'')+'>'+LBL[k]+'</option>'}).join('')+'</select>';
+    var selBy='<select data-f="by"><option value="all">Semua inspector</option>'+inspectors.map(function(b){return '<option value="'+esc(b)+'"'+(F.by===b?' selected':'')+'>'+esc(b)+'</option>'}).join('')+'</select>';
+    return '<div class="hm-sec" id="iaHead"><h3>Aktivitas Inspeksi '+(isToday?'Hari Ini':'')+'</h3>'+
+      '<div class="ia-tools"><input type="date" data-f="date" value="'+F.date+'">'+selBy+selSt+'<button data-f="today">Hari ini</button></div></div>'+
+      '<div class="ia-card"><div class="ia-sum">'+sum+'</div><div class="ia-list">'+rows+'</div></div>';
+  }
+
+  function openItem(key){
+    var u=key.lastIndexOf('_'),p=key.slice(0,u),idx=+key.slice(u+1),r=(projectData[p]||[])[idx];if(!r)return;
+    currentProject=p;
+    openView(isMainRow(r)?'main':'complete');
+    setTimeout(function(){openInspected(key,String(r.part_name||r.level||'').replace(/^▶\s*/,''))},60);
+  }
+
+  function redraw(){
+    var root=document.getElementById('homeView'),w=root&&root.querySelector('.ia-wrap');if(!w)return;
+    var nw=document.createElement('div');nw.className='ia-wrap';nw.innerHTML=section();w.replaceWith(nw);
+  }
+  var bound=false;
+  function bindOnce(root){
+    if(bound)return;bound=true;
+    root.addEventListener('change',function(ev){
+      if(!ev.target.closest||!ev.target.closest('.ia-wrap'))return;
+      var f=ev.target.getAttribute('data-f');if(!f)return;
+      F[f]=ev.target.value;redraw();
+    });
+    root.addEventListener('click',function(ev){
+      if(!ev.target.closest||!ev.target.closest('.ia-wrap'))return;
+      if(ev.target.closest('[data-f="today"]')){F.date='';F.by='all';F.status='all';redraw();return}
+      var r=ev.target.closest('.ia-row');if(r)openItem(r.getAttribute('data-key'));
+    });
+  }
+  function mount(root){
+    var anchor=root.querySelector('.hm-projects');if(!anchor)return;
+    var head=anchor.previousElementSibling; /* judul "Resume per Project" */
+    var old=root.querySelector('.ia-wrap');if(old)old.remove();
+    var w=document.createElement('div');w.className='ia-wrap';w.innerHTML=section();
+    anchor.parentNode.insertBefore(w,head||anchor);
+    bindOnce(root);
+  }
+
+  var _rh=renderHome;
+  renderHome=function(){
+    _rh.apply(this,arguments);
+    try{var root=document.getElementById('homeView');if(root){mount(root);sig=signature()}}catch(e){console.error(e)}
+  };
+
+  /* data inspector lain masuk lewat sinkron Sheet secara diam-diam (tanpa render ulang),
+     jadi daftar diperbarui sendiri bila ada perubahan dan Home sedang terbuka */
+  var sig='';
+  function signature(){var a=collect();return a.length+'|'+a.map(function(x){return x.key+x.status+x.t}).join(',')}
+  setInterval(function(){
+    try{
+      if(!document.body.classList.contains('is-home'))return;
+      var root=document.getElementById('homeView'),w=root&&root.querySelector('.ia-wrap');if(!w)return;
+      var a=document.activeElement;if(a&&w.contains(a)&&(a.tagName==='SELECT'||a.tagName==='INPUT'))return;
+      var n=signature();if(n===sig)return;sig=n;
+      redraw();
+    }catch(e){}
+  },15000);
 })();
 </script>
 
