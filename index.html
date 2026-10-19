@@ -478,7 +478,15 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
                 <span id="listTitle">Components Checklist</span>
                 <span id="progressCount" style="font-size: 0.8rem; color: #94a3b8;">Checked: 0 / 3376</span>
             </div>
-            <div class="table-container">
+            
+<div id="checkFilterBar" style="margin: 10px 0; display: flex; gap: 8px; align-items: center;">
+    <span style="font-size: 13px; font-weight: bold; color: var(--muted-foreground, #666);">Filter Status:</span>
+    <button onclick="setCheckFilter('all')" id="flt-all" style="padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border, #ccc); background: var(--accent, #0284c7); color: white; cursor: pointer; font-size: 12px;">Semua</button>
+    <button onclick="setCheckFilter('unchecked')" id="flt-unchecked" style="padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border, #ccc); background: transparent; color: inherit; cursor: pointer; font-size: 12px;">Belum Dicek</button>
+    <button onclick="setCheckFilter('checked')" id="flt-checked" style="padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border, #ccc); background: transparent; color: inherit; cursor: pointer; font-size: 12px;">Sudah Dicek</button>
+</div>
+
+<div class="table-container">
                 <table id="checkTable">
                     <thead>
                         <tr>
@@ -34577,6 +34585,28 @@ window.onload=async function(){
   return r;
 };
 })();
+</script>
+
+
+<script>
+let currentCheckFilter = 'all';
+
+function setCheckFilter(mode) {
+    currentCheckFilter = mode;
+    ['all', 'unchecked', 'checked'].forEach(m => {
+        let btn = document.getElementById('flt-' + m);
+        if (btn) {
+            if (m === mode) {
+                btn.style.background = 'var(--accent, #0284c7)';
+                btn.style.color = 'white';
+            } else {
+                btn.style.background = 'transparent';
+                btn.style.color = 'inherit';
+            }
+        }
+    });
+    if (typeof renderTable === 'function') renderTable();
+}
 </script>
 
 </body>
