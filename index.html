@@ -33622,7 +33622,7 @@ const BUILTIN=Object.keys(projectData);
 const idb=()=>new Promise((ok,no)=>{const r=indexedDB.open('qc_store',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)});
 async function kvGet(k){try{const d=await idb();return await new Promise(ok=>{const q=d.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>ok(q.result);q.onerror=()=>ok()})}catch(e){}}
 async function kvSet(k,v){try{const d=await idb();return await new Promise(ok=>{const t=d.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=()=>ok(true);t.onerror=()=>ok(false)})}catch(e){return false}}
-const save=async()=>{const a=await kvSet('projects',store.projects),b=await kvSet('drive',store.drive);if(!a||!b)toast('⚠️ Gagal menyimpan ke browser. Pakai tab Backup.',1)};
+const save=async()=>{const a=await kvSet('projects',store.projects),b=await kvSet('drive',store.drive);if(!a||!b)toast('⚠️ Gagal menyimpan ke browser. Pakai tab Backup.',1);try{window.QCSync&&window.QCSync.projChanged&&window.QCSync.projChanged()}catch(e){}};
 function toast(t,bad){let d=document.createElement('div');d.textContent=t;d.style.cssText='position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:100001;padding:11px 18px;border-radius:12px;font-size:.85rem;font-weight:700;color:#fff;box-shadow:0 10px 30px #0008;background:'+(bad?'#be123c':'#047857');document.body.appendChild(d);setTimeout(()=>d.remove(),4200)}
 /* ---------- util ---------- */
 const N=s=>String(s==null?'':s).toUpperCase().replace(/[^A-Z0-9]/g,'');
@@ -33761,7 +33761,16 @@ window.pmTab=t=>open_(t);
 const hd=document.querySelector('body > div[style*="display: flex"]');const bt=document.createElement('button');bt.id='pmBtn';bt.textContent='⚙️ Kelola Project';bt.onclick=()=>open_('import');(hd||document.body).appendChild(bt);
 const prev=window.onload;
 window.onload=async()=>{try{const p=await kvGet('projects'),d=await kvGet('drive');if(p)store.projects=p;if(d)store.drive=d;Object.assign(projectData,store.projects);applyDrive()}catch(e){console.error(e)}
+ window.QCProj.ld=true;
  if(prev)prev();setTimeout(()=>syncAll(true),800);setInterval(()=>syncAll(true),300000)};
+/* ---------- API untuk sinkron antar inspector (QCSync) ---------- */
+window.QCProj={ld:false,loaded:()=>window.QCProj.ld,all:()=>store.projects,
+ async put(name,rows){
+  if(rows==null){const had=name in store.projects;delete store.projects[name];delete store.drive[name];await save();
+   if(BUILTIN.includes(name)){if(had)location.reload();return}
+   delete projectData[name];return}
+  projectData[name]=rows;store.projects[name]=rows;try{applyDrive([name])}catch(e){}await save()},
+ refresh};
 })();
 </script>
 
@@ -33792,16 +33801,18 @@ window.addEventListener('DOMContentLoaded', () => {
 /* ===== SINKRON ANTAR INSPECTOR (Google Apps Script + Google Sheet) =====
    - Centang  : localStorage 'qc_checked_state'  -> catatan 'c:<PROJECT_idx>'
    - Inspeksi : localStorage 'insp_<key>'        -> catatan 'i:<key>'
+   - Unit     : localStorage 'qc_units'          -> catatan 'u:<PROJECT>' (jumlah unit)
+   - Project  : hasil import Excel (IndexedDB)   -> catatan 'p:<PROJECT>' (digzip)
    Perubahan lokal dideteksi lewat hook localStorage, dikirim ke Sheet, dan
    perubahan inspector lain diambil tiap 30 detik. */
 (function(){
 'use strict';
 const LS = window.localStorage;
 const _set = Storage.prototype.setItem, _rem = Storage.prototype.removeItem;
-const K = {url:'qc_sync_api_url', cursor:'qc_sync_cursor', dirty:'qc_sync_dirty', inited:'qc_sync_inited', last:'qc_sync_last', src:'qc_sync_src', off:'qc_sync_off'};
-const CHK = 'qc_checked_state', POLL_KEY = 'qc_sync_poll';
+const K = {url:'qc_sync_api_url', cursor:'qc_sync_cursor', dirty:'qc_sync_dirty', inited:'qc_sync_inited', last:'qc_sync_last', src:'qc_sync_src', off:'qc_sync_off', inited2:'qc_sync_inited2'};
+const CHK = 'qc_checked_state', UK = 'qc_units', POLL_KEY = 'qc_sync_poll';
 const getPoll = () => Math.min(120000, Math.max(5000, Number(raw(POLL_KEY)) || 15000));   // jeda ambil data (ms), default 15 dtk
-let busy = false, pushTimer = null, pollTimer = null;
+let busy = false, pushTimer = null, pollTimer = null, bigProj = '';
 let st = {kind:'off', msg:'Belum terhubung'};
 
 const raw  = k => { try { return LS.getItem(k); } catch(e) { return null; } };
@@ -33809,7 +33820,8 @@ const jget = (k, d) => { try { const v = raw(k); return v ? JSON.parse(v) : d; }
 const jset = (k, v) => { try { _set.call(LS, k, JSON.stringify(v)); } catch(e) {} };
 const getUrl = () => (raw(K.url) || '').trim();
 const $ = id => document.getElementById(id);
-let lastChk = jget(CHK, {});
+let lastChk = jget(CHK, {}), lastUnits = jget(UK, {}), lastProj = {}, projReady = false;
+const pendP = [], pendU = [], deferred = new Set();
 const URL_RE = /^https:\/\/script\.google\.com\/macros\/s\/[^\s]+\/exec(\?.*)?$/;
 
 /* ---------- link undangan: https://.../#sync=<url-apps-script> ----------
@@ -33821,7 +33833,7 @@ function applyInvite(){
     history.replaceState(null, '', location.pathname + location.search);
     if (!URL_RE.test(u) || getUrl() === u) return;
     if (getUrl() && !confirm('Ganti tujuan sinkronisasi di perangkat ini dengan yang dari link undangan?')) return;
-    _rem.call(LS, K.cursor); _rem.call(LS, K.inited); _rem.call(LS, K.off); _set.call(LS, K.src, 'manual'); _set.call(LS, K.url, u);
+    _rem.call(LS, K.cursor); _rem.call(LS, K.inited); _rem.call(LS, K.inited2); _rem.call(LS, K.off); _set.call(LS, K.src, 'manual'); _set.call(LS, K.url, u);
   } catch(e) {}
 }
 applyInvite();
@@ -33838,7 +33850,7 @@ function applyDefault(){
     const cur = getUrl();
     if (cur === d) { _set.call(LS, K.src, 'default'); return; }
     if (cur && raw(K.src) !== 'default') return;
-    _rem.call(LS, K.cursor); _rem.call(LS, K.inited);
+    _rem.call(LS, K.cursor); _rem.call(LS, K.inited); _rem.call(LS, K.inited2);
     _set.call(LS, K.src, 'default'); _set.call(LS, K.url, d);
   } catch(e) {}
 }
@@ -33860,6 +33872,61 @@ function okMsg(){
   setStatus(p ? 'pending' : 'ok', 'Tersinkron ' + t + (p ? ' — ' + p + ' perubahan menunggu kirim' : ''));
 }
 
+
+/* ---------- project (hasil import Excel) & jumlah unit ---------- */
+const hash = s => { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h.toString(36) + ':' + s.length; };
+function b64(u8){ let s = '', n = 0x8000; for (let i = 0; i < u8.length; i += n) s += String.fromCharCode.apply(null, u8.subarray(i, i + n)); return btoa(s); }
+function unb64(t){ const s = atob(t), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
+async function encProj(rows){
+  const txt = JSON.stringify(rows);
+  try {
+    if (typeof CompressionStream !== 'undefined') {
+      const buf = await new Response(new Blob([txt]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
+      return 'z1:' + b64(new Uint8Array(buf));
+    }
+  } catch(e) {}
+  return 'j1:' + txt;
+}
+async function decProj(v){
+  if (v.indexOf('j1:') === 0) return v.slice(3);
+  if (v.indexOf('z1:') === 0) {
+    if (typeof DecompressionStream === 'undefined') throw new Error('Browser ini belum mendukung kompresi (perbarui browser)');
+    return await new Response(new Blob([unb64(v.slice(3))]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+  }
+  throw new Error('Format project tidak dikenal');
+}
+const projLoaded = () => !!(window.QCProj && window.QCProj.loaded());
+async function whenProj(){
+  for (let i = 0; i < 50 && !projLoaded(); i++) await new Promise(r => setTimeout(r, 200));
+  return projLoaded();
+}
+function projSnapshot(){ const sp = window.QCProj.all(), o = {}; for (const n in sp) o[n] = hash(JSON.stringify(sp[n])); return o; }
+function initProj(){
+  if (projReady || !projLoaded()) return;
+  lastProj = projSnapshot(); projReady = true;
+  if (!raw(K.inited2)) {                       // sekali: kirim project & unit yang sudah ada di perangkat ini
+    const d = jget(K.dirty, {}), uc = jget(UK, {});
+    for (const n in lastProj) if (!d['p:' + n]) d['p:' + n] = 1;
+    for (const b in uc) if (!d['u:' + b]) d['u:' + b] = 1;
+    jset(K.dirty, d); _set.call(LS, K.inited2, '1');
+  }
+}
+function projChanged(){
+  if (!projReady || !getUrl() || !projLoaded()) return;
+  const cur = projSnapshot(), d = jget(K.dirty, {}), now = Date.now(); let n = 0;
+  for (const k in cur) if (cur[k] !== lastProj[k]) { d['p:' + k] = now; n++; }
+  for (const k in lastProj) if (!(k in cur)) { d['p:' + k] = now; n++; }
+  lastProj = cur;
+  if (n) { jset(K.dirty, d); schedulePush(); }
+}
+function diffUnits(){
+  const cur = jget(UK, {}), d = jget(K.dirty, {}), now = Date.now(); let n = 0;
+  for (const k in cur) if (cur[k] !== lastUnits[k]) { d['u:' + k] = now; n++; }
+  for (const k in lastUnits) if (!(k in cur)) { d['u:' + k] = now; n++; }
+  lastUnits = cur;
+  if (n) { jset(K.dirty, d); schedulePush(); }
+}
+
 /* ---------- deteksi perubahan lokal ---------- */
 function markDirty(id){
   const d = jget(K.dirty, {}); d[id] = Date.now(); jset(K.dirty, d);
@@ -33878,6 +33945,7 @@ Storage.prototype.setItem = function(k, v){
   if (this === LS && getUrl()) {
     k = String(k);
     if (k === CHK) diffChecks();
+    else if (k === UK) diffUnits();
     else if (k.indexOf('insp_') === 0) markDirty('i:' + k.slice(5));
   }
   return r;
@@ -33909,13 +33977,13 @@ async function push(){
   if (!getUrl()) return;
   if (busy) { schedulePush(); return; }
   if (!pendingCount()) return;
-  busy = true; setStatus('busy', 'Mengirim…');
+  busy = true; deferred.clear(); setStatus('busy', 'Mengirim…');
   try {
     let rejected = 0;
     for (;;) {
-      const cur = jget(K.dirty, {}), ids = Object.keys(cur);
+      const cur = jget(K.dirty, {}), ids = Object.keys(cur).filter(i => !deferred.has(i));
       if (!ids.length) break;
-      const chk = jget(CHK, {}), batch = [], drop = [];
+      const chk = jget(CHK, {}), uc = jget(UK, {}), batch = [], drop = [];
       let size = 0;
       for (const id of ids) {
         if (batch.length >= 300 || size > 150000) break;
@@ -33923,6 +33991,15 @@ async function push(){
         let v = null;
         if (kind === 'c') {
           v = (key in chk) ? String(!!chk[key]) : null;
+        } else if (kind === 'u') {
+          v = (key in uc) ? String(uc[key]) : null;
+        } else if (kind === 'p') {
+          if (!projLoaded()) { deferred.add(id); continue; }
+          const sp = window.QCProj.all();
+          if (key in sp) {
+            v = await encProj(sp[key]);
+            if (v.length > 850000) { drop.push(id); bigProj = key; continue; }   // melebihi batas 1 catatan di Google Sheet
+          }
         } else {
           const r = raw('insp_' + key);
           if (r != null) {
@@ -33949,7 +34026,7 @@ async function push(){
       jset(K.dirty, nd);
     }
     if (rejected) _set.call(LS, K.cursor, '0');   // ada data server yang lebih baru: ambil ulang semuanya
-    okMsg();
+    if (bigProj) { const b = bigProj; bigProj = ''; setStatus('err', 'Project "' + b + '" terlalu besar untuk disinkronkan lewat Google Sheet'); } else okMsg();
   } catch(e) {
     setStatus('err', 'Gagal kirim: ' + (e.message || e) + ' (akan dicoba lagi)');
   } finally { busy = false; }
@@ -33982,6 +34059,8 @@ function applyRecords(recs){
   recs.forEach(r => {
     if (d[r.k] && d[r.k] > r.ts) return;            // perubahan lokal yang belum terkirim lebih baru
     const kind = r.k.charAt(0), key = r.k.slice(2);
+    if (kind === 'p') { pendP.push(r); return; }
+    if (kind === 'u') { pendU.push(r); return; }
     if (kind === 'c') {
       if (r.v === null) { if (key in checkedState) { delete checkedState[key]; chkCh = true; chkKeys.push(key); } }
       else { const b = (r.v === 'true'); if (checkedState[key] !== b) { checkedState[key] = b; chkCh = true; chkKeys.push(key); } }
@@ -34007,16 +34086,55 @@ function applyRecords(recs){
   if (chkCh) silentPatch(chkKeys);
   return recs.length;
 }
+
+/* Terapkan project & jumlah unit dari inspector lain, lalu muat ulang tampilan. */
+async function flushExtra(){
+  if (!pendP.length && !pendU.length) return;
+  const P = pendP.splice(0), U = pendU.splice(0), Q = window.QCProj, UN = window.QCUnits;
+  let changed = false;
+  const lastP = {}; P.forEach(r => { lastP[r.k.slice(2)] = r; });
+  for (const name in lastP) {
+    const r = lastP[name], d = jget(K.dirty, {});
+    try {
+      if (r.v === null) {
+        if (name in Q.all()) { delete lastProj[name]; await Q.put(name, null); changed = true; }
+      } else {
+        const rows = JSON.parse(await decProj(r.v));
+        const h = hash(JSON.stringify(rows));
+        if (lastProj[name] !== h || !(name in Q.all())) { lastProj[name] = h; await Q.put(name, rows); changed = true; }
+      }
+      if (d['p:' + name] && d['p:' + name] <= r.ts) { delete d['p:' + name]; jset(K.dirty, d); }
+    } catch(e) { console.warn('QCSync: project gagal diterapkan', name, e); }
+  }
+  const lastU = {}; U.forEach(r => { lastU[r.k.slice(2)] = r; });
+  const cfg = jget(UK, {});
+  for (const base in lastU) {
+    const r = lastU[base], n = r.v === null ? 1 : Math.max(1, Math.min(50, Math.floor(+r.v) || 1)), old = Math.max(1, +cfg[base] || 1);
+    if (n === old) continue;
+    if (n < old && UN) for (let j = n + 1; j <= old; j++) { try { UN.wipe(UN.unitName(base, j)); } catch(e) {} }
+    if (n > 1) cfg[base] = n; else delete cfg[base];
+    changed = true;
+    const d = jget(K.dirty, {}); if (d['u:' + base] && d['u:' + base] <= r.ts) { delete d['u:' + base]; jset(K.dirty, d); }
+  }
+  if (changed) {
+    try { _set.call(LS, UK, JSON.stringify(cfg)); } catch(e) {}
+    lastUnits = jget(UK, {});
+    try { if (UN) { UN.reload(); UN.refresh(); } else if (Q) Q.refresh(); } catch(e) { console.error(e); }
+  }
+}
 async function pull(){
   if (!getUrl()) return;
   if (busy) return;
   busy = true; setStatus('busy', 'Mengambil data…');
   try {
+    if (!(await whenProj())) throw new Error('Data project belum siap, mencoba lagi');
+    initProj();
     let since = Number(raw(K.cursor)) || 0, srvNow = 0, total = 0;
     for (;;) {
       const j = await req(withQ(getUrl(), 'since=' + since + '&_=' + Date.now()));
       srvNow = j.now || srvNow;
       total += applyRecords(j.records || []);
+      await flushExtra();
       if (j.more) { since = j.cursor; _set.call(LS, K.cursor, String(since)); setStatus('busy', 'Mengambil data… (' + total + ')'); }
       else break;
     }
@@ -34090,13 +34208,13 @@ async function saveUrl(){
   setStatus('busy', 'Menguji koneksi…');
   try { await req(withQ(u, 'ping=1')); }
   catch(e) { setStatus('err', 'Tidak bisa terhubung: ' + (e.message || e) + '. Pastikan akses Web app = Anyone.'); return; }
-  if (u !== getUrl()) { _rem.call(LS, K.cursor); _rem.call(LS, K.inited); }
+  if (u !== getUrl()) { _rem.call(LS, K.cursor); _rem.call(LS, K.inited); _rem.call(LS, K.inited2); }
   _rem.call(LS, K.off); _set.call(LS, K.src, 'manual'); _set.call(LS, K.url, u);
   start();
 }
 function disconnect(){
   if (!confirm('Putuskan sinkronisasi di perangkat ini? Data lokal tetap ada.')) return;
-  [K.url, K.cursor, K.dirty, K.inited, K.last, K.src].forEach(k => _rem.call(LS, k)); _set.call(LS, K.off, '1');
+  [K.url, K.cursor, K.dirty, K.inited, K.inited2, K.last, K.src].forEach(k => _rem.call(LS, k)); _set.call(LS, K.off, '1');
   clearInterval(pollTimer); $('qcsUrl').value = '';
   setStatus('off', 'Belum terhubung');
 }
@@ -34108,7 +34226,7 @@ function openModal(){
     m.innerHTML =
       '<div style="background:#1e293b;color:#f8fafc;border:1px solid #334155;border-radius:12px;max-width:580px;width:100%;max-height:92vh;overflow:auto;padding:18px;font-size:.9rem;line-height:1.5">' +
       '<h3 style="margin:0 0 6px;color:#38bdf8">🔄 Sinkronisasi antar Inspector</h3>' +
-      '<p style="color:#94a3b8;margin:0 0 10px">Centang dan hasil inspeksi dikirim ke Google Sheet, lalu diterima inspector lain secara otomatis di latar belakang, tanpa perlu reload.</p>' +
+      '<p style="color:#94a3b8;margin:0 0 10px">Centang, hasil inspeksi, project (import Excel) dan jumlah unit dikirim ke Google Sheet, lalu diterima inspector lain secara otomatis di latar belakang, tanpa perlu reload.</p>' +
       '<details style="margin-bottom:12px"><summary style="cursor:pointer;color:#38bdf8">Cara setup (sekali saja, oleh 1 orang, ±3 menit)</summary>' +
       '<ol style="margin:8px 0 0;padding-left:20px;color:#cbd5e1">' +
       '<li>Buat <b>Google Sheet</b> baru → menu <b>Extensions → Apps Script</b>.</li>' +
@@ -34146,7 +34264,7 @@ function openModal(){
   $('qcsPoll').value = String(getPoll());
   setStatus(st.kind, getUrl() ? (st.kind === 'off' ? 'Terhubung' : st.msg) : 'Belum terhubung');
 }
-window.QCSync = {open: openModal, sync: () => tick(true), state: () => ({url: !!getUrl(), pending: pendingCount(), status: st})};
+window.QCSync = {projChanged, open: openModal, sync: () => tick(true), state: () => ({url: !!getUrl(), pending: pendingCount(), status: st})};
 })();
 </script>
 <script type="text/plain" id="qcSyncGS" style="display:none">
@@ -34438,7 +34556,7 @@ function rebuild(){
       })(b,unitName(b,n));
     }
   });
-  Object.keys(cfg).forEach(function(b){if(!(b in projectData)||unitSet.has(b)){delete cfg[b]}});
+  Object.keys(cfg).forEach(function(b){if(unitSet.has(b)){delete cfg[b]}});
   return before!==Object.keys(projectData).join('\u0001');
 }
 
@@ -34616,8 +34734,20 @@ if(pb)new MutationObserver(hideUnitsInManager).observe(pb,{childList:true,subtre
 var _onload=window.onload;
 window.onload=async function(){
   var r=_onload?await _onload.apply(this,arguments):undefined;
-  try{if(discover()){refreshUI()}}catch(e){console.error(e)}
+  try{var rb=rebuild(),dc=discover();if(rb||dc){refreshUI()}}catch(e){console.error(e)}
   return r;
+};
+
+/* API untuk sinkron antar inspector (QCSync) */
+window.QCUnits={
+  unitName:unitName,
+  wipe:wipe,
+  reload:function(){try{cfg=JSON.parse(localStorage.getItem(CFG_KEY)||'{}')||{}}catch(e){cfg={}}return rebuild()},
+  refresh:function(){
+    refreshUI();
+    var m=$('pmModal'),b=$('pmBody');
+    if(m&&m.classList.contains('open')&&b&&b.querySelector('[data-act="add"]'))renderUnits();
+  }
 };
 })();
 </script>
