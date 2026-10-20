@@ -33616,13 +33616,13 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 (function(){
 function ensureXLSX(){if(!window.XLSX)(0,eval)(document.getElementById('sheetjs').textContent)}
 const $=id=>document.getElementById(id),esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-let store={projects:{},drive:{}},pending=[];
+let store={projects:{},drive:{},hidden:{}},pending=[];
 const BUILTIN=Object.keys(projectData);
 /* ---------- penyimpanan (IndexedDB) ---------- */
 const idb=()=>new Promise((ok,no)=>{const r=indexedDB.open('qc_store',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)});
 async function kvGet(k){try{const d=await idb();return await new Promise(ok=>{const q=d.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>ok(q.result);q.onerror=()=>ok()})}catch(e){}}
 async function kvSet(k,v){try{const d=await idb();return await new Promise(ok=>{const t=d.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=()=>ok(true);t.onerror=()=>ok(false)})}catch(e){return false}}
-const save=async()=>{const a=await kvSet('projects',store.projects),b=await kvSet('drive',store.drive);if(!a||!b)toast('⚠️ Gagal menyimpan ke browser. Pakai tab Backup.',1);try{window.QCSync&&window.QCSync.projChanged&&window.QCSync.projChanged()}catch(e){}};
+const save=async()=>{const a=await kvSet('projects',store.projects),b=await kvSet('drive',store.drive),h=await kvSet('hidden',store.hidden);if(!a||!b||!h)toast('⚠️ Gagal menyimpan ke browser. Pakai tab Backup.',1);try{window.QCSync&&window.QCSync.projChanged&&window.QCSync.projChanged()}catch(e){}};
 function toast(t,bad){let d=document.createElement('div');d.textContent=t;d.style.cssText='position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:100001;padding:11px 18px;border-radius:12px;font-size:.85rem;font-weight:700;color:#fff;box-shadow:0 10px 30px #0008;background:'+(bad?'#be123c':'#047857');document.body.appendChild(d);setTimeout(()=>d.remove(),4200)}
 /* ---------- util ---------- */
 const N=s=>String(s==null?'':s).toUpperCase().replace(/[^A-Z0-9]/g,'');
@@ -33683,7 +33683,7 @@ function migrate(name,oldRows,newRows){const ns=new Map();sigs(newRows).forEach(
  try{saveChecked()}catch(e){}return{moved,lost}}
 async function commit(){let msg=[];for(const G of pending){if(!G.on||G.err)continue;const had=projectData[G.name];let extra='';
   if(had){const r=migrate(G.name,had,G.rows);extra=` (${r.moved} centang/hasil inspeksi dipertahankan${r.lost?', '+r.lost+' hilang karena baris dihapus':''})`}
-  projectData[G.name]=G.rows;store.projects[G.name]=G.rows;msg.push(G.name+extra)}
+  projectData[G.name]=G.rows;store.projects[G.name]=G.rows;delete store.hidden[G.name];msg.push(G.name+extra)}
  if(!msg.length){toast('Tidak ada project yang diimpor',1);return}
  applyDrive(msg.map(m=>m.split(' (')[0]));await save();refresh();pending=[];render('import');toast('✅ Diimpor: '+msg.join('; '))}
 /* ---------- UI ---------- */
@@ -33731,7 +33731,7 @@ function render(t){if(t)tab=t;const b=$('pmBody');document.querySelectorAll('.pm
  if(tab==='drive')b.innerHTML=driveHtml();
  if(tab==='backup')b.innerHTML=`<p>Project hasil import &amp; pengaturan Drive tersimpan di browser ini. Simpan backup agar aman jika data browser terhapus atau pindah komputer.</p>
  <div class="pm-row"><button class="primary" onclick="pmExport()">⬇️ Backup (.json)</button><input type="file" id="pmRest" accept=".json"><button onclick="pmRestore()">Pulihkan</button></div>
- <h4>Project saat ini</h4>${Object.keys(projectData).map(p=>{const bi=BUILTIN.includes(p),ov=p in store.projects;return `<div class="pm-card"><b>${esc(p)}</b> — ${projectData[p].length} baris <span class="pm-note">${bi?(ov?'(bawaan, sudah diganti import)':'(bawaan)'):'(hasil import)'}</span>${(ov||!bi)?`<div class="pm-row"><button onclick="pmDel('${esc(p)}')">${bi?'Kembalikan ke bawaan':'🗑️ Hapus project'}</button></div>`:''}</div>`}).join('')}`;
+ <h4>Project saat ini</h4>${Object.keys(projectData).map(p=>{const bi=BUILTIN.includes(p),ov=p in store.projects;return `<div class="pm-card"><b>${esc(p)}</b> — ${projectData[p].length} baris <span class="pm-note">${bi?(ov?'(bawaan, sudah diganti import)':'(bawaan)'):'(hasil import)'}</span><div class="pm-row"><button data-p="${esc(p)}" onclick="pmRen(this.dataset.p)">✏️ Ganti nama</button>${(ov||!bi)?`<button onclick="pmDel('${esc(p)}')">${bi?'Kembalikan ke bawaan':'🗑️ Hapus project'}</button>`:''}</div></div>`}).join('')}`;
  const f=$('pmFile');if(f)f.onchange=async()=>{if(!f.files[0])return;$('pmPrev').innerHTML='Membaca…';try{pending=await readFile(f.files[0]);pending.forEach(G=>G.on=!G.err);$('pmPrev').innerHTML=prevHtml()}catch(e){$('pmPrev').innerHTML=`<div class="pm-bad">Gagal membaca file: ${esc(e.message)}</div>`}}}
 function wGroup(w){const g={};w.forEach(x=>{const m=/^Baris (\d+): (.*?)(?: \(.*)?$/.exec(x);const k=m?m[2]:x,l=m?m[1]:'';(g[k]=g[k]||[]).push(l)});return Object.keys(g).map(k=>`<b>${g[k].length}×</b> ${esc(k)}${g[k][0]?' — baris '+g[k].slice(0,12).join(', ')+(g[k].length>12?', …':''):''}`).join('<br>')}
 function prevHtml(){if(!pending.length)return '';
@@ -33751,8 +33751,8 @@ Object.assign(window,{pmOn:(i,v)=>pending[i].on=v,pmCommit:commit,
  pmDSave:async()=>{const p=$('pmDP').value,u=$('pmDU').value.trim();if(!/^https?:\/\//.test(u))return toast('URL tidak valid',1);store.drive[p]=Object.assign(store.drive[p]||{},{url:u});$('pmDS').textContent='Menyinkronkan…';try{await sync(p);refresh();dStatus();toast('✅ '+p+' tersinkron')}catch(e){$('pmDS').innerHTML=`<div class="pm-bad">Gagal: ${esc(e.message)}. Cek URL/izin "Anyone" pada Web App.</div>`;await save()}},
  pmDClear:async()=>{const p=$('pmDP').value;delete store.drive[p];await save();dStatus();toast('Sinkron Drive dilepas (link tetap terakhir dari Excel/bawaan setelah muat ulang)')},
  pmSyncAll:()=>syncAll(false).then(()=>dStatus()),
- pmExport:()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({v:1,projects:store.projects,drive:store.drive})],{type:'application/json'}));a.download='QC_backup_'+new Date().toISOString().slice(0,10)+'.json';a.click()},
- pmRestore:async()=>{const f=$('pmRest').files[0];if(!f)return toast('Pilih file backup',1);try{const j=JSON.parse(await f.text());Object.assign(store.projects,j.projects||{});Object.assign(store.drive,j.drive||{});Object.assign(projectData,j.projects||{});applyDrive();await save();refresh();render('backup');toast('✅ Backup dipulihkan')}catch(e){toast('File tidak valid',1)}},
+ pmExport:()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({v:1,projects:store.projects,drive:store.drive,hidden:store.hidden})],{type:'application/json'}));a.download='QC_backup_'+new Date().toISOString().slice(0,10)+'.json';a.click()},
+ pmRestore:async()=>{const f=$('pmRest').files[0];if(!f)return toast('Pilih file backup',1);try{const j=JSON.parse(await f.text());Object.assign(store.projects,j.projects||{});Object.assign(store.drive,j.drive||{});Object.assign(store.hidden,j.hidden||{});Object.assign(projectData,j.projects||{});Object.keys(store.hidden).forEach(h=>{if(!(h in store.projects))delete projectData[h]});applyDrive();await save();refresh();render('backup');toast('✅ Backup dipulihkan')}catch(e){toast('File tidak valid',1)}},
  pmDel:async p=>{if(!confirm('Hapus "'+p+'" hasil import? Centang & hasil inspeksi project ini ikut dihapus.'))return;const bi=BUILTIN.includes(p);delete store.projects[p];delete store.drive[p];Object.keys(checkedState).forEach(k=>{if(!bi&&k.startsWith(p+'_'))delete checkedState[k]});if(!bi)Object.keys(localStorage).filter(k=>k.startsWith('insp_'+p+'_')).forEach(k=>localStorage.removeItem(k));saveChecked();await save();if(bi){location.reload();return}delete projectData[p];refresh();render('backup')}});
 /* ---------- pasang ---------- */
 document.head.insertAdjacentHTML('beforeend','<style>'+css+'</style>');
@@ -33760,11 +33760,46 @@ document.body.insertAdjacentHTML('beforeend','<div id="pmModal" onclick="if(even
 window.pmTab=t=>open_(t);
 const hd=document.querySelector('body > div[style*="display: flex"]');const bt=document.createElement('button');bt.id='pmBtn';bt.textContent='⚙️ Kelola Project';bt.onclick=()=>open_('import');(hd||document.body).appendChild(bt);
 const prev=window.onload;
-window.onload=async()=>{try{const p=await kvGet('projects'),d=await kvGet('drive');if(p)store.projects=p;if(d)store.drive=d;Object.assign(projectData,store.projects);applyDrive()}catch(e){console.error(e)}
+window.onload=async()=>{try{const p=await kvGet('projects'),d=await kvGet('drive'),hd=await kvGet('hidden');if(p)store.projects=p;if(d)store.drive=d;if(hd)store.hidden=hd;Object.assign(projectData,store.projects);Object.keys(store.hidden).forEach(h=>{if(!(h in store.projects))delete projectData[h]});applyDrive()}catch(e){console.error(e)}
  window.QCProj.ld=true;
  if(prev)prev();setTimeout(()=>syncAll(true),800);setInterval(()=>syncAll(true),300000)};
 /* ---------- API untuk sinkron antar inspector (QCSync) ---------- */
-window.QCProj={ld:false,loaded:()=>window.QCProj.ld,all:()=>store.projects,
+/* ---------- ganti nama project ---------- */
+async function renameProject(old,nw){
+  nw=String(nw==null?'':nw).trim().replace(/\s+/g,' ');
+  if(!nw||nw===old)return false;
+  if(nw.length>60||/ - Unit \d+$/i.test(nw)||nw.charAt(0)==='▶'){toast('Nama tidak valid (maks. 60 karakter, tidak boleh berakhiran " - Unit N")',1);return false}
+  if(nw in projectData){toast('Nama "'+nw+'" sudah dipakai project lain',1);return false}
+  const rows=projectData[old];if(!rows||!(old in projectData))return false;
+  const bi=BUILTIN.includes(old),re=new RegExp('^'+old.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'((?: - Unit \\d+)?_\\d+)$');
+  store.projects[nw]=rows;delete store.projects[old];
+  if(store.drive[old]){store.drive[nw]=store.drive[old];delete store.drive[old]}
+  delete store.hidden[nw];if(bi)store.hidden[old]=1;
+  projectData[nw]=rows;delete projectData[old];
+  /* centang */
+  const mv=[];Object.keys(checkedState).forEach(k=>{const m=re.exec(k);if(m)mv.push([k,nw+m[1]])});
+  mv.forEach(a=>{checkedState[a[1]]=checkedState[a[0]];delete checkedState[a[0]]});
+  try{saveChecked()}catch(e){}
+  /* hasil inspeksi (+ status) */
+  ['insp_','inspst_'].forEach(pre=>{Object.keys(localStorage).filter(k=>k.indexOf(pre)===0).forEach(k=>{const m=re.exec(k.slice(pre.length));if(!m)return;
+    try{localStorage.setItem(pre+nw+m[1],localStorage.getItem(k));localStorage.removeItem(k)}catch(e){console.warn('rename',k,e)}})});
+  /* jumlah unit */
+  try{const c=JSON.parse(localStorage.getItem('qc_units')||'{}');if(c[old]){c[nw]=c[old];delete c[old];localStorage.setItem('qc_units',JSON.stringify(c))}}catch(e){}
+  /* markup PDF (IndexedDB iq_store) */
+  await new Promise(ok=>{try{const r=indexedDB.open('iq_store',1);r.onerror=()=>ok();r.onsuccess=()=>{try{const db=r.result;if(!db.objectStoreNames.contains('kv')){ok();return}
+    const tx=db.transaction('kv','readwrite'),os=tx.objectStore('kv'),cur=os.openCursor();
+    cur.onsuccess=()=>{const c=cur.result;if(!c)return;const k=String(c.key);if(k.indexOf('ann_')===0){const m=re.exec(k.slice(4));if(m){os.put(c.value,'ann_'+nw+m[1]);c.delete()}}c.continue()};
+    tx.oncomplete=()=>ok();tx.onerror=()=>ok()}catch(e){ok()}}}catch(e){ok()}});
+  if(currentProject===old)currentProject=nw;else if(currentProject.indexOf(old+' - Unit ')===0)currentProject=nw+currentProject.slice(old.length);
+  await save();
+  try{window.QCUnits&&QCUnits.reload()}catch(e){}
+  refresh();if(window.QCUnits)try{QCUnits.refresh()}catch(e){}
+  if(tab==='backup')render('backup');
+  toast('✅ "'+old+'" diganti menjadi "'+nw+'"');
+  return true}
+window.pmRen=p=>{const n=prompt('Nama baru untuk project "'+p+'":',p);if(n!=null)return renameProject(p,n)};
+window.QCProj={ld:false,loaded:()=>window.QCProj.ld,all:()=>store.projects,hidden:()=>store.hidden,rename:renameProject,
+ async hide(name,on){if(on){store.hidden[name]=1;if(!(name in store.projects))delete projectData[name]}else delete store.hidden[name];await save()},
  async put(name,rows){
   if(rows==null){const had=name in store.projects;delete store.projects[name];delete store.drive[name];await save();
    if(BUILTIN.includes(name)){if(had)location.reload();return}
@@ -33820,8 +33855,8 @@ const jget = (k, d) => { try { const v = raw(k); return v ? JSON.parse(v) : d; }
 const jset = (k, v) => { try { _set.call(LS, k, JSON.stringify(v)); } catch(e) {} };
 const getUrl = () => (raw(K.url) || '').trim();
 const $ = id => document.getElementById(id);
-let lastChk = jget(CHK, {}), lastUnits = jget(UK, {}), lastProj = {}, projReady = false;
-const pendP = [], pendU = [], deferred = new Set();
+let lastChk = jget(CHK, {}), lastUnits = jget(UK, {}), lastProj = {}, lastHid = {}, projReady = false;
+const pendP = [], pendU = [], pendR = [], deferred = new Set();
 const URL_RE = /^https:\/\/script\.google\.com\/macros\/s\/[^\s]+\/exec(\?.*)?$/;
 
 /* ---------- link undangan: https://.../#sync=<url-apps-script> ----------
@@ -33903,11 +33938,12 @@ async function whenProj(){
 function projSnapshot(){ const sp = window.QCProj.all(), o = {}; for (const n in sp) o[n] = hash(JSON.stringify(sp[n])); return o; }
 function initProj(){
   if (projReady || !projLoaded()) return;
-  lastProj = projSnapshot(); projReady = true;
+  lastProj = projSnapshot(); lastHid = Object.assign({}, window.QCProj.hidden()); projReady = true;
   if (!raw(K.inited2)) {                       // sekali: kirim project & unit yang sudah ada di perangkat ini
     const d = jget(K.dirty, {}), uc = jget(UK, {});
     for (const n in lastProj) if (!d['p:' + n]) d['p:' + n] = 1;
     for (const b in uc) if (!d['u:' + b]) d['u:' + b] = 1;
+    for (const h in lastHid) if (!d['r:' + h]) d['r:' + h] = 1;
     jset(K.dirty, d); _set.call(LS, K.inited2, '1');
   }
 }
@@ -33917,6 +33953,10 @@ function projChanged(){
   for (const k in cur) if (cur[k] !== lastProj[k]) { d['p:' + k] = now; n++; }
   for (const k in lastProj) if (!(k in cur)) { d['p:' + k] = now; n++; }
   lastProj = cur;
+  const hid = window.QCProj.hidden();
+  for (const k in hid) if (!lastHid[k]) { d['r:' + k] = now; n++; }
+  for (const k in lastHid) if (!hid[k]) { d['r:' + k] = now; n++; }
+  lastHid = Object.assign({}, hid);
   if (n) { jset(K.dirty, d); schedulePush(); }
 }
 function diffUnits(){
@@ -33993,6 +34033,9 @@ async function push(){
           v = (key in chk) ? String(!!chk[key]) : null;
         } else if (kind === 'u') {
           v = (key in uc) ? String(uc[key]) : null;
+        } else if (kind === 'r') {
+          if (!projLoaded()) { deferred.add(id); continue; }
+          v = (key in window.QCProj.hidden()) ? '1' : null;
         } else if (kind === 'p') {
           if (!projLoaded()) { deferred.add(id); continue; }
           const sp = window.QCProj.all();
@@ -34061,6 +34104,7 @@ function applyRecords(recs){
     const kind = r.k.charAt(0), key = r.k.slice(2);
     if (kind === 'p') { pendP.push(r); return; }
     if (kind === 'u') { pendU.push(r); return; }
+    if (kind === 'r') { pendR.push(r); return; }
     if (kind === 'c') {
       if (r.v === null) { if (key in checkedState) { delete checkedState[key]; chkCh = true; chkKeys.push(key); } }
       else { const b = (r.v === 'true'); if (checkedState[key] !== b) { checkedState[key] = b; chkCh = true; chkKeys.push(key); } }
@@ -34089,8 +34133,8 @@ function applyRecords(recs){
 
 /* Terapkan project & jumlah unit dari inspector lain, lalu muat ulang tampilan. */
 async function flushExtra(){
-  if (!pendP.length && !pendU.length) return;
-  const P = pendP.splice(0), U = pendU.splice(0), Q = window.QCProj, UN = window.QCUnits;
+  if (!pendP.length && !pendU.length && !pendR.length) return;
+  const R = pendR.splice(0), P = pendP.splice(0), U = pendU.splice(0), Q = window.QCProj, UN = window.QCUnits;
   let changed = false;
   const lastP = {}; P.forEach(r => { lastP[r.k.slice(2)] = r; });
   for (const name in lastP) {
@@ -34105,6 +34149,15 @@ async function flushExtra(){
       }
       if (d['p:' + name] && d['p:' + name] <= r.ts) { delete d['p:' + name]; jset(K.dirty, d); }
     } catch(e) { console.warn('QCSync: project gagal diterapkan', name, e); }
+  }
+  const lastR = {}; R.forEach(r => { lastR[r.k.slice(2)] = r; });
+  for (const name in lastR) {
+    const r = lastR[name], d = jget(K.dirty, {});
+    try {
+      if (r.v !== null && !(name in Q.hidden()) && !(name in Q.all())) { lastHid[name] = 1; await Q.hide(name, true); changed = true; }
+      else if (r.v === null && (name in Q.hidden())) { delete lastHid[name]; await Q.hide(name, false); }
+      if (d['r:' + name] && d['r:' + name] <= r.ts) { delete d['r:' + name]; jset(K.dirty, d); }
+    } catch(e) { console.warn('QCSync: gagal menerapkan nama bawaan', name, e); }
   }
   const lastU = {}; U.forEach(r => { lastU[r.k.slice(2)] = r; });
   const cfg = jget(UK, {});
@@ -34637,7 +34690,7 @@ function renderUnits(){
       var nm=unitName(p,u),s=stat(nm,insp),pc=s.t?Math.round(s.c/s.t*1000)/10:0;
       rows+='<tr><td><b>Unit '+u+'</b></td><td>'+s.c.toLocaleString('id-ID')+' / '+s.t.toLocaleString('id-ID')+' <span class="pm-note">('+pc.toLocaleString('id-ID')+'%)</span></td><td>'+s.ins.toLocaleString('id-ID')+'</td><td><button data-act="open" data-name="'+esc(nm)+'">Buka</button></td></tr>';
     }
-    html+='<div class="pm-card"><div class="pm-row"><b style="font-size:1rem">'+esc(p)+'</b><span class="pm-note">'+n+' unit</span></div>'
+    html+='<div class="pm-card"><div class="pm-row"><b style="font-size:1rem">'+esc(p)+'</b><span class="pm-note">'+n+' unit</span><button data-act="rename" data-base="'+esc(p)+'">✏️ Ganti nama</button></div>'
       +'<div class="pm-row"><label class="pm-note">Jumlah unit:</label><input type="number" min="1" max="'+MAXU+'" value="'+n+'" data-ui="'+bi+'" style="width:90px;background:#102743;color:#eef7ff;border:1px solid #315476;border-radius:10px;padding:8px 10px">'
       +'<button class="primary" data-act="apply" data-base="'+esc(p)+'" data-ui="'+bi+'">Terapkan</button>'
       +'<button data-act="add" data-base="'+esc(p)+'">＋ Tambah 1 unit</button></div>'
@@ -34649,6 +34702,7 @@ function renderUnits(){
     var t=e.target.closest&&e.target.closest('[data-act]');if(!t)return;
     var act=t.getAttribute('data-act');
     if(act==='open')openUnit(t.getAttribute('data-name'));
+    else if(act==='rename')window.pmRen(t.getAttribute('data-base'));
     else if(act==='add'){var bs=t.getAttribute('data-base');setUnits(bs,(+cfg[bs]||1)+1)}
     else if(act==='apply'){var inp=b.querySelector('input[data-ui="'+t.getAttribute('data-ui')+'"]');setUnits(t.getAttribute('data-base'),inp?inp.value:1)}
   };
