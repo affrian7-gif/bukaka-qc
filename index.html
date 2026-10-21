@@ -33987,7 +33987,7 @@ Storage.prototype.setItem = function(k, v){
     k = String(k);
     if (k === CHK) diffChecks();
     else if (k === UK) diffUnits();
-    else if (k.indexOf('insp_') === 0) markDirty('i:' + k.slice(5));
+    else if (k.indexOf('insp_') === 0) markDirty('i:' + k.slice(5)); else if (k.indexOf('boqdwg_') === 0) markDirty('d:' + k.slice(7));
   }
   return r;
 };
@@ -33995,7 +33995,7 @@ Storage.prototype.removeItem = function(k){
   const r = _rem.apply(this, arguments);
   if (this === LS && getUrl()) {
     k = String(k);
-    if (k.indexOf('insp_') === 0) markDirty('i:' + k.slice(5));
+    if (k.indexOf('insp_') === 0) markDirty('i:' + k.slice(5)); else if (k.indexOf('boqdwg_') === 0) markDirty('d:' + k.slice(7));
   }
   return r;
 };
@@ -34030,7 +34030,7 @@ async function push(){
         if (batch.length >= 300 || size > 150000) break;
         const kind = id.charAt(0), key = id.slice(2);
         let v = null;
-        if (kind === 'c') {
+        if (kind === 'd') { v = raw('boqdwg_' + key); } else if (kind === 'c') {
           v = (key in chk) ? String(!!chk[key]) : null;
         } else if (kind === 'u') {
           v = (key in uc) ? String(uc[key]) : null;
@@ -34106,6 +34106,7 @@ function applyRecords(recs){
     if (kind === 'p') { pendP.push(r); return; }
     if (kind === 'u') { pendU.push(r); return; }
     if (kind === 'r') { pendR.push(r); return; }
+    if (kind === 'd') { try { if (window.__boqApplyDwg) window.__boqApplyDwg(key, r.v, _set, _rem, LS); } catch(e) {} return; }
     if (kind === 'c') {
       if (r.v === null) { if (key in checkedState) { delete checkedState[key]; chkCh = true; chkKeys.push(key); } }
       else { const b = (r.v === 'true'); if (checkedState[key] !== b) { checkedState[key] = b; chkCh = true; chkKeys.push(key); } }
@@ -35008,6 +35009,7 @@ window.QCUnits={
 var DEF='https://script.google.com/macros/s/AKfycbznI4KLKdCb7BgBACDe--xtY1zJ6JiF6eLIkkSKsQFalFYzphYaHH33t0Q93JGyghV6/exec';
 function SURL(){return (localStorage.getItem('boq_sync_url')||DEF).trim();}
 var ALIAS={SOETTA:'SOETTA-14'},rep={},applied={},busy=false;
+var ORIG={};try{Object.keys(projectData).forEach(function(P){ORIG[P]=JSON.stringify(projectData[P])})}catch(e){}
 function app(n){return ALIAS[n]||n}
 function rem(a){for(var k in ALIAS)if(ALIAS[k]===a)return k;return a}
 function norm(s){s=String(s==null?'':s).toUpperCase().replace(/\s+/g,' ').trim();return s==='-'?'':s}
@@ -35056,20 +35058,34 @@ function merge(base,fresh){
     if(isH(r))cur=out.length-1;else{added++;if(addN.length<15)addN.push((r.part_num||'')+' '+(r.part_name||''))}});
   return{rows:out,matched:matched,gone:gone,added:added,baseItems:baseItems,goneN:goneN,addN:addN}}
 
-async function syncP(rn,force){
+function fromSlots(sl){return sl.map(function(x){var h=String(x[0]).charAt(0)==='H';return{level:h?'▶ ':'L1',no:'',part_num:'',part_name:'',drawing_no:'',qty:'',material:'',foto:'',cek:'☐',link:'-',_sig:x[0],_g:x[1]==null?undefined:x[1]}})}
+async function getSlots(rn){try{var j=await (await fetch(SURL()+'?action=slots&project='+encodeURIComponent(rn))).json();return j.ok?j.slots:null}catch(e){return null}}
+async function putSlots(rn,sl){try{return await (await fetch(SURL(),{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'slots',project:rn,slots:sl})})).json()}catch(e){return{ok:false,error:String(e)}}}
+function linkMapOf(rows){var o={};rows.forEach(function(r){if(r&&r._sig&&!r._gone)o[r._sig]=r.link});return o}
+
+async function syncP(rn,force,retry){
   var P=app(rn);
   if(typeof store!=='undefined'&&store&&store.hidden&&store.hidden[P])return false;
   var r=await fetch(SURL()+'?project='+encodeURIComponent(rn)+(force?'&refresh=1':''));
   var j=await r.json();if(!j.ok)throw new Error(j.error||'gagal');
   var d=j.projects[rn],fresh=toRows(d.rows),ver=String(d.srcUpdated);
-  var cached=await kg('boq_rows_'+P),sv=await kg('boq_ver_'+P);
-  var base=(cached&&cached.length)?cached:(projectData[P]||[]);
+  var canon=await getSlots(rn);                       /* tabel slot bersama: sama untuk semua inspector */
+  var cached=await kg('boq_rows_'+P),sv=await kg('boq_ver_'+P),hasCache=!!(cached&&cached.length);
+  var base=canon?fromSlots(canon):(hasCache?cached:(projectData[P]||[]));
   var head={raw:d.rows.length,fresh:fresh.length,ver:d.srcUpdated,at:d.fetchedAt,tab:d.sheet};
-  if(cached&&sv===ver&&applied[P]&&!force){rep[P]=Object.assign(rep[P]||{},head,{unchanged:true});return false}
+  if(hasCache&&sv===ver&&applied[P]&&!force&&(!canon||canon.length===cached.length)){rep[P]=Object.assign(rep[P]||{},head,{unchanged:true});return false}
+  var prevLinks=hasCache?linkMapOf(cached):null;
   var m=merge(base,fresh);applyOvr(P,m.rows);
   var info=Object.assign(head,{matched:m.matched,gone:m.gone,added:m.added,baseItems:m.baseItems,goneN:m.goneN,addN:m.addN});
-  if(!(cached&&cached.length)&&m.baseItems>50&&m.matched/m.baseItems<0.6){info.rejected=true;rep[P]=info;return false}
-  rep[P]=info;projectData[P]=m.rows;applied[P]=1;
+  if(!canon&&!hasCache&&m.baseItems>50&&m.matched/m.baseItems<0.6){info.rejected=true;rep[P]=info;return false}
+  var slots=m.rows.map(function(x){return[x._sig,x._g===undefined?null:x._g]});
+  if(!canon||slots.length>canon.length){
+    var pr=await putSlots(rn,slots);
+    if(!pr.ok&&pr.conflict&&!retry)return syncP(rn,force,true)}      /* inspector lain menambah slot lebih dulu: ulangi */
+  if(prevLinks){var ov=ovrAll();m.rows.forEach(function(x){
+    if(x._gone||!x._sig||ov[P+'|'+x._sig])return;var a=prevLinks[x._sig],b=x.link;
+    if(a&&b&&a!=='-'&&b!=='-'&&driveId(a)&&driveId(b)&&driveId(a)!==driveId(b))nAdd({P:P,sig:x._sig,name:nameOf(x),kind:'sheet',by:'',t:Date.now(),link:b})})}
+  rep[P]=info;projectData[P]=m.rows;applied[P]=1;markSynced(P);
   await ks('boq_rows_'+P,m.rows);await ks('boq_ver_'+P,ver);
   return true}
 
@@ -35086,7 +35102,7 @@ async function syncAll(force){
     if(changed){if(typeof refresh==='function')refresh();else if(typeof init==='function')init()}
     stat('BOQ tersinkron '+new Date().toLocaleTimeString()+(errs?' · '+errs+' error (lihat Cek)':''),errs)
   }catch(e){stat('Sinkron gagal: '+(e.message||e),1)}
-  busy=false;if(tabOn())fillRep()}
+  busy=false;try{migrateOld()}catch(e){}if(tabOn())fillRep()}
 
 
 var IN='width:100%;box-sizing:border-box;margin:4px 0;background:#102743;color:#eef7ff;border:1px solid #315476;border-radius:10px;padding:8px 12px';
@@ -35108,8 +35124,8 @@ function fillRep(){var e=document.getElementById('bqRep');if(e)e.innerHTML=repHt
 
 function renderTab(){
   var b=document.getElementById('pmBody');if(!b)return;
-  b.innerHTML='<p>Data komponen diambil langsung dari spreadsheet BOQ perusahaan lewat Apps Script. Sinkron otomatis saat halaman dibuka dan tiap 10 menit.</p>'+
-  '<div class="pm-card"><div class="pm-row"><button class="primary" id="bqGo">🔄 Sinkron sekarang</button><span id="boqStat" class="pm-note">'+esc(lastStat)+'</span></div></div>'+
+  b.innerHTML='<p>Data komponen diambil langsung dari spreadsheet BOQ perusahaan lewat Apps Script. Sinkron hanya berjalan manual: tekan tombol di bawah. Saat halaman dibuka, yang tampil adalah data asli di file ini.</p>'+
+  '<div class="pm-card"><div class="pm-row"><button class="primary" id="bqGo">🔄 Sinkron sekarang</button><button id="bqRst" title="Hapus hasil sinkron BOQ di browser ini dan tampilkan data asli">↩ Kembalikan data asli</button><span id="boqStat" class="pm-note">'+esc(lastStat)+'</span></div></div>'+
   '<h4>Project dari spreadsheet &amp; cek sinkron</h4><div id="bqRep">'+repHtml()+'</div>'+
   '<h4>Tambah project baru</h4><div class="pm-card">'+
   '<b>Nama project</b><input type="text" id="bqN" placeholder="mis. CHANGI 2">'+
@@ -35119,7 +35135,7 @@ function renderTab(){
   '<div class="pm-row"><button class="primary" id="bqAdd">➕ Tambah project</button></div><div id="bqMsg"></div></div>'+
   '<details class="pm-card"><summary>Pengaturan URL Apps Script</summary><input type="text" id="bqU" value="'+esc(SURL())+'"><div class="pm-row"><button id="bqUs">Simpan URL</button></div></details>';
   var g=function(i){return document.getElementById(i)};
-  g('bqGo').onclick=function(){syncAll(true)};
+  g('bqGo').onclick=function(){syncAll(true)};g('bqRst').onclick=restoreOrig;
   g('bqUs').onclick=function(){var v=g('bqU').value.trim();if(/^https?:\/\//.test(v)){localStorage.setItem('boq_sync_url',v);T('URL disimpan')}else T('URL tidak valid',1)};
   g('bqAdd').onclick=async function(){
     var n=g('bqN').value.trim(),l=g('bqL').value.trim(),t=g('bqT').value.trim(),k=g('bqK').value.trim(),m=g('bqMsg');
@@ -35140,76 +35156,149 @@ function hook(){
   window.pmTab=function(t){if(typeof prev==='function')prev(t);if(t==='boq')renderTab()}}
 
 
-/* ===== Update drawing manual (di viewer View Drawing) ===== */
-var OVR='boq_dwg_ovr';
-function ovrAll(){try{return JSON.parse(localStorage.getItem(OVR)||'{}')||{}}catch(e){return{}}}
-function ovrSet(o){try{localStorage.setItem(OVR,JSON.stringify(o))}catch(e){}}
-function applyOvr(P,rows){var o=ovrAll(),pre=P+'_',n=0;
-  Object.keys(o).forEach(function(k){if(k.indexOf(pre)!==0)return;var r=rows&&rows[+k.slice(pre.length)];
-    if(r&&!r._gone&&r.link!==o[k].link){r.link=o[k].link;r.foto='Lihat Link →';n++}});return n}
-function rowOf(key){var i=key.lastIndexOf('_'),P=key.slice(0,i),ix=+key.slice(i+1);return{P:P,ix:ix,row:projectData[P]&&projectData[P][ix]}}
+/* ===== Update drawing manual + pemberitahuan ===== */
+var OP='boqdwg_',NK='boq_notif',DK='boq_notif_dis';
+function esc2(s){return esc(s)}
 function driveId(s){var m=String(s||'').match(/\/d\/([\w-]{10,})/)||String(s||'').match(/[?&]id=([\w-]{10,})/);return m?m[1]:''}
-function closeUpd(){var e=document.getElementById('bqUpdPop');if(e)e.remove()}
+function nameOf(r){return isH(r)?String(r.level).replace(/^▶\s*/,''):((r.part_num&&r.part_num!=='-'?r.part_num+' ':'')+(r.part_name||''))}
+function rowOf(key){var i=key.lastIndexOf('_'),P=key.slice(0,i),ix=+key.slice(i+1);return{P:P,ix:ix,row:projectData[P]&&projectData[P][ix]}}
+function baseOf(P){var m=/^(.*\S)\s+\d+$/.exec(P);return(m&&projectData[m[1]]&&projectData[m[1]]===projectData[P])?m[1]:P}
+function ensureSigs(P){var rows=projectData[P];if(!rows||!rows.length||rows[0]._sig)return;var s=sigs(rows);rows.forEach(function(r,i){r._sig=s[i]})}
+function ctx(key){var r=rowOf(key);ensureSigs(r.P);if(!r.row||!r.row._sig)return null;var B=baseOf(r.P);return{P:r.P,base:B,row:r.row,kid:B+'|'+r.row._sig}}
+function ovrAll(){var o={};try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf(OP)===0){try{o[k.slice(OP.length)]=JSON.parse(localStorage.getItem(k))}catch(e){}}}}catch(e){}return o}
+function applyOvr(P,rows){var o=ovrAll(),n=0;if(!rows)return 0;
+  for(var i=0;i<rows.length;i++){var r=rows[i];if(!r||r._gone||!r._sig)continue;var x=o[P+'|'+r._sig];if(x&&x.link&&r.link!==x.link){r.link=x.link;r.foto='Lihat Link →';n++}}return n}
+function who(ask){var n=localStorage.getItem('boq_inspector')||'';if(!n&&ask){n=(prompt('Nama kamu (dicatat pada update drawing):')||'').trim();if(n)localStorage.setItem('boq_inspector',n)}return n||(ask?'inspector':'')}
 
+/* --- pemberitahuan drawing yang diperbarui (per inspector; bisa dihapus) --- */
+function nGet(){try{return JSON.parse(localStorage.getItem(NK)||'[]')||[]}catch(e){return[]}}
+function nSet(a){try{localStorage.setItem(NK,JSON.stringify(a.slice(0,300)))}catch(e){}}
+function nDis(){try{return JSON.parse(localStorage.getItem(DK)||'{}')||{}}catch(e){return{}}}
+function nBadge(){var e=document.getElementById('bqBellN'),n=nGet().length;if(e)e.textContent=n?'('+n+')':'';var b=document.getElementById('bqBell');if(b)b.style.color=n?'#fbbf24':''}
+function nAdd(n){n.id=n.P+'|'+n.sig+'|'+driveId(n.link);if(nDis()[n.id])return;var a=nGet();if(a.some(function(x){return x.id===n.id}))return;a.unshift(n);nSet(a);nBadge()}
+function nDel(id){var a=nGet().filter(function(x){return x.id!==id}),d=nDis();d[id]=1;try{localStorage.setItem(DK,JSON.stringify(d))}catch(e){}nSet(a);nBadge()}
+function idxOfSig(P,sig){var rows=projectData[P]||[];for(var i=0;i<rows.length;i++)if(rows[i]._sig===sig)return i;return-1}
+function closeN(){var e=document.getElementById('bqNPop');if(e)e.remove()}
+function openNotif(){
+  closeN();var a=nGet(),d=document.createElement('div');d.id='bqNPop';
+  d.style.cssText='position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:12px';
+  var BT='background:#102743;border:1px solid #23486d;color:#eaf4ff;border-radius:10px;padding:6px 10px;cursor:pointer;font:inherit;margin:4px 6px 0 0';
+  var list=a.slice(0,100).map(function(x,i){
+    return'<div style="border:1px solid #1b3552;background:#071326;border-radius:10px;padding:8px 10px;margin:6px 0"><b>'+esc(x.name)+'</b> <span style="color:#8ca8c8;font-size:.8rem">'+esc(x.P)+'</span>'+
+    '<div style="color:#8ca8c8;font-size:.8rem">'+(x.kind==='manual'?'✏️ Diganti manual'+(x.by?' oleh '+esc(x.by):''):'📄 Link berubah di spreadsheet')+' · '+new Date(x.t).toLocaleString('id-ID')+'</div>'+
+    '<button data-o="'+i+'" style="'+BT+'">Buka drawing</button><button data-d="'+i+'" style="'+BT+'">🗑 Hapus</button></div>'}).join('');
+  d.innerHTML='<div style="background:#0a1a2e;border:1px solid #2d6199;border-radius:16px;color:#eaf4ff;max-width:600px;width:100%;max-height:88vh;overflow:auto;padding:14px 16px;font:14px/1.5 system-ui,sans-serif">'+
+  '<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:1.02rem">🔔 Drawing yang diperbarui ('+a.length+')</b><span><button id="bqNAll" style="'+BT+'">Hapus semua</button><button id="bqNX" style="'+BT+'">✕</button></span></div>'+
+  (list||'<div style="color:#8ca8c8;margin:12px 0">Tidak ada pemberitahuan.</div>')+(a.length>100?'<div style="color:#8ca8c8">Menampilkan 100 terbaru.</div>':'')+'</div>';
+  d.addEventListener('click',function(e){if(e.target===d)closeN()});document.body.appendChild(d);
+  document.getElementById('bqNX').onclick=closeN;
+  document.getElementById('bqNAll').onclick=function(){a.forEach(function(x){nDel(x.id)});openNotif()};
+  d.querySelectorAll('[data-d]').forEach(function(b){b.onclick=function(){nDel(a[+b.getAttribute('data-d')].id);openNotif()}});
+  d.querySelectorAll('[data-o]').forEach(function(b){b.onclick=function(){var x=a[+b.getAttribute('data-o')],ix=idxOfSig(x.P,x.sig);
+    if(ix<0){T('Item tidak ditemukan di BOQ saat ini',1);return}
+    closeN();window.loadInspectionDrawing(x.link,x.name,x.P+'_'+ix)}})}
+function hookBell(){
+  if(document.getElementById('bqBell'))return;
+  var anchor=document.getElementById('qcSyncBtn'),host=anchor?anchor.parentNode:document.querySelector('.controls');if(!host)return;
+  var b=document.createElement('button');b.id='bqBell';b.title='Pemberitahuan drawing yang diperbarui';b.innerHTML='🔔 Update Drawing <span id="bqBellN"></span>';
+  b.onclick=openNotif;if(anchor)anchor.insertAdjacentElement('afterend',b);else host.appendChild(b);nBadge()}
+
+/* --- terima update drawing dari inspector lain (dipanggil oleh QCSync) --- */
+function setRowLink(kid,link,o){
+  var i=kid.indexOf('|'),P=kid.slice(0,i),sig=kid.slice(i+1);ensureSigs(P);var rows=projectData[P]||[];
+  for(var x=0;x<rows.length;x++)if(rows[x]._sig===sig){
+    if(link){rows[x].link=link;rows[x].foto='Lihat Link →'}
+    if(o&&link)nAdd({P:P,sig:sig,name:nameOf(rows[x]),kind:'manual',by:o.by||'',t:o.t||Date.now(),link:link});break}}
+window.__boqApplyDwg=function(kid,v,setF,remF,ls){
+  var k=OP+kid,cur=ls.getItem(k);
+  if(v===null){if(cur==null)return;var old=null;try{old=JSON.parse(cur)}catch(e){}remF.call(ls,k);setRowLink(kid,old&&old.orig||null,null);return}
+  if(cur===v)return;var o=null;try{o=JSON.parse(v)}catch(e){return}
+  setF.call(ls,k,v);setRowLink(kid,o.link,o)};
+
+/* --- jalur buka drawing selalu memakai link terbaru + info update --- */
+function wrapLoader(){var f=window.loadInspectionDrawing;if(typeof f!=='function'||f.__bq)return;
+  var w=function(l,t,k){
+    try{var c=k&&ctx(k),r=c&&c.row,first=String(l||'').split(/[,\s]+/)[0];
+      if(r&&r.link&&r.link!=='-'&&r.link!==first)l=r.link;
+      if(c){var hit=nGet().filter(function(x){return x.sig===r._sig&&x.P===c.base});
+        if(hit.length)T('🔔 Drawing ini sudah diperbarui ('+(hit[0].kind==='manual'?'manual'+(hit[0].by?' oleh '+hit[0].by:''):'dari spreadsheet')+')')}}catch(e){}
+    return f.call(this,l,t,k)};
+  w.__bq=1;window.loadInspectionDrawing=w}
+
+/* --- migrasi override versi lama (kunci nomor baris) ke kunci stabil --- */
+function migrateOld(){var raw=localStorage.getItem('boq_dwg_ovr');if(!raw)return;var old={};try{old=JSON.parse(raw)||{}}catch(e){}
+  var left={};Object.keys(old).forEach(function(k){var c=ctx(k);
+    if(c)localStorage.setItem(OP+c.kid,JSON.stringify({link:old[k].link,orig:old[k].orig,by:who(false),t:old[k].t||Date.now(),name:nameOf(c.row)}));else left[k]=old[k]});
+  if(Object.keys(left).length)localStorage.setItem('boq_dwg_ovr',JSON.stringify(left));else localStorage.removeItem('boq_dwg_ovr')}
+
+/* --- tombol Update Drawing di viewer --- */
+function closeUpd(){var e=document.getElementById('bqUpdPop');if(e)e.remove()}
 function openUpd(){
   var cd=(typeof currentDrawing!=='undefined'&&currentDrawing)||{},key=cd.key||'',link=cd.url||'',name=cd.name||'';
-  if(!key){T('Drawing ini belum terhubung ke item BOQ',1);return}
-  var o=ovrAll()[key];closeUpd();
+  var c=key?ctx(key):null;
+  if(!c){T('Drawing ini belum terhubung ke item BOQ (tekan Sinkron BOQ dulu)',1);return}
+  var o=ovrAll()[c.kid],syncOn=!!(window.QCSync&&QCSync.state&&QCSync.state().url);closeUpd();
   var d=document.createElement('div');d.id='bqUpdPop';
   d.style.cssText='position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:12px';
   var N='color:#8ca8c8;font-size:.8rem',BT='background:#102743;border:1px solid #23486d;color:#eaf4ff;border-radius:10px;padding:8px 12px;cursor:pointer;font:inherit;margin:4px 6px 4px 0',
       INP='width:100%;box-sizing:border-box;margin:4px 0;background:#102743;color:#eef7ff;border:1px solid #315476;border-radius:10px;padding:8px 12px;font:inherit';
   d.innerHTML='<div style="background:#0a1a2e;border:1px solid #2d6199;border-radius:16px;color:#eaf4ff;max-width:560px;width:100%;max-height:90vh;overflow:auto;padding:16px 18px;font:14px/1.5 system-ui,sans-serif">'+
   '<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:1.02rem">🔄 Update drawing manual</b><button id="bqUx" style="'+BT+'">✕</button></div>'+
-  '<div style="'+N+'">'+esc(name)+' · '+esc(key)+'</div>'+
-  '<div style="'+N+';word-break:break-all">Link aktif: '+esc(link||'-')+'</div>'+
-  (o?'<div style="color:#fbbf24;font-size:.8rem">⚠ Memakai link manual (bukan dari spreadsheet)</div>':'')+
-  '<h4 style="margin:14px 0 4px">1. Muat ulang dari Drive</h4>'+
-  '<div style="'+N+'">Pakai saat perusahaan menimpa file dengan revisi baru di link yang sama. Salinan PDF di browser dihapus lalu diunduh ulang.</div>'+
+  '<div style="'+N+'">'+esc(name)+'</div><div style="'+N+';word-break:break-all">Link aktif: '+esc(link||'-')+'</div>'+
+  (o?'<div style="color:#fbbf24;font-size:.8rem">⚠ Memakai link manual'+(o.by?' (oleh '+esc(o.by)+')':'')+', bukan dari spreadsheet</div>':'')+
+  '<h4 style="margin:14px 0 4px">1. Muat ulang dari Drive</h4><div style="'+N+'">Pakai saat perusahaan menimpa file dengan revisi baru di link yang sama. Salinan PDF di browser ini dihapus lalu diunduh ulang.</div>'+
   '<button id="bqU1" style="'+BT+'">⬇ Muat ulang drawing ini</button>'+
-  '<h4 style="margin:14px 0 4px">2. Ganti link drawing</h4>'+
-  '<input id="bqU2i" style="'+INP+'" placeholder="https://drive.google.com/file/d/…/view">'+
-  '<div style="'+N+'">Link manual tetap dipakai walau spreadsheet disinkron ulang. Tersimpan di browser ini.</div>'+
+  '<h4 style="margin:14px 0 4px">2. Ganti link drawing</h4><input id="bqU2i" style="'+INP+'" placeholder="https://drive.google.com/file/d/…/view">'+
+  '<div style="'+N+'">'+(syncOn?'Terkirim otomatis ke inspector lain lewat 🔄 Sinkron, dan mereka mendapat pemberitahuan.':'<span style="color:#fbbf24">Sinkron antar inspector belum terhubung: link hanya tersimpan di browser ini. Hubungkan lewat tombol 🔄 Sinkron agar inspector lain ikut update.</span>')+'</div>'+
   '<button id="bqU2" style="'+BT+'">💾 Simpan link baru</button>'+(o?'<button id="bqU2r" style="'+BT+'">↩ Kembali ke link spreadsheet</button>':'')+
-  '<h4 style="margin:14px 0 4px">3. Pakai file PDF dari perangkat</h4>'+
-  '<div style="'+N+'">Untuk drawing yang belum ada di Drive atau tidak bisa dimuat. Disimpan di browser untuk drawing ini.</div>'+
+  '<h4 style="margin:14px 0 4px">3. Pakai file PDF dari perangkat</h4><div style="'+N+'">Untuk drawing yang belum ada di Drive. Hanya tersimpan di browser ini.</div>'+
   '<button id="bqU3" style="'+BT+'">📂 Pilih file PDF</button><div id="bqUm" style="margin-top:6px"></div></div>';
-  d.addEventListener('click',function(e){if(e.target===d)closeUpd()});
-  document.body.appendChild(d);
+  d.addEventListener('click',function(e){if(e.target===d)closeUpd()});document.body.appendChild(d);
   var g=function(i){return document.getElementById(i)};
-  g('bqUx').onclick=closeUpd;
-  g('bqU1').onclick=function(){closeUpd();iq.reload()};
-  g('bqU3').onclick=function(){closeUpd();iq.pickFile()};
+  g('bqUx').onclick=closeUpd;g('bqU1').onclick=function(){closeUpd();iq.reload()};g('bqU3').onclick=function(){closeUpd();iq.pickFile()};
   function reopen(newLink,msg){
     var title=String(name).replace(/^(Inspeksi Drawing|Hasil Inspeksi QC):\s*/,'');
-    iq.close();
-    var t=document.getElementById('inspTitle');
-    if(t&&t.offsetParent!==null)return false;            /* batal: ada coretan belum disimpan */
-    closeUpd();T(msg);
-    setTimeout(function(){window.loadInspectionDrawing(newLink,title,key)},150);return true}
+    iq.close();var t=document.getElementById('inspTitle');
+    if(t&&t.offsetParent!==null)return false;           /* batal: ada coretan belum disimpan */
+    closeUpd();T(msg);setTimeout(function(){window.loadInspectionDrawing(newLink,title,key)},150);return true}
   g('bqU2').onclick=function(){
     var v=g('bqU2i').value.trim(),m=g('bqUm');
     if(!/^https?:\/\//.test(v)||!driveId(v)){m.innerHTML='<span style="color:#fb7185">Link harus link file Google Drive (…/d/ID_FILE/…)</span>';return}
-    var r=rowOf(key);if(!r.row){m.innerHTML='<span style="color:#fb7185">Item BOQ tidak ditemukan</span>';return}
-    var all=ovrAll(),orig=all[key]?all[key].orig:r.row.link;
-    if(!reopen(v,'Link drawing diganti manual'))return;
-    all[key]={link:v,orig:orig,t:Date.now()};ovrSet(all);
-    r.row.link=v;r.row.foto='Lihat Link →'};
+    var by=who(true),orig=o?o.orig:c.row.link;
+    if(!reopen(v,'Link drawing diganti'+(syncOn?' dan dikirim ke inspector lain':' (hanya di browser ini)')))return;
+    try{localStorage.setItem(OP+c.kid,JSON.stringify({link:v,orig:orig,by:by,t:Date.now(),name:nameOf(c.row)}))}catch(e){T('Gagal menyimpan',1)}
+    c.row.link=v;c.row.foto='Lihat Link →';if(typeof renderTable==='function')renderTable()};
   if(g('bqU2r'))g('bqU2r').onclick=function(){
-    var all=ovrAll(),r=rowOf(key),orig=all[key]&&all[key].orig;
+    var orig=o&&o.orig;
     if(!reopen(orig||link,'Kembali ke link spreadsheet'))return;
-    delete all[key];ovrSet(all);
-    if(r.row&&orig){r.row.link=orig;r.row.foto=orig&&orig!=='-'?'Lihat Link →':'-'}
-    syncAll(false)}}
-
+    try{localStorage.removeItem(OP+c.kid)}catch(e){}
+    if(orig){c.row.link=orig;c.row.foto=orig!=='-'?'Lihat Link →':'-'}
+    if(typeof renderTable==='function')renderTable()}}
 function hookViewer(){
-  var s=document.getElementById('iqSaveBtn');
-  if(!s||document.getElementById('bqUpd'))return;
+  var s=document.getElementById('iqSaveBtn');if(!s||document.getElementById('bqUpd'))return;
   s.insertAdjacentHTML('beforebegin','<button class="iq-btn" id="bqUpd" title="Update drawing manual: muat ulang, ganti link, atau ganti file PDF">🔄<span class="lbl"> Update Drawing</span></button>');
   document.getElementById('bqUpd').onclick=openUpd}
 
-window.addEventListener('load',function(){hook();hookViewer();setTimeout(function(){hook();hookViewer()},1000);setTimeout(function(){var n=0;Object.keys(projectData).forEach(function(P){try{n+=applyOvr(P,projectData[P])}catch(e){}});if(n&&typeof renderTable==='function')renderTable()},1200);setTimeout(function(){syncAll(false)},1500);
-  setInterval(function(){if(document.visibilityState==='visible')syncAll(false)},600000)});
+function markSynced(P){try{var a=JSON.parse(localStorage.getItem('boq_synced')||'[]');if(a.indexOf(P)<0){a.push(P);localStorage.setItem('boq_synced',JSON.stringify(a))}}catch(e){}}
+function kd(k){try{return Promise.resolve(typeof kvDel==='function'?kvDel(k):kvSet(k,null)).catch(function(){})}catch(e){return Promise.resolve()}}
+function reapplyOvr(){if(!Object.keys(ovrAll()).length)return;Object.keys(projectData).forEach(function(P){try{ensureSigs(P);applyOvr(P,projectData[P])}catch(e){}})}
+async function restoreOrig(){
+  if(busy){T('Tunggu sinkron selesai dulu',1);return}
+  if(!confirm('Kembalikan data project ke data asli di file ini?\n\nHasil sinkron BOQ di browser ini dihapus. Centang & hasil inspeksi tidak berubah.'))return;
+  var imp=(typeof store!=='undefined'&&store&&store.projects)||{};
+  Object.keys(ORIG).forEach(function(P){if(!(P in imp)){try{projectData[P]=JSON.parse(ORIG[P])}catch(e){}}});
+  var synced=[];try{synced=JSON.parse(localStorage.getItem('boq_synced')||'[]')}catch(e){}
+  for(var i=0;i<synced.length;i++){var P=synced[i];
+    if(!(P in ORIG)&&!(P in imp)){try{delete projectData[P]}catch(e){}}
+    await kd('boq_rows_'+P);await kd('boq_ver_'+P)}
+  try{localStorage.removeItem('boq_synced')}catch(e){}
+  applied={};rep={};reapplyOvr();
+  if(typeof refresh==='function')refresh();else if(typeof init==='function')init();
+  stat('Data dikembalikan ke data asli');T('Data dikembalikan ke data asli');if(tabOn())renderTab()}
+
+window.addEventListener('load',function(){hook();hookViewer();hookBell();wrapLoader();
+  setTimeout(function(){hook();hookViewer();hookBell();wrapLoader()},1000);
+  setTimeout(reapplyOvr,1200)});
 })();
 
 </script>
