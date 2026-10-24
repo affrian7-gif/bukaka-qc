@@ -4049,7 +4049,6 @@ body.guest-mode .out-photo-box .rm-photo { display:none !important; }
   <div class="hm-hint">Main Assy yang sudah dicentang di Fabrikasi otomatis tercentang juga di Completeness. Komponen di bawahnya tetap dicek satu per satu. Tersimpan otomatis di browser ini.</div></div>
 
     <div class="controls">
-        <button id="btnIncoming" onclick="showIncoming()" style="background:#0284c7;color:#fff;font-weight:700;padding:8px 14px;border-radius:6px;border:none;cursor:pointer;">📦 Incoming Inspection</button>
         <button id="btnHome" onclick="showHome()">🏠 Dashboard</button>
         <label>Project:</label>
         <select id="projectSelect" onchange="changeProject()"><option value="PALAU">PALAU (3530 items)</option><option value="SOETTA-14">SOETTA-14 (5745 items)</option></select><button id="unitBtn" onclick="pmTab('units')" title="Tambah / kelola unit project">🏗️ Unit</button>
@@ -7078,6 +7077,7 @@ function projStats(p){
     else { m.compTotal++; if(chk) m.compChecked++; if(has) m.compLink++; }
     if(insp.has(k)) m.inspected++;
   });
+  try{const a=window.QCAdd&&window.QCAdd.stats(p);if(a){m.compTotal+=a.total;m.compChecked+=a.checked;m.inspected+=a.inspected;}}catch(e){}
   return m;
 }
 const fmt=n=>Number(n).toLocaleString('id-ID');
@@ -8406,14 +8406,14 @@ if(typeof _commit==='function'){
 
 /* tab "Unit" pada modal Kelola Project + tombol cepat di bar kontrol */
 var tabs=document.querySelector('#pmModal .pm-tabs');
-if(tabs)tabs.insertAdjacentHTML('beforeend','<button data-t="units" onclick="pmTab(\'units\')">🏗️ Unit</button>');
+if(tabs&&!tabs.querySelector('[data-t="units"]'))tabs.insertAdjacentHTML('beforeend','<button data-t="units" onclick="pmTab(\'units\')">🏗️ Unit</button>');
 var _pmTab=window.pmTab;
 window.pmTab=function(t){
   if(typeof _pmTab==='function')_pmTab(t);
   if(t==='units')renderUnits();
 };
 var sel=$('projectSelect');
-if(sel)sel.insertAdjacentHTML('afterend','<button id="unitBtn" onclick="pmTab(\'units\')" title="Tambah / kelola unit project">🏗️ Unit</button>');
+if(sel&&!$('unitBtn'))sel.insertAdjacentHTML('afterend','<button id="unitBtn" onclick="pmTab(\'units\')" title="Tambah / kelola unit project">🏗️ Unit</button>');
 var pb=$('pmBody');
 if(pb)new MutationObserver(hideUnitsInManager).observe(pb,{childList:true,subtree:true});
 
@@ -16337,7 +16337,7 @@ function appendAdd(){
   const checked=all.filter(o=>checkedState[rowKey(p,o.id)]).length;
   const open=openGrp||!!q||cf!=='all';
   const hd=document.createElement('tr');hd.className='main-row';hd.id='qcAddHdr';
-  hd.innerHTML='<td></td><td colspan="3" style="cursor:pointer" onclick="QCAdd.toggle()"><span style="display:inline-block;width:20px;font-weight:bold">'+(open?'▼':'▶')+'</span> <b>➕ ADDITIONAL COMPONENTS</b> ('+all.length+' items · '+checked+' checked)</td>'+
+  hd.innerHTML='<td></td><td colspan="3" style="cursor:pointer" onclick="QCAdd.toggle()"><span style="display:inline-block;width:20px;font-weight:bold">'+(open?'▼':'▶')+'</span> <b>➕ ADDITIONAL COMPONENTS</b> (<span id="qcAddCnt">'+all.length+' items · '+checked+' checked</span>)</td>'+
     '<td colspan="2"><button class="primary" onclick="event.stopPropagation();QCAdd.open()" style="padding:4px 10px;font-size:12px">➕ Tambah komponen</button></td><td></td><td></td>';
   tb.appendChild(hd);
   if(!open||(typeof showOnlyMainAssy!=='undefined'&&showOnlyMainAssy))return;
@@ -16355,9 +16355,39 @@ function appendAdd(){
     tb.appendChild(tr);
   });
 }
+function stats(p){
+  const l=load(p);let c=0,i=0;
+  l.forEach(o=>{const k=rowKey(p,o.id);if(checkedState[k])c++;if(inspHas(k))i++;});
+  return{total:l.length,checked:c,inspected:i};
+}
+/* Kartu statistik (Total / Inspected / Remaining / % selesai), progres & hitungan filter ikut memasukkan komponen Additional.
+   Tampilan Fabrikasi Main Assy tidak diubah (Additional bukan main assy). */
+function fixStats(){
+  const p=proj(),a=stats(p),sp=document.getElementById('qcAddCnt');
+  if(sp)sp.textContent=a.total+' items · '+a.checked+' checked';
+  if(typeof currentView!=='undefined'&&currentView==='main')return;
+  const rows=(typeof projectData!=='undefined'&&projectData[p])||[];
+  let t=0,c=0;
+  rows.forEach((r,i)=>{if(String((r&&r.level)||'').startsWith('▶'))return;t++;if(checkedState[p+'_'+i])c++;});
+  t+=a.total;c+=a.checked;
+  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.innerText=v;};
+  set('progressCount','Checked: '+c+' / '+t);set('totalStat',t.toLocaleString());set('checkedStat',c.toLocaleString());
+  set('pendingStat',Math.max(0,t-c).toLocaleString());set('checkedNote',(t?(c/t*100).toFixed(1):0)+'% selesai');
+  const f=document.getElementById('checkFilter');
+  if(f&&a.total&&!f.__qcAddFix){
+    const add={all:0,accept:0,special:0,reject:0,hold:0,none:0};
+    load(p).forEach(o=>{const k=rowKey(p,o.id);add.all++;if(!inspHas(k))add.none++;else{const st=(window.__inspSt||{})[k];if(st in add)add[st]++;}});
+    Array.from(f.options).forEach(o=>{
+      const m=/^(.*\()([\d.]+)(\))$/.exec(o.text);if(!m||!(o.value in add))return;
+      o.text=m[1]+(Number(m[2].replace(/\./g,''))+add[o.value]).toLocaleString('id-ID')+m[3];
+    });
+  }
+}
+const _uc=window.updateCounts;
+if(typeof _uc==='function'){window.updateCounts=function(){const r=_uc.apply(this,arguments);try{fixStats();}catch(e){}return r;};}
 const _rt=window.renderTable;
 if(typeof _rt==='function'){
-  window.renderTable=function(){const r=_rt.apply(this,arguments);try{appendAdd();}catch(e){console.error('QCAdd',e);}return r;};
+  window.renderTable=function(){const r=_rt.apply(this,arguments);try{appendAdd();fixStats();}catch(e){console.error('QCAdd',e);}return r;};
 }
 function closeDlg(){const d=document.getElementById('qcAddDlg');if(d)d.remove();}
 function openDlg(id){
@@ -16431,7 +16461,7 @@ window.QCAdd={
   open:openDlg,del,edit:openDlg,
   toggle:()=>{openGrp=!openGrp;try{renderTable();}catch(e){}},
   refresh:()=>{if(document.getElementById('qcAddDlg'))return;try{if(typeof currentView!=='undefined'&&currentView==='home')return;renderTable();}catch(e){}},
-  list:()=>load(proj())
+  list:()=>load(proj()),stats
 };
 try{if(typeof currentView==='undefined'||currentView!=='home')renderTable();}catch(e){}
 })();
