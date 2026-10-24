@@ -8696,7 +8696,7 @@ function openNotif(){
   d.querySelectorAll('[data-d]').forEach(function(b){b.onclick=function(){nDel(a[+b.getAttribute('data-d')].id);openNotif()}});
   d.querySelectorAll('[data-o]').forEach(function(b){b.onclick=function(){closeN();openNotifItem(a[+b.getAttribute('data-o')])}})}
 function hookBell(){
-  if(document.getElementById('bqBell'))return;
+  var eb=document.getElementById('bqBell');if(eb){eb.onclick=openNotif;nBadge();return}
   var anchor=document.getElementById('qcSyncBtn'),host=anchor?anchor.parentNode:document.querySelector('.controls');if(!host)return;
   var b=document.createElement('button');b.id='bqBell';b.title='Pemberitahuan drawing yang diperbarui';b.innerHTML='🔔 Update Drawing <span id="bqBellN"></span>';
   b.onclick=openNotif;if(anchor)anchor.insertAdjacentElement('afterend',b);else host.appendChild(b);nBadge()}
