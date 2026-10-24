@@ -4056,6 +4056,7 @@ body.guest-mode .out-photo-box .rm-photo { display:none !important; }
         <input id="searchInput" class="search-input" type="search" placeholder="⌕  Cari part number, nama, drawing..." oninput="clearTimeout(window.__st);window.__st=setTimeout(function(){window.__lim=500;renderTable()},180)" aria-label="Cari komponen">
         <select id="checkFilter" onchange="window.__cf=this.value;window.__lim=500;renderTable()" aria-label="Filter status centang" title="Short list berdasarkan status hasil inspeksi"><option value="all">☰ Semua status (3.530)</option><option value="accept">✔ Accept (0)</option><option value="special">★ Spesial Accepted (0)</option><option value="reject">✖ Reject (0)</option><option value="hold">⏸ Hold Inspect (1)</option><option value="none">☐ Belum diinspeksi (3.529)</option></select>
         <button class="primary" onclick="saveInspection()">💾 Save Report</button>
+        <button class="primary" onclick="QCAdd.open()" title="Tambah komponen Additional (tersimpan &amp; tersinkron ke semua inspector)">➕ Additional</button>
         <span id="saveStatus" style="color: #4ade80; font-size: 0.85rem;"></span>
         <button id="qcSyncBtn" onclick="QCSync.open()" title="Sinkronisasi: Belum terhubung">🔄 Sinkron <span id="qcSyncDot" style="color:#64748b">●</span></button><button id="bqBell" title="Pemberitahuan drawing yang diperbarui">🔔 Update Drawing <span id="bqBellN"></span></button>
     </div>
@@ -5792,6 +5793,7 @@ function renderTable() {
 #iqMsg{position:absolute;inset:0;z-index:8;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(4,8,15,.82)}
 #iqMsg .box{max-width:520px;width:100%;background:#0f1d32;border:1px solid #24466d;border-radius:14px;padding:20px;font-size:.85rem;line-height:1.55;box-shadow:0 20px 60px #000a}
 #iqMsg .box h3{margin:0 0 8px;font-size:1rem;color:#7dd3fc}
+#iqMsg .box{max-height:100%;box-sizing:border-box;overflow:auto}
 #iqMsg .box small{color:#94a3b8;display:block;margin-top:8px;word-break:break-word}
 #iqMsg .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .iq-spin{display:inline-block;width:16px;height:16px;border:2px solid #38bdf8;border-top-color:transparent;border-radius:50%;animation:iqspin .8s linear infinite;vertical-align:-3px;margin-right:8px}
@@ -5843,6 +5845,7 @@ function renderTable() {
         <button class="iq-btn" id="iqRedoBtn" onclick="iq.redo()" title="Redo (Ctrl+Y)" disabled="">↷<span class="lbl"> Redo</span></button>
         <button class="iq-btn danger" onclick="iq.clear()" title="Hapus semua coretan &amp; komentar di layar (belum disimpan)">🧹<span class="lbl"> Hapus Semua</span></button>
         <button class="iq-btn danger" id="iqDelBtn" style="display:none" onclick="iq.delResult()" title="Hapus hasil inspeksi yang sudah tersimpan untuk drawing ini">🗑<span class="lbl"> Hapus Hasil</span></button>
+        <button class="iq-btn" id="iqXBtn" onclick="iq.extra()" title="Gambar Additional: tambah / lihat foto tambahan (tersimpan &amp; tersinkron ke semua inspector)">🖼<span class="lbl"> Additional</span></button>
         <button class="iq-btn" id="bqUpd" title="Update drawing manual: muat ulang, ganti link, atau ganti file PDF">🔄<span class="lbl"> Update Drawing</span></button><button class="iq-btn primary" id="iqSaveBtn" onclick="iq.save()" title="Gabungkan coretan ke PDF asli &amp; simpan (Ctrl+S)">💾<span class="lbl"> Simpan Inspeksi</span></button>
         <button class="iq-btn" onclick="iq.close()" title="Tutup (Esc)">✕<span class="lbl"> Tutup</span></button>
       </div>
@@ -5975,7 +5978,7 @@ const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
 const isOpen=()=>modal.style.display==='flex';
 
 /* ---------- state ---------- */
-const S={key:'',title:'',link:'',cid:'',bytes:null,pdf:null,pages:[],zoom:1,vr:0};
+const S={key:'',title:'',link:'',cid:'',bytes:null,pdf:null,pages:[],zoom:1,vr:0,extra:[]};
 let tool='pan', color='#ff2d2d', size=2, cfs=16, sizeTouched=false;
 let items=[], undoS=[], redoS=[], dirty=false, sel=null;
 let mode=null, cur=null, spaceDown=false, toastT=0, loadToken=0, rrT=0, io=null, inertia=0;
@@ -6748,9 +6751,10 @@ function packItems(){
 }
 async function saveAnn(key){
   if(!items.length&&!S.approved){try{localStorage.removeItem('insp_'+key);localStorage.removeItem('inspst_'+key);}catch(e){}await kvDel('ann_'+key);return;}
-  const data={v:3,link:S.link,title:S.title,items:packItems(),approved:!!S.approved,status:S.status||'',stamp:S.sp||null,by:S.by||'',date:S.date||'',t:Date.now()};
+  const data={v:3,link:S.link,title:S.title,items:packItems(),approved:!!S.approved,status:S.status||'',stamp:S.sp||null,by:S.by||'',date:S.date||'',extra:S.extra||[],t:Date.now()};
   try{if(S.status)localStorage.setItem('inspst_'+key,S.status);else localStorage.removeItem('inspst_'+key);}catch(e){}
   const json=JSON.stringify(data);
+  if(json.length>880000){try{toast('⚠ Data inspeksi terlalu besar untuk sinkron — kurangi gambar additional');}catch(e){}}
   try{localStorage.setItem('insp_'+key,json);await kvDel('ann_'+key);}
   catch(e){
     await kvSet('ann_'+key,data);
@@ -6766,6 +6770,71 @@ async function loadAnn(key){
     if(d.idb){const f=await kvGet('ann_'+key);if(f)d=f;else d.items=[];}
     return d;
   }catch(e){return null;}
+}
+
+/* ---------- gambar Additional (ikut tersimpan & tersinkron lewat insp_<key>) ---------- */
+const XMAX=8, XBUDGET=560000; /* total karakter gambar agar rekaman sinkron tetap < ±900 KB (batas Google Sheet) */
+const xTot=()=>(S.extra||[]).reduce((a,e)=>a+(e&&e.d?e.d.length:0),0);
+function xCount(){const b=$('iqXBtn');if(!b)return;const n=(S.extra||[]).length;b.innerHTML='🖼'+(n?'<sup style="font-weight:800">'+n+'</sup>':'')+'<span class="lbl"> Additional'+(n?' ('+n+')':'')+'</span>';}
+function xImg(src){return new Promise((ok,no)=>{const im=new Image();im.onload=()=>ok(im);im.onerror=()=>no(new Error('Gambar tidak bisa dibaca'));im.src=src;});}
+function xRead(f){return new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok(r.result);r.onerror=()=>no(new Error('Gagal membaca file'));r.readAsDataURL(f);});}
+async function xEnc(src,maxD,q){
+  const im=await xImg(src),w0=im.naturalWidth||im.width,h0=im.naturalHeight||im.height,k=Math.min(1,maxD/Math.max(w0,h0));
+  const cv=document.createElement('canvas');cv.width=Math.max(1,Math.round(w0*k));cv.height=Math.max(1,Math.round(h0*k));
+  const c=cv.getContext('2d');c.fillStyle='#fff';c.fillRect(0,0,cv.width,cv.height);c.drawImage(im,0,0,cv.width,cv.height);
+  const out=cv.toDataURL('image/jpeg',q);cv.width=cv.height=1;return out;
+}
+async function xFit(){ /* kecilkan semua gambar bertahap sampai total muat di batas sinkron */
+  let guard=0;
+  while(xTot()>XBUDGET&&guard++<6){
+    for(const e of S.extra){const im=await xImg(e.d);const m=Math.max(im.naturalWidth,im.naturalHeight);e.d=await xEnc(e.d,Math.max(480,Math.round(m*.8)),.6);}
+  }
+  return xTot()<=XBUDGET;
+}
+async function xAdd(files){
+  const list=[...files].filter(f=>/^image\//.test(f.type||'')||/\.(jpe?g|png|webp|gif|bmp)$/i.test(f.name||''));
+  if(!list.length){toast('Pilih file gambar (JPG/PNG/WEBP)');return;}
+  const room=XMAX-S.extra.length;
+  if(room<=0){alert('Maksimal '+XMAX+' gambar additional per drawing.');return;}
+  const box=$('iqXBox');if(box)box.style.opacity='.5';
+  const added=[];let fail=0;
+  for(const f of list.slice(0,room)){
+    try{const e={d:await xEnc(await xRead(f),1280,.72),t:Date.now(),by:S.by||lastBy()};S.extra.push(e);added.push(e);}catch(err){fail++;}
+  }
+  if(!(await xFit())){added.forEach(e=>{const i=S.extra.indexOf(e);if(i>=0)S.extra.splice(i,1);});alert('Gambar terlalu besar untuk disinkronkan. Kurangi jumlah gambar.');}
+  else if(added.length){setDirty(true);}
+  xRender();
+  if(list.length>room)toast('Hanya '+room+' gambar yang ditambahkan (maks '+XMAX+')');
+  else if(fail)toast(fail+' file gagal dibaca (format tidak didukung)');
+  else if(added.length)toast(added.length+' gambar ditambahkan — tekan Simpan agar tersinkron');
+}
+function xRender(){
+  xCount();
+  const box=$('iqXBox');if(!box)return;box.style.opacity='';
+  const ex=S.extra||[],pct=Math.min(100,Math.round(xTot()/XBUDGET*100));
+  box.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px">'+
+    ex.map((e,i)=>'<div style="position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;border:1px solid #28466d;background:#071326"><img src="'+e.d+'" alt="Additional '+(i+1)+'" onclick="iq.xView('+i+')" style="width:100%;height:100%;object-fit:cover;cursor:zoom-in;display:block"><button class="iq-btn danger" onclick="iq.xDel('+i+')" title="Hapus gambar" style="position:absolute;top:3px;right:3px;padding:1px 6px;font-size:.7rem;border-radius:6px">✕</button></div>').join('')+
+    (ex.length<XMAX?'<button class="iq-btn" onclick="iq.xPick()" style="aspect-ratio:1;font-size:1.5rem;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:2px;padding:0">＋<span style="font-size:.62rem;font-weight:700">Tambah</span></button>':'')+'</div>'+
+    '<div style="margin-top:6px;font-size:.68rem;color:#7f9fc2">'+ex.length+'/'+XMAX+' gambar · kapasitas sinkron '+pct+'% terpakai</div>';
+}
+function xPick(){
+  let f=$('iqXFile');
+  if(!f){f=document.createElement('input');f.type='file';f.id='iqXFile';f.accept='image/*';f.multiple=true;f.style.display='none';
+    f.addEventListener('change',()=>{if(f.files&&f.files.length)xAdd(f.files);f.value='';});document.body.appendChild(f);}
+  f.click();
+}
+function xDel(i){if(!S.extra[i])return;S.extra.splice(i,1);setDirty(true);xRender();}
+function xView(i){
+  const e=S.extra[i];if(!e)return;
+  const o=document.createElement('div');
+  o.style.cssText='position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;padding:12px;cursor:zoom-out';
+  o.innerHTML='<img src="'+e.d+'" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:6px"><div style="position:absolute;top:10px;left:14px;color:#cbd5e1;font:700 .8rem system-ui,sans-serif">Additional '+(i+1)+'/'+S.extra.length+(e.by?' · '+escH(e.by):'')+' — klik untuk menutup</div>';
+  o.onclick=()=>o.remove();document.body.appendChild(o);
+}
+function xPanel(){
+  if(!S.key&&!S.title)return;
+  showMsg('<h3>🖼 Gambar Additional</h3>Foto/gambar tambahan untuk drawing ini. Ikut tersimpan &amp; tersinkron ke semua inspector saat menekan <b>Simpan Inspeksi</b>.<div id="iqXBox" style="margin-top:10px"></div><div class="row"><button class="iq-btn primary" onclick="iq.hideDlg()">Selesai</button></div>');
+  xRender();
 }
 
 /* ---------- gabungkan coretan + PDF asli -> PDF utuh ---------- */
@@ -6797,6 +6866,20 @@ async function buildMergedPdf(){
     pg.drawImage(img,{x,y,width:p.w,height:p.h,rotate:degrees(rot)});
     cv.width=cv.height=1;
   }
+  const ex=S.extra||[];
+  if(ex.length){
+    const L=window.PDFLib,fnt=await doc.embedFont(L.StandardFonts.Helvetica);
+    for(let n=0;n<ex.length;n++){
+      try{
+        const im=await doc.embedJpg(b64ToBuf(String(ex[n].d).split(',')[1]));
+        const land=im.width>=im.height,PW=land?842:595,PH=land?595:842,M=36,CH=26;
+        const pg=doc.addPage([PW,PH]);
+        pg.drawText(('Additional '+(n+1)+'/'+ex.length+' - '+safeName(S.title)).slice(0,95),{x:M,y:PH-M+6,size:10,font:fnt,color:L.rgb(.3,.3,.3)});
+        const sc=Math.min((PW-2*M)/im.width,(PH-2*M-CH)/im.height),w=im.width*sc,h=im.height*sc;
+        pg.drawImage(im,{x:(PW-w)/2,y:(PH-CH-h)/2+(M/2),width:w,height:h});
+      }catch(e){console.warn('Additional #'+(n+1)+' dilewati',e);}
+    }
+  }
   return doc.save({useObjectStreams:true});
 }
 function safeName(s){return String(s||'Part').replace(/^Inspeksi Drawing:\s*/i,'').replace(/^Hasil Inspeksi QC:\s*/i,'').replace(/[^a-z0-9_-]+/gi,'_').replace(/^_+|_+$/g,'').slice(0,70)||'Part';}
@@ -6812,12 +6895,13 @@ function save(){
     '<div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">'+
     '<label style="font-size:.78rem">Inspected By (nama inspector)<input id="iqBy" type="text" maxlength="32" placeholder="Nama inspector" value="'+escA(S.by||lastBy())+'" style="width:100%;box-sizing:border-box;margin-top:3px;padding:10px;border-radius:8px;border:1px solid #28466d;background:#0b1b33;color:#fff;font-size:.9rem"></label>'+
     '<label style="font-size:.78rem">Tanggal<input id="iqDate" type="date" value="'+(S.date||todayISO())+'" style="width:100%;box-sizing:border-box;margin-top:3px;padding:10px;border-radius:8px;border:1px solid #28466d;background:#0b1b33;color:#fff;font-size:.9rem;color-scheme:dark"></label></div>'+
-    '<div style="margin-top:12px">3. Simpan (stempel <b>Inspected</b> berwarna sesuai status; atur posisinya dengan tool 🔖):</div>'+
+    '<div style="margin-top:12px">3. Additional <span style="color:#7f9fc2">(opsional) — tambah gambar/foto; ikut tersimpan &amp; tersinkron ke semua inspector:</span></div><div id="iqXBox" style="margin-top:6px"></div>'+
+    '<div style="margin-top:12px">4. Simpan (stempel <b>Inspected</b> berwarna sesuai status; atur posisinya dengan tool 🔖):</div>'+
     '<div class="row" style="flex-direction:column;margin-top:6px">'+
     '<button class="iq-btn primary" style="padding:13px" onclick="iq.saveDo(\'pdf\')">💾 Simpan &amp; download PDF</button>'+
     '<button class="iq-btn" style="padding:13px" onclick="iq.saveDo(\'only\')">✔ Simpan saja (tanpa download)</button>'+
     '<button class="iq-btn" style="padding:13px" onclick="iq.hideDlg()">Batal</button></div>');
-  setSt(S.pend);
+  setSt(S.pend);xRender();
 }
 function escA(t){return String(t||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
 function setSt(k){
@@ -6845,7 +6929,7 @@ async function saveDo(mode){
     if((S.status==='accept'||S.status==='special')&&S.key){try{checkedState[S.key]=true;if(typeof saveChecked==='function')saveChecked();}catch(e){}}
     try{if(typeof renderTable==='function')renderTable();}catch(e){}
     setDirty(false);
-    try{if(typeof recordInspectionResult==='function')recordInspectionResult('Inspeksi ['+INSP_ST[S.status].t+'] disimpan'+(mode==='pdf'?' + PDF':'')+': '+S.title+' ('+items.length+' coretan)');}catch(e){}
+    try{if(typeof recordInspectionResult==='function')recordInspectionResult('Inspeksi ['+INSP_ST[S.status].t+'] disimpan'+(mode==='pdf'?' + PDF':'')+': '+S.title+' ('+items.length+' coretan'+((S.extra||[]).length?', '+S.extra.length+' gambar additional':'')+')');}catch(e){}
     toast(mode==='pdf'?'Tersimpan ✓ PDF ('+S.pages.length+' hal.) diunduh · '+INSP_ST[S.status].t:'Tersimpan ✓ (tanpa download) · '+INSP_ST[S.status].t);
   }catch(err){console.error(err);S.approved=was;S.status=wasSt;S.by=wasBy;S.date=wasDt;scheduleRedraw();alert('Gagal menyimpan: '+(err&&err.message||err));}
   btn.disabled=false;btn.innerHTML=old;saving=false;
@@ -6856,11 +6940,11 @@ async function delResult(){
   const key=S.key;if(!key)return;
   let has=false;try{has=!!localStorage.getItem('insp_'+key);}catch(e){}
   if(!has&&!items.length){toast('Belum ada hasil inspeksi tersimpan untuk drawing ini');return;}
-  if(!confirm('Hapus hasil inspeksi (coretan & komentar) untuk:\n'+S.title+'\n\nTindakan ini tidak bisa dibatalkan. File PDF yang sudah diunduh tidak ikut terhapus.'))return;
+  if(!confirm('Hapus hasil inspeksi (coretan, komentar & gambar additional) untuk:\n'+S.title+'\n\nTindakan ini tidak bisa dibatalkan. File PDF yang sudah diunduh tidak ikut terhapus.'))return;
   try{localStorage.removeItem('insp_'+key);}catch(e){}
   await kvDel('ann_'+key);window.__inspSet=null;
   try{if(typeof recordInspectionResult==='function')recordInspectionResult('Hasil inspeksi dihapus: '+S.title);}catch(e){}
-  S.approved=false;S.status='';S.sp=null;S.by='';S.date='';try{localStorage.removeItem('inspst_'+S.key);}catch(e){}items=[];undoS=[];redoS=[];sel=null;setDirty(false);updUndo();
+  S.approved=false;S.status='';S.sp=null;S.by='';S.date='';S.extra=[];try{localStorage.removeItem('inspst_'+S.key);}catch(e){}items=[];undoS=[];redoS=[];sel=null;setDirty(false);updUndo();
   S.pages.forEach(p=>scheduleRedraw(p.i));
   close(true);
 }
@@ -6879,7 +6963,8 @@ async function openDoc(o){
   modal.style.display='flex';modal.setAttribute('aria-hidden','false');document.body.style.overflow='hidden';
   ['iqSidePanel','iqSrcPanel'].forEach(x=>{$(x).style.display='none';});
   setTool('pan');
-  const ann=o.result?await loadAnn(S.key):null; /* View Drawing = mulai bersih; coretan lama hanya dimuat lewat tombol Hasil */
+  const ann=o.result?await loadAnn(S.key):null;
+  S.extra=[];try{const a0=o.result?ann:await loadAnn(S.key);if(a0&&Array.isArray(a0.extra))S.extra=a0.extra.filter(e=>e&&typeof e.d==='string').slice(0,XMAX);}catch(e){}xCount(); /* View Drawing = mulai bersih; coretan lama hanya dimuat lewat tombol Hasil */
   S.approved=!!(ann&&ann.approved);S.status=(ann&&ann.status)||'';S.sp=(ann&&ann.stamp)||null;S.by=(ann&&ann.by)||'';S.date=(ann&&ann.date)||'';
   if(ann&&ann.items)items=ann.items.map(it=>Object.assign({},it));
   else if(ann&&ann.legacy)toast('Hasil lama (format PNG) tidak bisa dimuat ulang; coretan baru akan menggantikannya saat disimpan');
@@ -6892,12 +6977,12 @@ function close(force){
   loadToken++;cancelEditor();hideMsg();
   modal.style.display='none';modal.setAttribute('aria-hidden','true');document.body.style.overflow='';
   if(io)io.disconnect();
-  pagesEl.innerHTML='';S.pages=[];if(S.pdf){try{S.pdf.destroy();}catch(e){}}S.pdf=null;S.bytes=null;items=[];setDirty(false);
+  pagesEl.innerHTML='';S.pages=[];if(S.pdf){try{S.pdf.destroy();}catch(e){}}S.pdf=null;S.bytes=null;items=[];S.extra=[];xCount();setDirty(false);
   if(typeof renderTable==='function')renderTable();
 }
 
 /* ---------- API global ---------- */
-window.iq={delResult,tool:setTool,undo,redo,clear:clearAll,zoom:zoomBtn,fit,rotate,close,save,saveDo,setSt,hideDlg:hideMsg,page:gotoPage,pop,saveSrc,pickFile,reload:()=>{$('iqSrcPanel').style.display='none';reloadPdf(true);}};
+window.iq={xPick,xDel,xView,extra:xPanel,delResult,tool:setTool,undo,redo,clear:clearAll,zoom:zoomBtn,fit,rotate,close,save,saveDo,setSt,hideDlg:hideMsg,page:gotoPage,pop,saveSrc,pickFile,reload:()=>{$('iqSrcPanel').style.display='none';reloadPdf(true);}};
 window.closeInspModal=close;
 window.loadInspectionDrawing=function(linksStr,title,key){
   if(!linksStr)return;
@@ -7500,7 +7585,7 @@ Storage.prototype.setItem = function(k, v){
     k = String(k);
     if (k === CHK) diffChecks();
     else if (k === UK) diffUnits();
-    else if (k.indexOf('insp_') === 0) markDirty('i:' + k.slice(5)); else if (k.indexOf('boqdwg_') === 0) markDirty('d:' + k.slice(7));
+    else if (k.indexOf('insp_') === 0) markDirty('i:' + k.slice(5)); else if (k.indexOf('boqdwg_') === 0) markDirty('d:' + k.slice(7)); else if (k.indexOf('qcadd_') === 0) markDirty('a:' + k.slice(6));
   }
   return r;
 };
@@ -7508,7 +7593,7 @@ Storage.prototype.removeItem = function(k){
   const r = _rem.apply(this, arguments);
   if (this === LS && getUrl()) {
     k = String(k);
-    if (k.indexOf('insp_') === 0) markDirty('i:' + k.slice(5)); else if (k.indexOf('boqdwg_') === 0) markDirty('d:' + k.slice(7));
+    if (k.indexOf('insp_') === 0) markDirty('i:' + k.slice(5)); else if (k.indexOf('boqdwg_') === 0) markDirty('d:' + k.slice(7)); else if (k.indexOf('qcadd_') === 0) markDirty('a:' + k.slice(6));
   }
   return r;
 };
@@ -7543,7 +7628,7 @@ async function push(){
         if (batch.length >= 300 || size > 150000) break;
         const kind = id.charAt(0), key = id.slice(2);
         let v = null;
-        if (kind === 'd') { v = raw('boqdwg_' + key); } else if (kind === 'c') {
+        if (kind === 'd') { v = raw('boqdwg_' + key); } else if (kind === 'a') { v = raw('qcadd_' + key); } else if (kind === 'c') {
           v = (key in chk) ? String(!!chk[key]) : null;
         } else if (kind === 'u') {
           v = (key in uc) ? String(uc[key]) : null;
@@ -7619,6 +7704,7 @@ function applyRecords(recs){
     if (kind === 'p') { pendP.push(r); return; }
     if (kind === 'u') { pendU.push(r); return; }
     if (kind === 'r') { pendR.push(r); return; }
+    if (kind === 'a') { try { if (r.v === null) _rem.call(LS, 'qcadd_' + key); else _set.call(LS, 'qcadd_' + key, r.v); window.__qcAddCh = true; } catch(e) { console.warn('QCSync: penyimpanan penuh, lewati', key); } return; }
     if (kind === 'd') { try { if (window.__boqApplyDwg) window.__boqApplyDwg(key, r.v, _set, _rem, LS); } catch(e) {} return; }
     if (kind === 'c') {
       if (r.v === null) { if (key in checkedState) { delete checkedState[key]; chkCh = true; chkKeys.push(key); } }
@@ -7643,6 +7729,7 @@ function applyRecords(recs){
   }
   if (inspCh) { window.__inspSet = null; window.__inspSt = null; }
   if (chkCh) silentPatch(chkKeys);
+  if (window.__qcAddCh) { window.__qcAddCh = false; try { if (window.QCAdd) window.QCAdd.refresh(); } catch(e) {} }
   return recs.length;
 }
 
@@ -7724,6 +7811,7 @@ function initialUpload(){
       d['i:' + n.slice(5)] = t;
     }
   }
+  for (let i = 0; i < LS.length; i++) { const n = LS.key(i); if (n && n.indexOf('qcadd_') === 0 && !d['a:' + n.slice(6)]) { let t = 1; try { t = JSON.parse(LS.getItem(n)).t || 1; } catch(e) {} d['a:' + n.slice(6)] = t; } }
   jset(K.dirty, d); _set.call(LS, K.inited, '1');
 }
 async function tick(force){
@@ -16176,5 +16264,127 @@ if(document.fonts&&document.fonts.ready) document.fonts.ready.then(renderStage);
   try{ injectCard(); }catch(e){}
 })();
 
+</script>
+
+<script id="qc-additional">
+/* ===== Komponen ADDITIONAL: tambah komponen manual (satu atau banyak) di luar daftar Excel =====
+   - Disimpan per komponen di localStorage 'qcadd_<PROJECT>|<id>'  -> sinkron antar inspector sebagai catatan 'a:<PROJECT>|<id>'
+   - Tidak mengubah data project/Excel maupun nomor urut centang yang sudah ada
+   - Centang & hasil inspeksi memakai kunci '<PROJECT>~add_<id>' (ikut sinkron lewat jalur centang/inspeksi biasa) */
+(function(){
+'use strict';
+const LS=window.localStorage,PRE='qcadd_',BYK='qc_add_by';
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const js=s=>esc(String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
+const proj=()=>{try{return currentProject}catch(e){return ''}};
+const lsKey=(p,id)=>PRE+p+'|'+id, rowKey=(p,id)=>p+'~add_'+id;
+let openGrp=true;
+function load(p){
+  const out=[];
+  try{for(let i=0;i<LS.length;i++){const k=LS.key(i);if(!k||k.indexOf(PRE+p+'|')!==0)continue;try{const o=JSON.parse(LS.getItem(k));if(o&&o.id)out.push(o);}catch(e){}}}catch(e){}
+  out.sort((a,b)=>(a.t||0)-(b.t||0)||String(a.id).localeCompare(String(b.id)));
+  return out;
+}
+function note(t,bad){
+  const d=document.createElement('div');d.textContent=t;
+  d.style.cssText='position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:100010;padding:11px 18px;border-radius:12px;font-size:.85rem;font-weight:700;color:#fff;box-shadow:0 10px 30px #0008;background:'+(bad?'#b91c1c':'#047857');
+  document.body.appendChild(d);setTimeout(()=>d.remove(),2800);
+}
+function appendAdd(){
+  const tb=document.getElementById('tableBody'),p=proj();if(!tb||!p)return;
+  const all=load(p),q=((document.getElementById('searchInput')||{}).value||'').trim().toLowerCase(),cf=window.__cf||'all';
+  let list=all;
+  if(q)list=list.filter(o=>[o.no,o.part_num,o.part_name,o.drawing_no,o.material].some(v=>String(v||'').toLowerCase().includes(q)));
+  if(cf!=='all')list=list.filter(o=>{const k=rowKey(p,o.id),h=inspHas(k);return cf==='none'?!h:(h&&(window.__inspSt||{})[k]===cf);});
+  if(!list.length&&(q||cf!=='all'))return;
+  const checked=all.filter(o=>checkedState[rowKey(p,o.id)]).length;
+  const open=openGrp||!!q||cf!=='all';
+  const hd=document.createElement('tr');hd.className='main-row';hd.id='qcAddHdr';
+  hd.innerHTML='<td></td><td colspan="3" style="cursor:pointer" onclick="QCAdd.toggle()"><span style="display:inline-block;width:20px;font-weight:bold">'+(open?'▼':'▶')+'</span> <b>➕ ADDITIONAL COMPONENTS</b> ('+all.length+' items · '+checked+' checked)</td>'+
+    '<td colspan="2"><button class="primary" onclick="event.stopPropagation();QCAdd.open()" style="padding:4px 10px;font-size:12px">➕ Tambah komponen</button></td><td></td><td></td>';
+  tb.appendChild(hd);
+  if(!open||(typeof showOnlyMainAssy!=='undefined'&&showOnlyMainAssy))return;
+  if(!list.length){const e=document.createElement('tr');e.innerHTML='<td colspan="9" style="text-align:center;color:#64748b;font-style:italic;padding:10px">Belum ada komponen additional. Klik “Tambah komponen”.</td>';tb.appendChild(e);return;}
+  list.forEach(o=>{
+    const k=rowKey(p,o.id),on=!!checkedState[k],tr=document.createElement('tr');if(on)tr.className='checked';
+    const nm=o.part_name||o.no||'Additional';
+    const lk=(o.link&&/^https?:\/\//i.test(o.link))?'<a href="#" onclick="event.stopPropagation();loadInspectionDrawing(\''+js(o.link.replace(/[\s'"<>\\]/g,encodeURIComponent))+'\',\''+js(nm)+'\',\''+js(k)+'\');return false;" class="link-badge">View Drawing</a>':'-';
+    const hs=inspHas(k)?'<button onclick="openInspected(\''+js(k)+'\',\''+js(nm)+'\');return false;" style="background:'+inspColor(k)+';color:white;padding:3px 8px;border-radius:4px;border:none;cursor:pointer;font-weight:bold;font-size:11px;">'+inspLabel(k)+'</button>':'<span style="color:#64748b;font-style:italic;">Belum ada</span>';
+    tr.innerHTML='<td style="text-align:center;padding-left:25px;"><input type="checkbox" '+(on?'checked':'')+' onchange="toggleCheck(\''+js(k)+'\',this)"></td>'+
+      '<td>'+esc(o.no)+'</td>'+
+      '<td>&nbsp;&nbsp;&nbsp;&nbsp;↳ '+esc(nm)+' <span style="white-space:nowrap"><button title="Edit" onclick="QCAdd.open(\''+js(o.id)+'\')" style="padding:0 5px;font-size:11px;background:transparent;border:1px solid #334e73;border-radius:5px;cursor:pointer">✎</button> <button title="Hapus" onclick="QCAdd.del(\''+js(o.id)+'\')" style="padding:0 5px;font-size:11px;background:transparent;border:1px solid #7a1d3d;border-radius:5px;cursor:pointer">🗑</button></span></td>'+
+      '<td>'+esc(o.part_num)+'</td><td>'+esc(o.drawing_no)+'</td><td>'+esc(o.qty)+'</td><td>'+esc(o.material)+'</td>'+
+      '<td style="text-align:center">'+lk+'</td><td style="text-align:center">'+hs+'</td>';
+    tb.appendChild(tr);
+  });
+}
+const _rt=window.renderTable;
+if(typeof _rt==='function'){
+  window.renderTable=function(){const r=_rt.apply(this,arguments);try{appendAdd();}catch(e){console.error('QCAdd',e);}return r;};
+}
+function closeDlg(){const d=document.getElementById('qcAddDlg');if(d)d.remove();}
+function openDlg(id){
+  closeDlg();
+  const p=proj();if(!p)return;
+  const cur=id?load(p).find(o=>o.id===id):null;
+  let by='';try{by=(cur&&cur.by)||LS.getItem(BYK)||'';}catch(e){}
+  const bg=document.createElement('div');bg.id='qcAddDlg';
+  bg.style.cssText='position:fixed;inset:0;z-index:100005;background:rgba(2,6,14,.82);display:flex;align-items:center;justify-content:center;padding:12px;overflow:auto';
+  const inp='width:100%;box-sizing:border-box;margin-top:3px;padding:9px 10px;border-radius:8px;border:1px solid #28466d;background:#0b1b33;color:#fff;font-size:.88rem';
+  const f=(l,n,ph,v,extra)=>'<label style="font-size:.76rem;color:#b6cde6;display:block;'+(extra||'')+'">'+l+'<input data-f="'+n+'" type="text" placeholder="'+esc(ph||'')+'" value="'+esc(v||'')+'" style="'+inp+'"></label>';
+  const c=cur||{};
+  bg.innerHTML='<div style="width:100%;max-width:520px;background:#0f1d32;border:1px solid #24466d;border-radius:14px;padding:18px;box-shadow:0 20px 60px #000a;color:#e6f0fb;font-family:inherit">'+
+    '<h3 style="margin:0 0 4px;color:#7dd3fc;font-size:1.05rem">'+(cur?'✎ Edit komponen Additional':'➕ Tambah komponen Additional')+'</h3>'+
+    '<div style="font-size:.74rem;color:#7f9fc2;margin-bottom:10px">Project: <b>'+esc(p)+'</b> · tersimpan &amp; tersinkron ke semua inspector.</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+      f('Nama komponen *','part_name','mis. Bracket tambahan',c.part_name,'grid-column:1/3')+
+      f('No / Level','no','mis. A1',c.no)+f('Part Number','part_num','',c.part_num)+
+      f('Drawing No','drawing_no','',c.drawing_no)+f('Qty','qty','1',c.qty)+
+      f('Material','material','',c.material,'grid-column:1/3')+
+      f('Link drawing (opsional, Google Drive)','link','https://drive.google.com/file/d/…',c.link,'grid-column:1/3')+
+      f('Ditambahkan oleh','by','Nama inspector',by,'grid-column:1/3')+
+    '</div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">'+
+      '<button class="primary" id="qcAddOk" style="flex:1;padding:11px">💾 Simpan</button>'+
+      (cur?'':'<button id="qcAddMore" style="flex:1;padding:11px">💾 Simpan &amp; tambah lagi</button>')+
+      '<button id="qcAddNo" style="padding:11px 16px">Batal</button></div></div>';
+  document.body.appendChild(bg);
+  const g=n=>bg.querySelector('[data-f="'+n+'"]');
+  const doSave=again=>{
+    const o={id:cur?cur.id:(Date.now().toString(36)+Math.random().toString(36).slice(2,5)),t:cur?(cur.t||Date.now()):Date.now()};
+    ['no','part_num','part_name','drawing_no','qty','material','link','by'].forEach(n=>{o[n]=(g(n).value||'').trim();});
+    if(!o.part_name){note('Isi nama komponen dulu',1);g('part_name').focus();return;}
+    if(o.link&&!/^https?:\/\//i.test(o.link)){note('Link drawing harus diawali http:// atau https://',1);g('link').focus();return;}
+    try{LS.setItem(lsKey(p,o.id),JSON.stringify(o));if(o.by)LS.setItem(BYK,o.by);}
+    catch(e){note('Gagal menyimpan: penyimpanan browser penuh',1);return;}
+    openGrp=true;try{renderTable();}catch(e){}
+    if(again){['no','part_num','part_name','drawing_no','qty'].forEach(n=>{g(n).value='';});g('part_name').focus();note('Tersimpan ✓ — silakan tambah komponen berikutnya');}
+    else{closeDlg();note(cur?'Komponen diperbarui ✓':'Komponen Additional tersimpan ✓');}
+  };
+  bg.querySelector('#qcAddOk').onclick=()=>doSave(false);
+  const m=bg.querySelector('#qcAddMore');if(m)m.onclick=()=>doSave(true);
+  bg.querySelector('#qcAddNo').onclick=closeDlg;
+  bg.addEventListener('mousedown',e=>{if(e.target===bg)closeDlg();});
+  bg.addEventListener('keydown',e=>{if(e.key==='Escape')closeDlg();else if(e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();doSave(false);}});
+  setTimeout(()=>g('part_name').focus(),30);
+}
+function del(id){
+  const p=proj(),o=load(p).find(x=>x.id===id);if(!o)return;
+  if(!confirm('Hapus komponen Additional:\n'+(o.part_name||o.no)+'\n\nCentang & hasil inspeksinya ikut dihapus (juga di inspector lain setelah sinkron).'))return;
+  const k=rowKey(p,id);
+  try{LS.removeItem(lsKey(p,id));}catch(e){}
+  try{LS.removeItem('insp_'+k);LS.removeItem('inspst_'+k);window.__inspSet=null;}catch(e){}
+  try{if(k in checkedState){delete checkedState[k];if(typeof saveChecked==='function')saveChecked();}}catch(e){}
+  try{renderTable();}catch(e){}
+  note('Komponen dihapus');
+}
+window.QCAdd={
+  open:openDlg,del,edit:openDlg,
+  toggle:()=>{openGrp=!openGrp;try{renderTable();}catch(e){}},
+  refresh:()=>{if(document.getElementById('qcAddDlg'))return;try{if(typeof currentView!=='undefined'&&currentView==='home')return;renderTable();}catch(e){}},
+  list:()=>load(proj())
+};
+try{if(typeof currentView==='undefined'||currentView!=='home')renderTable();}catch(e){}
+})();
 </script>
 </body></html>
