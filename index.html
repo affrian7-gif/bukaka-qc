@@ -5845,6 +5845,7 @@ function renderTable() {
         <button class="iq-btn" id="iqRedoBtn" onclick="iq.redo()" title="Redo (Ctrl+Y)" disabled="">↷<span class="lbl"> Redo</span></button>
         <button class="iq-btn danger" onclick="iq.clear()" title="Hapus semua coretan &amp; komentar di layar (belum disimpan)">🧹<span class="lbl"> Hapus Semua</span></button>
         <button class="iq-btn danger" id="iqDelBtn" style="display:none" onclick="iq.delResult()" title="Hapus hasil inspeksi yang sudah tersimpan untuk drawing ini">🗑<span class="lbl"> Hapus Hasil</span></button>
+        <button class="iq-btn" id="iqPrintBtn" onclick="iq.print()" title="Cetak hasil: drawing + coretan + stempel + gambar Additional (Ctrl+P)">🖨<span class="lbl"> Print</span></button>
         <button class="iq-btn" id="iqXBtn" onclick="iq.extra()" title="Gambar Additional: tambah / lihat foto tambahan (tersimpan &amp; tersinkron ke semua inspector)">🖼<span class="lbl"> Additional</span></button>
         <button class="iq-btn" id="bqUpd" title="Update drawing manual: muat ulang, ganti link, atau ganti file PDF">🔄<span class="lbl"> Update Drawing</span></button><button class="iq-btn primary" id="iqSaveBtn" onclick="iq.save()" title="Gabungkan coretan ke PDF asli &amp; simpan (Ctrl+S)">💾<span class="lbl"> Simpan Inspeksi</span></button>
         <button class="iq-btn" onclick="iq.close()" title="Tutup (Esc)">✕<span class="lbl"> Tutup</span></button>
@@ -6660,6 +6661,7 @@ document.addEventListener('keydown',e=>{
     if(l==='z'){e.preventDefault();e.shiftKey?redo():undo();}
     else if(l==='y'){e.preventDefault();redo();}
     else if(l==='s'){e.preventDefault();save();}
+    else if(l==='p'){e.preventDefault();printResult();}
     return;
   }
   switch(k.toLowerCase()){
@@ -6935,6 +6937,33 @@ async function saveDo(mode){
   btn.disabled=false;btn.innerHTML=old;saving=false;
 }
 
+/* ---------- print hasil (PDF gabungan: drawing + coretan + stempel + gambar Additional) ---------- */
+let printing=false;
+async function printResult(){
+  if(printing)return;
+  if(!S.pdf||!S.bytes){alert('PDF belum dimuat — tidak ada yang bisa dicetak.');return;}
+  commitEditor();
+  const touch=!!(window.matchMedia&&matchMedia('(pointer:coarse)').matches);
+  const win=touch?window.open('','_blank'):null; /* dibuka sekarang agar tidak diblokir pop-up (perangkat sentuh) */
+  printing=true;const btn=$('iqPrintBtn'),old=btn.innerHTML;
+  btn.disabled=true;btn.innerHTML='⏳<span class="lbl"> Menyiapkan…</span>';
+  try{
+    const bytes=await buildMergedPdf();
+    const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
+    setTimeout(()=>URL.revokeObjectURL(url),300000);
+    if(win){win.location.href=url;toast('PDF dibuka di tab baru — cetak dari sana');}
+    else{
+      let fr=$('iqPrintFrame');if(fr)fr.remove();
+      fr=document.createElement('iframe');fr.id='iqPrintFrame';
+      fr.style.cssText='position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none';
+      fr.onload=()=>{try{fr.contentWindow.focus();fr.contentWindow.print();}catch(e){window.open(url,'_blank');}};
+      fr.src=url;document.body.appendChild(fr);
+      toast('Dialog cetak dibuka'+(S.approved?'':' (belum disimpan: stempel Inspected belum ikut)'));
+    }
+  }catch(err){console.error(err);if(win)try{win.close();}catch(e){}alert('Gagal menyiapkan cetakan: '+(err&&err.message||err));}
+  btn.disabled=false;btn.innerHTML=old;printing=false;
+}
+
 /* ---------- hapus hasil inspeksi tersimpan ---------- */
 async function delResult(){
   const key=S.key;if(!key)return;
@@ -6982,7 +7011,7 @@ function close(force){
 }
 
 /* ---------- API global ---------- */
-window.iq={xPick,xDel,xView,extra:xPanel,delResult,tool:setTool,undo,redo,clear:clearAll,zoom:zoomBtn,fit,rotate,close,save,saveDo,setSt,hideDlg:hideMsg,page:gotoPage,pop,saveSrc,pickFile,reload:()=>{$('iqSrcPanel').style.display='none';reloadPdf(true);}};
+window.iq={print:printResult,xPick,xDel,xView,extra:xPanel,delResult,tool:setTool,undo,redo,clear:clearAll,zoom:zoomBtn,fit,rotate,close,save,saveDo,setSt,hideDlg:hideMsg,page:gotoPage,pop,saveSrc,pickFile,reload:()=>{$('iqSrcPanel').style.display='none';reloadPdf(true);}};
 window.closeInspModal=close;
 window.loadInspectionDrawing=function(linksStr,title,key){
   if(!linksStr)return;
