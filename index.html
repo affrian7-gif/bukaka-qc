@@ -18113,8 +18113,7 @@ async function build(){
  var a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=name;document.body.appendChild(a);a.click();a.remove();toast('File tampilan tamu tersimpan: '+name);
 }
 function mk(){var b=document.createElement('button');b.type='button';b.className='gx-share';b.textContent='👥 Bagikan Outstanding ke Tamu';b.title='Buat file hanya-baca untuk tamu';b.onclick=function(e){e.stopPropagation();build();};return b;}
-function ensure(){var h=document.querySelector('#homeView .hm-hero-l');if(h&&!h.querySelector('.gx-share'))h.appendChild(mk());
- var q=document.querySelector('.qo-hd>div:last-child');if(q&&!q.querySelector('.gx-share')){var b=mk();b.textContent='👥 Bagikan ke Tamu';q.insertBefore(b,q.firstChild);}}
+function ensure(){var q=document.querySelector('.qo-hd>div:last-child');if(q&&!q.querySelector('.gx-share')&&typeof window.gxOutLink==='function'){var b=document.createElement('button');b.type='button';b.className='gx-share';b.textContent='🌐 Salin Link Tamu';b.title='Salin link Outstanding untuk tamu (online, hanya-baca)';b.onclick=function(e){e.stopPropagation();window.gxOutLink();};q.insertBefore(b,q.firstChild);}}
 var t;new MutationObserver(function(){clearTimeout(t);t=setTimeout(ensure,150);}).observe(document.body,{childList:true,subtree:true});ensure();
 })();
 </script><style id="gx-style2">
@@ -18141,7 +18140,8 @@ function guestLink(){var u=(localStorage.getItem('qc_sync_api_url')||'').trim();
  var l=location.origin+location.pathname+'#tamu='+encodeURIComponent(u);
  (navigator.clipboard?navigator.clipboard.writeText(l):Promise.reject()).then(function(){toast('🔗 Link tamu disalin.');},function(){prompt('Salin link tamu:',l);});}
 function outLink(){var u=(localStorage.getItem('qc_sync_api_url')||'').trim();if(!u){alert('Sinkronisasi belum aktif. Hubungkan dulu lewat tombol Sinkron.');return;}var l=u+(u.indexOf('?')>=0?'&':'?')+'view=tamu';(navigator.clipboard?navigator.clipboard.writeText(l):Promise.reject()).then(function(){toast('🌐 Link Outstanding tamu disalin.');},function(){prompt('Salin link:',l);});}
-function ensure(){var h=document.querySelector('#homeView .hm-hero-l');if(h&&!G&&!h.querySelector('.gx-link')){var b=document.createElement('button');b.type='button';b.className='gx-link';b.textContent='🔗 Salin Link Tamu (Online)';b.onclick=guestLink;h.appendChild(b);var b2=document.createElement('button');b2.type='button';b2.className='gx-link';b2.textContent='🌐 Salin Link Outstanding Tamu';b2.onclick=outLink;h.appendChild(b2);}}
+window.gxOutLink=outLink;
+function ensure(){}
 var t;new MutationObserver(function(){clearTimeout(t);t=setTimeout(ensure,250);}).observe(document.body,{childList:true,subtree:true});setInterval(ensure,5000);ensure();
 })();
 </script></body></html>
