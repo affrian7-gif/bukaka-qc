@@ -17808,11 +17808,11 @@ function sum(){const o=items(),p=o.filter(x=>x=='P').length,f=o.filter(x=>x=='F'
 function body(){const S=SH[cur],X=ed?1:0,A=ed?'<th rowspan="2" class="cs-ea"></th>':'';let h='';
  const addb=(a,t)=>ed?`<div class="cs-add"><button data-act="${a}">${t}</button></div>`:'';
  if(S.ty=='list'){const fa=cur=='fat',NC=fa?8:6;
-  h=`<table class="x-t"><tr><th rowspan="2" style="width:5%">NO</th><th rowspan="2">DESCRIPTION</th>${fa?'<th colspan="2">STANDARD</th><th rowspan="2" style="width:9%">ACTUAL</th>':'<th rowspan="2" style="width:13%">STANDARD</th>'}<th colspan="2">RESULT</th><th rowspan="2" style="width:14%">REMARK</th>${A}</tr><tr>${fa?'<th style="width:11%">STANDARD</th><th style="width:9%">TOLERANCE</th>':''}<th style="width:4%">PASS</th><th style="width:4%">FAIL</th></tr>`+
+  h=`<table class="x-t">${fa?'<colgroup>'+(ed?[4,27,11,8,9,5,5,19,12]:[5,33,12,9,10,5,5,21]).map(w=>'<col style="width:'+w+'%">').join('')+'</colgroup>':''}<tr><th rowspan="2" style="width:5%">NO</th><th rowspan="2">DESCRIPTION</th>${fa?'<th colspan="2">STANDARD</th><th rowspan="2" style="width:9%">ACTUAL</th>':'<th rowspan="2" style="width:13%">STANDARD</th>'}<th colspan="2">RESULT</th><th rowspan="2" style="width:14%">REMARK</th>${A}</tr><tr>${fa?'<th style="width:11%">STANDARD</th><th style="width:9%">TOLERANCE</th>':''}<th style="width:4%">PASS</th><th style="width:4%">FAIL</th></tr>`+
   dat().map(r=>{const pad=4+r.d*14,m=r.h?r.t.match(/^(\S+)\s+([\s\S]*)$/):null,no=m&&!ed?m[1]:'',tx=m&&!ed?m[2]:r.t;
    if(!r.s){const b=r.h||/^\s*\d+(\.\d+)*[.)]?\s|^[A-Z][A-Z &\/]+$/.test(r.t);return `<tr class="${r.h?'x-sec':b?'x-sub':''}"><td class="c">${esc(no)}</td><td colspan="${NC-1}" style="padding-left:${pad}px">${ed?ee(r,'t'):esc(tx)}</td>${ab(r.k,'<button data-act="addi" data-k="'+r.k+'" title="Tambah butir uji">＋</button><button data-act="addh" data-k="'+r.k+'" title="Tambah judul">▤</button>')}</tr>`}
    const lk=(r.t.match(/FRM-PQ-PC-0(6|7|8)/)||[])[0],go=lk&&!ed?{6:'eir',7:'ilbr',8:'aptr'}[lk.slice(-1)]:'';
-   return `<tr><td></td><td style="padding-left:${pad}px">${ee(r,'t')}${go?` <a class="cs-go" data-go="${go}">→ buka ${SH[go].n}</a>`:''}</td><td class="c">${ee(r,'s')}</td>${fa?`<td>${inp(r.k+':t')}</td><td>${inp(r.k+':a')}</td>`:''}${rc(r.k+':p',V(r.k+':p'))}<td>${inp(r.k+':m','100%',r.r)}</td>${ab(r.k,'<button data-act="addi" data-k="'+r.k+'" title="Tambah butir uji">＋</button><button data-act="addh" data-k="'+r.k+'" title="Tambah judul">▤</button>')}</tr>`}).join('')+'</table>'+addb('addi','＋ Tambah butir uji di akhir')}
+   return `<tr><td></td><td style="padding-left:${pad}px">${ee(r,'t')}${go?` <a class="cs-go" data-go="${go}">→ buka ${SH[go].n}</a>`:''}</td><td class="c">${ee(r,'s')}</td>${fa?`<td>${inp(r.k+':t')}</td><td>${inp(r.k+':a')}</td>`:''}${rc(r.k+':p',V(r.k+':p'))}<td>${fa?`<textarea class="cs-i cs-ta" rows="1" data-k="${r.k}:m" placeholder="${esc(r.r)}">${esc(V(r.k+':m'))}</textarea>`:inp(r.k+':m','100%',r.r)}</td>${ab(r.k,'<button data-act="addi" data-k="'+r.k+'" title="Tambah butir uji">＋</button><button data-act="addh" data-k="'+r.k+'" title="Tambah judul">▤</button>')}</tr>`}).join('')+'</table>'+addb('addi','＋ Tambah butir uji di akhir')}
  else if(S.ty=='eir'){h=dat().map((s,a)=>{const NC=(s.cur?16:15)+X;return `<table class="x-t eir"><tr><td class="x-band" colspan="${NC}">${ed?`<input class="cs-i cs-e" data-sn="${a}" value="${esc(s.n)}"> <button class="cs-sb" data-act="addr" data-sa="${a}">＋ Baris</button><button class="cs-sb" data-act="dels" data-sa="${a}">🗑 Hapus seksi</button>`:esc(s.n)}</td></tr><tr><th rowspan="2">POSITION</th><th colspan="3">CONTIUNITY TEST</th><th colspan="3">INSULATION RESISTANCE</th><th colspan="2">RESULT</th><th colspan="${s.cur?4:3}">${s.cur?'ELECTRICAL CURRENT':'ELECTRICAL VOLTAGE'}</th><th colspan="2">RESULT</th><th rowspan="2">REMARKS</th>${A}</tr><tr><th>CABLE NO.</th><th>PASS</th><th>FAIL</th><th>CABLE NO.</th><th>STANDARD</th><th>ACTUAL</th><th>PASS</th><th>FAIL</th><th>CABLE NO.</th><th>STANDARD</th>${s.cur?'<th>FORWARD (A)</th><th>REVERSE (A)</th>':'<th>ACTUAL</th>'}<th>PASS</th><th>FAIL</th></tr>`+
   s.rows.map((r,j)=>{const k=r.k;let ps='';if(ed)ps=`<td>${ee(r,'p')}</td>`;else if(!j||s.rows[j-1].p!=r.p){let n=1;while(s.rows[j+n]&&s.rows[j+n].p==r.p)n++;ps=`<td rowspan="${n}" class="c b">${esc(r.p)}</td>`}
    return `<tr>${ps}<td>${ee(r,'c')}</td>${rc(k+':c',V(k+':c'))}<td>${ee(r,'i')}</td><td>${inp(k+':is')}</td><td>${inp(k+':ia')}</td>${rc(k+':ip',V(k+':ip'))}<td>${ee(r,'e')}</td><td>${inp(k+':es')}</td><td>${inp(k+':ea')}</td>${s.cur?`<td>${inp(k+':er')}</td>`:''}${rc(k+':p',V(k+':p'))}<td>${inp(k+':m')}</td>${ab(k)}</tr>`}).join('')+'</table>'}).join('')+addb('adds','＋ Tambah seksi baru')}
@@ -17827,7 +17827,10 @@ function sigs(){return '<table class="x-s"><tr>'+SG[cur].map((g,j)=>`<td><b>${g[
 function xhead(){const t=TT[cur],L=[['cl','Client / Customer'],['pj','Project Name'],['ud','Unit Description'],['sr','Std. Reference']],R=[['rn','Report No.'],['rv','Revise No.'],['dt','Date'],['sh','Sheet']];
  return `<table class="x-hd"><tr><td class="x-logo"><img src="${LOGO}" alt="BUKAKA"></td><td class="x-tt ${t[2]?'w':''}"><b>${t[0]}</b>${t[1]?`<i>${t[1]}</i>`:''}</td></tr></table><table class="x-m">`+L.map((l,i)=>`<tr><td class="l">${l[1]}</td><td>: ${mi(l[0])}</td><td class="l">${R[i][1]}</td><td>: ${mi(R[i][0])}</td></tr>`).join('')+'</table>'}
 function render(){const S=SH[cur];
- document.getElementById('csForm').innerHTML=`<div class="cs-tools"><button class="${ed?'cs-on':''}" onclick="QCSheets.edit()">${ed?'✔ Selesai Edit':'✏️ Edit Form'}</button>${ed?'<button onclick="QCSheets.std()">↺ Struktur standar</button>':''}<button onclick="QCSheets.print()">🖨️ Print / PDF</button><button onclick="QCSheets.reset()">🗑️ Reset isian</button><span>Tersimpan otomatis di browser · ${esc(proj())}</span></div><div id="csSum">${sum()}</div><div class="xp x-${cur}">${xhead()}<div class="cs-scroll">${body()}</div>${foot()}${sigs()}<div class="x-code">Form No.: ${S.c} &nbsp; Rev.00</div></div>`;updFoot()}
+ document.getElementById('csForm').innerHTML=`<div class="cs-tools"><button class="${ed?'cs-on':''}" onclick="QCSheets.edit()">${ed?'✔ Selesai Edit':'✏️ Edit Form'}</button>${ed?'<button onclick="QCSheets.std()">↺ Struktur standar</button>':''}<button onclick="QCSheets.print()">🖨️ Print / PDF</button><button onclick="QCSheets.reset()">🗑️ Reset isian</button><span>Tersimpan otomatis di browser · ${esc(proj())}</span></div><div id="csSum">${sum()}</div><div class="xp x-${cur}">${xhead()}<div class="cs-scroll">${body()}</div>${foot()}${sigs()}<div class="x-code">Form No.: ${S.c} &nbsp; Rev.00</div></div>`;updFoot();fitTA()}
+function fitTA(){document.querySelectorAll('#csForm textarea.cs-ta').forEach(t=>{t.style.height='auto';t.style.height=t.scrollHeight+'px'})}
+document.addEventListener('input',e=>{if(e.target.classList&&e.target.classList.contains('cs-ta'))fitTA()});
+window.addEventListener('resize',()=>fitTA());
 function act(b){const a=b.dataset.act,k=b.dataset.k,S=SH[cur];const O=own();const L=S.ty=='eir'?null:O;
  const idx=()=>L.findIndex(r=>r.k==k);
  if(a=='del'){if(b.dataset.arm!='1'){b.dataset.arm='1';b.textContent='Yakin?';setTimeout(()=>{if(b.isConnected){b.dataset.arm='';b.textContent='🗑'}},2500);return}
@@ -17893,6 +17896,33 @@ if(document.readyState=='complete')init();else window.addEventListener('load',()
 
 </script>
 
+<style id="qc-fat-fit">
+/* ===== Checksheet FAT: muat penuh di layar, tidak terpotong, tanpa geser ===== */
+#csForm{max-width:100%;box-sizing:border-box}
+#csForm .cs-tools{flex-wrap:wrap}
+#csForm .xp.x-fat{width:100%;max-width:100%!important;box-sizing:border-box}
+#csForm .xp.x-fat .cs-scroll{overflow:visible!important}
+#csForm .xp.x-fat table{width:100%!important;max-width:100%!important;table-layout:fixed!important}
+#csForm .xp.x-fat td,#csForm .xp.x-fat th{min-width:0!important;white-space:normal!important;overflow-wrap:anywhere;word-break:break-word}
+#csForm .xp.x-fat .cs-i,#csForm .xp.x-fat td>input{min-width:0!important;max-width:100%!important;width:100%!important;box-sizing:border-box}
+#csForm .xp.x-fat textarea.cs-ta{display:block;resize:none;overflow:hidden;min-height:1.7em;line-height:1.3;font:inherit;field-sizing:content}
+#csForm .xp.x-fat .x-r{width:auto!important}
+#csForm .xp.x-fat .cs-ea{padding:1px!important;white-space:normal!important}
+#csForm .xp.x-fat .cs-ea button{min-width:20px;height:20px;padding:0 3px;margin:1px;font-size:10px}
+#csForm .xp.x-fat .x-m .l{white-space:normal!important}
+@media(max-width:820px){
+  #csForm{padding:6px!important;margin-left:0;margin-right:0}
+  #csForm .xp.x-fat{font-size:9px}
+  #csForm .xp.x-fat td,#csForm .xp.x-fat th{padding:1px 2px!important;font-size:9px!important}
+  #csForm .xp.x-fat .x-t th{font-size:8px!important}
+  #csForm .xp.x-fat .x-tt b{font-size:13px!important}
+  #csForm .xp.x-fat .x-tt i{font-size:10px!important}
+  #csForm .xp.x-fat .x-logo img{height:40px}
+  #csForm .xp.x-fat .x-r{font-size:11px!important}
+  #csForm .xp.x-fat .cs-i{font-size:9px!important;padding:0 1px!important}
+  #csForm .xp.x-fat .x-s .sp{height:40px}
+}
+</style>
 <style id="qc-fix-v1">
 /* ===== A. Halaman daftar (Fabrikasi / FAT / Non Tunnel): jangan menempel & terpotong di tepi layar ===== */
 /* stylesheet checksheet meng-nol-kan padding body; dikembalikan khusus halaman daftar */
