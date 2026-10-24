@@ -8727,6 +8727,7 @@ function wrapLoader(){var f=window.loadInspectionDrawing;if(typeof f!=='function
 function closeUpd(){var e=document.getElementById('bqUpdPop');if(e)e.remove()}
 function openUpd(){
   var cd=(typeof currentDrawing!=='undefined'&&currentDrawing)||{},key=cd.key||'',link=cd.url||'',name=cd.name||'';
+  if(String(key).indexOf('~add_')>-1){T('Komponen Additional: ubah link atau PDF lewat tombol ✎ Edit di tabel',1);return}
   var c=key?ctx(key):null;
   if(!c){T('Drawing ini belum terhubung ke item project',1);return}
   var o=ovrAll()[c.kid],syncOn=!!(window.QCSync&&QCSync.state&&QCSync.state().url);closeUpd();
@@ -8770,7 +8771,7 @@ function openUpd(){
     if(orig){c.row.link=orig;c.row.foto=orig!=='-'?'Lihat Link →':'-'}
     if(typeof renderTable==='function')renderTable()}}
 function hookViewer(){
-  var s=document.getElementById('iqSaveBtn');if(!s||document.getElementById('bqUpd'))return;
+  var s=document.getElementById('iqSaveBtn');if(!s)return;if(document.getElementById('bqUpd')){document.getElementById('bqUpd').onclick=openUpd;return}
   s.insertAdjacentHTML('beforebegin','<button class="iq-btn" id="bqUpd" title="Update drawing manual: muat ulang, ganti link, atau ganti file PDF">🔄<span class="lbl"> Update Drawing</span></button>');
   document.getElementById('bqUpd').onclick=openUpd}
 
