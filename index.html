@@ -16278,6 +16278,13 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const js=s=>esc(String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
 const proj=()=>{try{return currentProject}catch(e){return ''}};
 const lsKey=(p,id)=>PRE+p+'|'+id, rowKey=(p,id)=>p+'~add_'+id;
+/* PDF drawing 1-1: tiap komponen punya 'alamat' sendiri -> cache PDF di viewer ('pdf_'+alamat) tidak pernah dipakai bersama */
+const selfLink=(p,id)=>'qcadd://'+encodeURIComponent(p)+'/'+id;
+const pdfKey=(p,id)=>'pdf_'+selfLink(p,id);
+const linkOf=(p,o)=>(o.link&&/^https?:\/\//i.test(o.link))?o.link:selfLink(p,o.id);
+function idb(){return new Promise((ok,no)=>{const r=indexedDB.open('iq_store',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error);});}
+async function kvSet(k,v){try{const d=await idb();return await new Promise(ok=>{const t=d.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=()=>ok(true);t.onerror=()=>ok(false);});}catch(e){return false;}}
+async function kvDel(k){try{const d=await idb();return await new Promise(ok=>{const t=d.transaction('kv','readwrite');t.objectStore('kv').delete(k);t.oncomplete=()=>ok(true);t.onerror=()=>ok(false);});}catch(e){return false;}}
 let openGrp=true;
 function load(p){
   const out=[];
@@ -16308,7 +16315,7 @@ function appendAdd(){
   list.forEach(o=>{
     const k=rowKey(p,o.id),on=!!checkedState[k],tr=document.createElement('tr');if(on)tr.className='checked';
     const nm=o.part_name||o.no||'Additional';
-    const lk=(o.link&&/^https?:\/\//i.test(o.link))?'<a href="#" onclick="event.stopPropagation();loadInspectionDrawing(\''+js(o.link.replace(/[\s'"<>\\]/g,encodeURIComponent))+'\',\''+js(nm)+'\',\''+js(k)+'\');return false;" class="link-badge">View Drawing</a>':'-';
+    const lk='<a href="#" onclick="event.stopPropagation();loadInspectionDrawing(\''+js(linkOf(p,o).replace(/[\s'"<>\\]/g,encodeURIComponent))+'\',\''+js(nm)+'\',\''+js(k)+'\');return false;" class="link-badge" title="'+(o.link?'Drawing dari link Drive':'PDF drawing khusus komponen ini')+'">View Drawing</a>';
     const hs=inspHas(k)?'<button onclick="openInspected(\''+js(k)+'\',\''+js(nm)+'\');return false;" style="background:'+inspColor(k)+';color:white;padding:3px 8px;border-radius:4px;border:none;cursor:pointer;font-weight:bold;font-size:11px;">'+inspLabel(k)+'</button>':'<span style="color:#64748b;font-style:italic;">Belum ada</span>';
     tr.innerHTML='<td style="text-align:center;padding-left:25px;"><input type="checkbox" '+(on?'checked':'')+' onchange="toggleCheck(\''+js(k)+'\',this)"></td>'+
       '<td>'+esc(o.no)+'</td>'+
@@ -16341,7 +16348,8 @@ function openDlg(id){
       f('No / Level','no','mis. A1',c.no)+f('Part Number','part_num','',c.part_num)+
       f('Drawing No','drawing_no','',c.drawing_no)+f('Qty','qty','1',c.qty)+
       f('Material','material','',c.material,'grid-column:1/3')+
-      f('Link drawing (opsional, Google Drive)','link','https://drive.google.com/file/d/…',c.link,'grid-column:1/3')+
+      f('Link drawing Google Drive (opsional — tersinkron ke semua inspector)','link','https://drive.google.com/file/d/…',c.link,'grid-column:1/3')+
+      '<label style="font-size:.76rem;color:#b6cde6;display:block;grid-column:1/3">ATAU file PDF drawing khusus komponen ini <span style="color:#7f9fc2">(tersimpan di perangkat ini saja)</span>'+(c.pdf&&!c.link?' <b style="color:#34d399">✔ sudah terpasang — pilih file baru untuk mengganti</b>':'')+'<input data-f="pdf" type="file" accept="application/pdf,.pdf" style="width:100%;box-sizing:border-box;margin-top:3px;padding:7px;border-radius:8px;border:1px solid #28466d;background:#0b1b33;color:#e6f0fb;font-size:.8rem"></label>'+
       f('Ditambahkan oleh','by','Nama inspector',by,'grid-column:1/3')+
     '</div>'+
     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">'+
@@ -16350,15 +16358,26 @@ function openDlg(id){
       '<button id="qcAddNo" style="padding:11px 16px">Batal</button></div></div>';
   document.body.appendChild(bg);
   const g=n=>bg.querySelector('[data-f="'+n+'"]');
-  const doSave=again=>{
+  const doSave=async again=>{
     const o={id:cur?cur.id:(Date.now().toString(36)+Math.random().toString(36).slice(2,5)),t:cur?(cur.t||Date.now()):Date.now()};
     ['no','part_num','part_name','drawing_no','qty','material','link','by'].forEach(n=>{o[n]=(g(n).value||'').trim();});
     if(!o.part_name){note('Isi nama komponen dulu',1);g('part_name').focus();return;}
     if(o.link&&!/^https?:\/\//i.test(o.link)){note('Link drawing harus diawali http:// atau https://',1);g('link').focus();return;}
+    const fi=g('pdf'),file=fi&&fi.files&&fi.files[0];
+    if(file&&o.link){note('Isi salah satu saja: link Drive ATAU file PDF',1);return;}
+    if(file){
+      try{
+        const buf=await file.arrayBuffer(),u=new Uint8Array(buf,0,Math.min(1024,buf.byteLength));let ok=false;
+        for(let i=0;i<u.length-4;i++){if(u[i]===37&&u[i+1]===80&&u[i+2]===68&&u[i+3]===70){ok=true;break;}}
+        if(!ok)throw new Error('file bukan PDF');
+        if(!(await kvSet(pdfKey(p,o.id),buf)))throw new Error('penyimpanan browser penuh');
+        o.pdf=1;
+      }catch(e){note('Gagal memasang PDF: '+e.message,1);return;}
+    }else if(cur&&cur.pdf&&!o.link)o.pdf=1;
     try{LS.setItem(lsKey(p,o.id),JSON.stringify(o));if(o.by)LS.setItem(BYK,o.by);}
     catch(e){note('Gagal menyimpan: penyimpanan browser penuh',1);return;}
     openGrp=true;try{renderTable();}catch(e){}
-    if(again){['no','part_num','part_name','drawing_no','qty'].forEach(n=>{g(n).value='';});g('part_name').focus();note('Tersimpan ✓ — silakan tambah komponen berikutnya');}
+    if(again){['no','part_num','part_name','drawing_no','qty'].forEach(n=>{g(n).value='';});g('pdf').value='';g('part_name').focus();note('Tersimpan ✓ — silakan tambah komponen berikutnya');}
     else{closeDlg();note(cur?'Komponen diperbarui ✓':'Komponen Additional tersimpan ✓');}
   };
   bg.querySelector('#qcAddOk').onclick=()=>doSave(false);
@@ -16372,7 +16391,7 @@ function del(id){
   const p=proj(),o=load(p).find(x=>x.id===id);if(!o)return;
   if(!confirm('Hapus komponen Additional:\n'+(o.part_name||o.no)+'\n\nCentang & hasil inspeksinya ikut dihapus (juga di inspector lain setelah sinkron).'))return;
   const k=rowKey(p,id);
-  try{LS.removeItem(lsKey(p,id));}catch(e){}
+  try{LS.removeItem(lsKey(p,id));}catch(e){}kvDel(pdfKey(p,id));
   try{LS.removeItem('insp_'+k);LS.removeItem('inspst_'+k);window.__inspSet=null;}catch(e){}
   try{if(k in checkedState){delete checkedState[k];if(typeof saveChecked==='function')saveChecked();}}catch(e){}
   try{renderTable();}catch(e){}
