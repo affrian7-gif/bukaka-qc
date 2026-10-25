@@ -17357,8 +17357,16 @@ body.is-wi #qoBtn{display:none}
       '<td data-l="Status"><select class="qo-st" data-id="'+x.id+'" data-f="st" data-c="1" aria-label="Status"><option'+(cl?'':' selected')+'>OPEN</option><option'+(cl?' selected':'')+'>CLOSE</option></select></td>'+
       '<td data-l="Tgl Close">'+(cl?'<input type="date" data-id="'+x.id+'" data-f="cd" data-c="1" value="'+esc(x.cd)+'" aria-label="Tanggal close">':'<span style="color:#7f9bbd">—</span>')+'</td>'+
       '<td data-l="Durasi">'+ageBadge(x,d)+'</td>'+
+      '<td data-l="Kategori Defect"><input type="text" list="qoCats" data-id="'+x.id+'" data-f="cat" value="'+esc(x.cat)+'" placeholder="Kategori defect" maxlength="80" aria-label="Kategori defect"></td>'+
+      '<td data-l="5M"><select data-id="'+x.id+'" data-f="m5" aria-label="5M">'+['','Man','Machine','Material','Method','Environment'].map(function(o){return '<option value="'+o+'"'+((x.m5||'')===o?' selected':'')+'>'+(o||'—')+'</option>';}).join('')+'</select></td>'+
+      '<td data-l="Process"><input type="text" list="qoProcs" data-id="'+x.id+'" data-f="prc" value="'+esc(x.prc)+'" placeholder="Process" maxlength="60" aria-label="Process"></td>'+
+      '<td data-l="Component"><input type="text" list="qoComps" data-id="'+x.id+'" data-f="comp" value="'+esc(x.comp)+'" placeholder="Component" maxlength="60" aria-label="Component"></td>'+
       '<td><button class="qo-x" type="button" data-a="del" data-id="'+x.id+'" aria-label="Hapus baris">×</button></td></tr>';
   }
+  var CATS=['Uneven Coverage','Improper Installation','Incomplete Installation','Surface Painting Scratch','Sealant Appreance','Incomplete Sealant','Incomplete Painting','Poor Weld Appreance','Contamination','Improper Torque','Dirty','Sagging','Surface damage','Height mismatch / Misalignment','Deformation','Incomplete Weld','Weld Finishing NG','Low DFT','Only Primer'];
+  var PROCS=['Installation','Painting','Sealant','Fastener','Welding','Cleanliness','Fit-up','Grinding','Handling','Putty','Mechanical Part','Functional Test','Electrical Part','Incoming Inspection'];
+  var COMPS=['Tunnel A','Tunnel B','Tunnel C','Cabin','Rotunda','Cable Chain','Lift Column','Drive Column','Wheel Bogie','Landing Stair','Wire Rope','Box Panel','Camera CCTV'];
+  function dl(base,f){var m={};base.forEach(function(v){m[v]=1;});items().forEach(function(x){if(x[f])m[String(x[f]).trim()]=1;});return Object.keys(m).sort().map(function(v){return '<option value="'+esc(v)+'">';}).join('');}
   function ageOf(x){var a=Math.round((Date.now()-new Date(x.od))/864e5);return isNaN(a)||a<0?0:a;}
   function ageBadge(x,d){if(x.st==='CLOSE')return '<span class="qo-age g">✓ '+(d==null?'-':d+' hr')+'</span>';var a=ageOf(x);return '<span class="qo-age '+(a>14?'r':a>7?'a':'g')+'" title="Sudah terbuka '+a+' hari">⏱ '+a+' hr</span>';}
   function heroHTML(base,o,c,avg){
@@ -17390,9 +17398,10 @@ body.is-wi #qoBtn{display:none}
         '</div><div style="display:flex;gap:8px;flex-wrap:wrap">'+
           '<button class="qo-b grn" type="button" data-a="csv">⬇ Export CSV</button>'+'<button class="qo-b" type="button" data-a="pdf" style="background:#dc2626;color:#fff;border-color:#dc2626">📄 Export PDF</button>'+
           '<button class="qo-b pri" type="button" data-a="add">＋ Tambah Outstanding</button></div></div>'+
-        '<div class="qo-wrap"><table class="qo-t"><thead><tr><th>No</th><th>Before</th><th>After</th><th style="width:15%">Item</th><th>Tgl Temuan</th><th style="width:11%">PIC</th><th style="width:22%">Komentar Temuan</th><th>Status</th><th>Tgl Close</th><th>Durasi</th><th></th></tr></thead><tbody>'+
+        '<div class="qo-wrap"><table class="qo-t"><thead><tr><th>No</th><th>Before</th><th>After</th><th style="width:15%">Item</th><th>Tgl Temuan</th><th style="width:11%">PIC</th><th style="width:22%">Komentar Temuan</th><th>Status</th><th>Tgl Close</th><th>Durasi</th><th>Kategori Defect</th><th>5M</th><th>Process</th><th>Component</th><th></th></tr></thead><tbody>'+
           (list.length?list.map(rowHTML).join(''):'<tr><td colspan="11" class="qo-empty">'+(base.length?'Tidak ada outstanding dengan status ini.':'Belum ada outstanding. Klik “＋ Tambah Outstanding”.')+'</td></tr>')+
         '</tbody></table></div>'+
+        '<datalist id="qoCats">'+dl(CATS,'cat')+'</datalist><datalist id="qoProcs">'+dl(PROCS,'prc')+'</datalist><datalist id="qoComps">'+dl(COMPS,'comp')+'</datalist>'+
         '<datalist id="qoPics">'+Object.keys(pics).map(function(p){return '<option value="'+esc(p)+'">';}).join('')+'</datalist>'+
         '<p class="qo-note">Tgl Temuan terisi otomatis hari ini. Saat status diubah ke CLOSE, Tgl Close terisi otomatis dan lama penyelesaian (hari) dihitung. Semua perubahan tersimpan otomatis.</p>'+
       '</div>';
@@ -17474,7 +17483,7 @@ body.is-wi #qoBtn{display:none}
     else if(a==='filt'){filt=b.getAttribute('data-v');render();}
     else if(a==='allitems'){ctx.ref=null;ctx.refLbl='';render();}
     else if(a==='add'){
-      var nw={id:uid(),c:Date.now(),mod:ctx.mod,proj:ctx.proj==null?(ctx.projLbl||''):ctx.proj,ref:ctx.ref==null?'':ctx.ref,lbl:ctx.ref!=null?(ctx.refLbl||''):'',od:today(),pic:'',cm:'',st:'OPEN',cd:'',pb:0,pa:0};
+      var nw={id:uid(),c:Date.now(),mod:ctx.mod,proj:ctx.proj==null?(ctx.projLbl||''):ctx.proj,ref:ctx.ref==null?'':ctx.ref,lbl:ctx.ref!=null?(ctx.refLbl||''):'',od:today(),pic:'',cat:'',m5:'',prc:'',comp:'',cm:'',st:'OPEN',cd:'',pb:0,pa:0};
       items().push(nw); saveItem(nw);
       filt='all'; render();
       var tr=ov.querySelectorAll('.qo-t tbody tr'); var last=tr[tr.length-1]; if(last){var ta=last.querySelector('textarea');if(ta)ta.focus();}
@@ -17493,9 +17502,9 @@ body.is-wi #qoBtn{display:none}
   }
   function exportCsv(){
     var list=items().filter(function(x){return inScope(x,ctx,true);});
-    var H=['No','Modul','Project','Item','Tgl Temuan','PIC','Komentar Temuan','Status','Tgl Close','Closure (Hari)','Foto Before','Foto After'];
+    var H=['No','Modul','Project','Item','Tgl Temuan','PIC','Komentar Temuan','Status','Tgl Close','Closure (Hari)','Kategori Defect','5M','Process','Component','Foto Before','Foto After'];
     var q=function(v){return '"'+String(v==null?'':v).replace(/"/g,'""')+'"';};
-    var rows=[H.map(q).join(',')].concat(list.map(function(x,i){var d=days(x);return [i+1,MODS[x.mod],x.proj,x.lbl,fmtD(x.od),x.pic,x.cm,x.st,fmtD(x.cd),d==null?'':d,x.pb?'Ada':'-',x.pa?'Ada':'-'].map(q).join(',');}));
+    var rows=[H.map(q).join(',')].concat(list.map(function(x,i){var d=days(x);return [i+1,MODS[x.mod],x.proj,x.lbl,fmtD(x.od),x.pic,x.cm,x.st,fmtD(x.cd),d==null?'':d,x.cat||'',x.m5||'',x.prc||'',x.comp||'',x.pb?'Ada':'-',x.pa?'Ada':'-'].map(q).join(',');}));
     var blob=new Blob(['﻿'+rows.join('\r\n')],{type:'text/csv;charset=utf-8'});
     var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
     a.download='Outstanding_'+ctx.mod+'_'+today()+'.csv'; document.body.appendChild(a); a.click();
@@ -18174,7 +18183,11 @@ function syncBadge(){var mb=document.querySelector('.controls .gx-mb');if(!mb)re
 setInterval(function(){try{if(!G)syncBadge();}catch(e){}},2000);
 var t;new MutationObserver(function(){clearTimeout(t);t=setTimeout(ensure,250);}).observe(document.body,{childList:true,subtree:true});setInterval(ensure,5000);ensure();
 })();
-</script><style id="so-css">
+</script><style id="so-qo-css">
+@media(min-width:861px){table.qo-t{min-width:1800px!important}
+.qo-t th:nth-child(11){width:150px!important}.qo-t th:nth-child(12){width:104px!important}.qo-t th:nth-child(13){width:120px!important}.qo-t th:nth-child(14){width:120px!important}.qo-t th:nth-child(15){width:40px!important}}
+</style>
+<style id="so-css">
 body.is-so .controls,body.is-so .stats-grid,body.is-so .main-layout,body.is-so #homeView,body.is-so #iqScroll,body.is-so #incomingView,body.is-so #wiNdtView,body.is-so h1,body.is-so .subtitle{display:none!important}
 body.is-so{padding:18px clamp(12px,2.4vw,28px) 60px!important}
 #soView{display:none;position:relative;z-index:1;max-width:1500px;margin:0 auto;color:#1a2b44;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
@@ -18221,6 +18234,7 @@ body.is-so #soView{display:block}
 #soView table[data-csv]:not([data-csv="Bulanan WSC1"]) th+th,#soView table[data-csv]:not([data-csv="Bulanan WSC1"]) td+td{border-left:1px solid #e3e8f0!important}
 #soView table[data-csv]:not([data-csv="Bulanan WSC1"]) tbody tr>td:first-child:not(:only-child){}
 #soView table[data-csv]:not([data-csv="Welder R2-R3"]):not([data-csv="Bulanan WSC1"]):not([data-csv="Completeness"]):not([data-csv="Total report by inspection"]) td:first-child,#soView table[data-csv]:not([data-csv="Welder R2-R3"]):not([data-csv="Bulanan WSC1"]):not([data-csv="Completeness"]):not([data-csv="Total report by inspection"]) th:first-child{text-align:center!important;width:44px}
+#soView table[data-lt][data-lt][data-lt][data-lt][data-lt][data-lt] td:first-child,#soView table[data-lt][data-lt][data-lt][data-lt][data-lt][data-lt] th:first-child{text-align:left!important;width:auto!important}
 #soView .so-empty{padding:14px;color:#6b7a93;font-size:.82rem;background:#f6f8fc;border-radius:10px}
 #soView .so-err{padding:12px;color:#b42318;background:#fde0de;border-radius:10px;font-size:.8rem}
 #soView .so-two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
@@ -18534,6 +18548,174 @@ function secTotals(){
     '<tr class="tot"><td>Total</td>'+grand.map(function(v){return '<td class="n">'+(v||'·')+'</td>';}).join('')+'<td class="n">'+nf(gt)+'</td></tr></tbody></table></div></div>';
 }
 
+
+/* ---------- 6. analisis temuan (defect) dari Outstanding ---------- */
+function defItems(){return D.out.filter(function(x){return inP(ym(x.od))&&(!S.proj||x.proj===S.proj);});}
+function countBy(L,keyFn){var g={};L.forEach(function(x){var k=keyFn(x);if(k==null)return;var o=g[k]||(g[k]={n:0,o:0});o.n++;if(x.st!=='CLOSE')o.o++;});return g;}
+function norm(v){return String(v==null?'':v).replace(/\s+/g,' ').trim();}
+function paretoSvg(ks,g,tot){
+  var top=ks.slice(0,10),W=860,H=260,pl=40,pr=44,pt=14,pb=84,iw=W-pl-pr,ih=H-pt-pb,mx=Math.max.apply(null,top.map(function(k){return g[k].n;}))||1;
+  var bw=iw/top.length*0.62,cum=0,pts=[],bars='',lab='';
+  top.forEach(function(k,i){
+    var cx=pl+iw*(i+0.5)/top.length,h=ih*g[k].n/mx;cum+=g[k].n;
+    bars+='<rect x="'+(cx-bw/2)+'" y="'+(pt+ih-h)+'" width="'+bw+'" height="'+h+'" rx="3" fill="#2f7fd6"><title>'+esc(k)+': '+g[k].n+' ('+pf(rate(g[k].n,tot),1)+')</title></rect><text x="'+cx+'" y="'+(pt+ih-h-4)+'" font-size="10" fill="#1a2b44" text-anchor="middle">'+g[k].n+'</text>';
+    pts.push((cx).toFixed(1)+','+(pt+ih*(1-cum/tot)).toFixed(1));
+    lab+='<text transform="translate('+cx+','+(pt+ih+10)+') rotate(-35)" font-size="10" fill="#44546a" text-anchor="end">'+esc(k.length>26?k.slice(0,25)+'…':k)+'</text>';
+  });
+  var ax='';[0,25,50,75,100].forEach(function(v){var y=pt+ih*(1-v/100);ax+='<line x1="'+pl+'" x2="'+(W-pr)+'" y1="'+y+'" y2="'+y+'" stroke="#e3e8f0"/><text x="'+(W-pr+6)+'" y="'+(y+3)+'" font-size="10" fill="#c92a2a">'+v+'%</text>';});
+  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto" role="img" aria-label="Pareto kategori defect">'+ax+bars+
+    '<polyline fill="none" stroke="#c92a2a" stroke-width="2.2" points="'+pts.join(' ')+'"/>'+pts.map(function(q){var c=q.split(',');return '<circle cx="'+c[0]+'" cy="'+c[1]+'" r="3" fill="#c92a2a"/>';}).join('')+lab+'</svg>'+
+    '<div class="so-legend"><span><i style="background:#2f7fd6"></i>Jumlah temuan (10 teratas)</span><span><i style="background:#c92a2a"></i>% kumulatif</span></div>';
+}
+function secPareto(){
+  var L=defItems(),none=0;
+  L.forEach(function(x){if(!norm(x.cat))none++;});
+  var g=countBy(L,function(x){var k=norm(x.cat);return k||null;}),ks=Object.keys(g).sort(function(a,b){return g[b].n-g[a].n;}),tot=ks.reduce(function(a,k){return a+g[k].n;},0);
+  var head='<h3>Pareto Kategori Defect</h3><p class="so-def">Jumlah temuan Outstanding (semua kategori modul) per Kategori Defect, '+PL()+(S.proj?' · project '+esc(S.proj):'')+'. '+(none?'<b>'+none+' temuan belum diisi Kategori Defect-nya</b> dan tidak ikut dihitung.':'Semua temuan sudah punya kategori.')+'</p>';
+  if(!ks.length)return '<div class="so-card">'+head+'<div class="so-empty">Belum ada temuan dengan Kategori Defect. Isi kolom “Kategori Defect” di Dashboard → Outstanding.</div></div>';
+  var cum=0;
+  var rows=ks.map(function(k,i){cum+=g[k].n;return '<tr><td>'+(i+1)+'</td><td>'+esc(k)+'</td><td class="n">'+g[k].n+'</td><td class="n">'+pf(rate(g[k].n,tot),1)+'</td><td class="n"><b>'+pf(rate(cum,tot),1)+'</b></td><td class="n">'+g[k].o+'</td></tr>';}).join('');
+  return '<div class="so-card">'+head+paretoSvg(ks,g,tot)+'<div class="so-scroll" style="margin-top:10px"><table data-csv="Pareto Category Defect"><thead><tr><th>#</th><th>Kategori Defect</th><th class="n">Jumlah</th><th class="n">%</th><th class="n">% Kumulatif</th><th class="n">Open</th></tr></thead><tbody>'+rows+'<tr class="tot"><td></td><td>Total</td><td class="n">'+tot+'</td><td class="n">100%</td><td class="n"></td><td class="n">'+ks.reduce(function(a,k){return a+g[k].o;},0)+'</td></tr></tbody></table></div></div>';
+}
+function sec5M(){
+  var L=defItems(),ORD=['Man','Machine','Material','Method','Environment'];
+  var g=countBy(L,function(x){var k=norm(x.m5);return ORD.indexOf(k)>=0?k:'(belum diisi)';}),tot=L.length;
+  var ks=ORD.concat(['(belum diisi)']).filter(function(k){return g[k];});
+  var head='<h3>Analisis 5M</h3><p class="so-def">Penyebab temuan menurut 5M (Man, Machine, Material, Method, Environment), '+PL()+(S.proj?' · project '+esc(S.proj):'')+'.</p>';
+  if(!tot)return '<div class="so-card">'+head+'<div class="so-empty">Belum ada temuan pada filter ini.</div></div>';
+  var mx=Math.max.apply(null,ks.map(function(k){return g[k].n;}));
+  return '<div class="so-card">'+head+'<div class="so-scroll"><table data-csv="Analisis 5M"><thead><tr><th>5M</th><th class="n">Jumlah</th><th class="n">%</th><th class="n">Proporsi</th><th class="n">Open</th></tr></thead><tbody>'+
+    ks.map(function(k){return '<tr><td>'+esc(k)+'</td><td class="n">'+g[k].n+'</td><td class="n">'+pf(rate(g[k].n,tot),1)+'</td><td class="n"><span class="so-bar" style="width:160px"><i style="width:'+(g[k].n/mx*100)+'%"></i></span></td><td class="n">'+g[k].o+'</td></tr>';}).join('')+
+    '<tr class="tot"><td>Total</td><td class="n">'+tot+'</td><td class="n">100%</td><td></td><td class="n">'+ks.reduce(function(a,k){return a+g[k].o;},0)+'</td></tr></tbody></table></div></div>';
+}
+function secProjOC(){
+  var L=D.out.filter(function(x){return inP(ym(x.od));}),g=countBy(L,function(x){return projOf(x.proj);});
+  var ks=Object.keys(g).sort(function(a,b){return g[b].o-g[a].o||g[b].n-g[a].n;});
+  var head='<h3>Open vs Closed per Project</h3><p class="so-def">Seluruh temuan Outstanding (semua kategori modul) per project, '+PL()+'. % Open = Open ÷ Total.</p>';
+  if(!ks.length)return '<div class="so-card">'+head+'<div class="so-empty">Belum ada temuan pada periode ini.</div></div>';
+  var T=0,O=0;
+  return '<div class="so-card">'+head+'<div class="so-scroll"><table data-csv="Open vs Closed per Project"><thead><tr><th>#</th><th>Project</th><th class="n">Closed</th><th class="n">Open</th><th class="n">Total</th><th class="n">% Open</th></tr></thead><tbody>'+
+    ks.map(function(k,i){var o=g[k];T+=o.n;O+=o.o;return '<tr><td>'+(i+1)+'</td><td>'+esc(k)+'</td><td class="n">'+(o.n-o.o)+'</td><td class="n">'+o.o+'</td><td class="n">'+o.n+'</td><td class="n">'+bar(rate(o.o,o.n),100)+badge(rate(o.o,o.n),OW,OB)+'</td></tr>';}).join('')+
+    '<tr class="tot"><td></td><td>Total</td><td class="n">'+(T-O)+'</td><td class="n">'+O+'</td><td class="n">'+T+'</td><td class="n">'+badge(rate(O,T),OW,OB)+'</td></tr></tbody></table></div></div>';
+}
+function secPicProc(){
+  var L=defItems(),pg={},prg={};
+  L.forEach(function(x){var a=norm(x.pic)||'(tanpa PIC)',b=norm(x.prc)||'(belum diisi)';(pg[a]=pg[a]||{})[b]=(pg[a][b]||0)+1;prg[b]=(prg[b]||0)+1;});
+  var head='<h3>Temuan per PIC × Process</h3><p class="so-def">Jumlah temuan per PIC (departemen/penanggung jawab) dan Process, '+PL()+(S.proj?' · project '+esc(S.proj):'')+'. Process ditampilkan maksimal 8 teratas; sisanya digabung ke “Lainnya”.</p>';
+  var pk=Object.keys(pg);if(!pk.length)return '<div class="so-card">'+head+'<div class="so-empty">Belum ada temuan pada filter ini.</div></div>';
+  var cols=Object.keys(prg).sort(function(a,b){return prg[b]-prg[a];}),top=cols.slice(0,8),rest=cols.slice(8);
+  function tot(a){return Object.keys(pg[a]).reduce(function(s2,k){return s2+pg[a][k];},0);}
+  pk.sort(function(a,b){return tot(b)-tot(a);});
+  var colT={};
+  var rows=pk.map(function(a){var o=pg[a],oth=rest.reduce(function(s2,k){return s2+(o[k]||0);},0);
+    return '<tr><td><b>'+esc(a)+'</b></td>'+top.map(function(k){colT[k]=(colT[k]||0)+(o[k]||0);return '<td class="n">'+(o[k]||'·')+'</td>';}).join('')+(rest.length?'<td class="n">'+(oth||'·')+'</td>':'')+'<td class="n"><b>'+tot(a)+'</b></td></tr>';}).join('');
+  var oth2=rest.reduce(function(s2,k){return s2+prg[k];},0);
+  return '<div class="so-card">'+head+'<div class="so-scroll"><table data-csv="PIC x Process"><thead><tr><th>PIC</th>'+top.map(function(k){return '<th class="n">'+esc(k)+'</th>';}).join('')+(rest.length?'<th class="n">Lainnya</th>':'')+'<th class="n">Total</th></tr></thead><tbody>'+rows+
+    '<tr class="tot"><td>Total</td>'+top.map(function(k){return '<td class="n">'+(colT[k]||0)+'</td>';}).join('')+(rest.length?'<td class="n">'+oth2+'</td>':'')+'<td class="n">'+L.length+'</td></tr></tbody></table></div></div>';
+}
+function secComp(){
+  var L=defItems(),g=countBy(L,function(x){var k=norm(x.comp);return k||null;}),ks=Object.keys(g).sort(function(a,b){return g[b].n-g[a].n;}).slice(0,10),none=L.filter(function(x){return !norm(x.comp);}).length;
+  var head='<h3>Temuan per Component (10 teratas)</h3><p class="so-def">'+PL()+(S.proj?' · project '+esc(S.proj):'')+'. '+(none?'<b>'+none+' temuan belum diisi Component-nya.</b>':'')+'</p>';
+  if(!ks.length)return '<div class="so-card">'+head+'<div class="so-empty">Belum ada temuan dengan Component.</div></div>';
+  var mx=g[ks[0]].n;
+  return '<div class="so-card">'+head+'<div class="so-scroll"><table data-csv="Temuan per Component"><thead><tr><th>#</th><th>Component</th><th class="n">Jumlah</th><th class="n">Proporsi</th><th class="n">Open</th></tr></thead><tbody>'+
+    ks.map(function(k,i){return '<tr><td>'+(i+1)+'</td><td>'+esc(k)+'</td><td class="n">'+g[k].n+'</td><td class="n"><span class="so-bar" style="width:160px"><i style="width:'+(g[k].n/mx*100)+'%"></i></span></td><td class="n">'+g[k].o+'</td></tr>';}).join('')+'</tbody></table></div></div>';
+}
+
+/* ---------- 6. ANALISIS DEFECT (dari temuan Outstanding) ---------- */
+function defItems(){
+  return D.out.filter(function(x){var d=ym(x.od);return inP(d)&&(!S.proj||x.proj===S.proj);});
+}
+function clean(v){return String(v==null?'':v).replace(/\s+/g,' ').trim();}
+function tally(list,keyFn){
+  var g={},disp={};
+  list.forEach(function(x){
+    var raw=clean(keyFn(x)),k=raw?raw.toLowerCase():'';
+    if(raw&&!disp[k])disp[k]=raw;
+    var o=g[k]||(g[k]={k:raw?disp[k]:'(belum diisi)',blank:!raw,n:0,o:0,c:0});
+    o.n++;if(x.st==='CLOSE')o.c++;else o.o++;
+  });
+  return Object.keys(g).map(function(k){return g[k];}).sort(function(a,b){return (a.blank-b.blank)||b.n-a.n;});
+}
+function paretoChart(rows,total){
+  if(!rows.length)return '';
+  var W=860,H=250,pl=40,pr=44,pt=14,pb=84,iw=W-pl-pr,ih=H-pt-pb,mx=Math.max.apply(null,rows.map(function(r){return r.n;}))||1;
+  var bw=iw/rows.length;
+  function Y(v){return pt+ih*(1-v/mx);}function Y2(p){return pt+ih*(1-p/100);}
+  var s='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto" role="img" aria-label="Pareto category defect">';
+  [0,25,50,75,100].forEach(function(p){s+='<line x1="'+pl+'" x2="'+(W-pr)+'" y1="'+Y2(p)+'" y2="'+Y2(p)+'" stroke="#e3e8f0"/><text x="'+(W-pr+6)+'" y="'+(Y2(p)+3)+'" font-size="10" fill="#c2410c">'+p+'%</text>';});
+  s+='<text x="'+(pl-6)+'" y="'+(Y(mx)+3)+'" font-size="10" fill="#6b7a93" text-anchor="end">'+mx+'</text><text x="'+(pl-6)+'" y="'+(Y(0)+3)+'" font-size="10" fill="#6b7a93" text-anchor="end">0</text>';
+  var cum=0,pts=[];
+  rows.forEach(function(r,i){
+    var x=pl+i*bw+bw*0.15,w=bw*0.7,y=Y(r.n);cum+=r.n;var cp=cum/total*100;
+    s+='<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+(Y(0)-y)+'" rx="3" fill="#2f7fd6"><title>'+esc(r.k)+': '+r.n+' ('+nf(r.n/total*100,1)+'%)</title></rect>';
+    s+='<text x="'+(x+w/2)+'" y="'+(y-3)+'" font-size="10" font-weight="700" fill="#1a2b44" text-anchor="middle">'+r.n+'</text>';
+    pts.push([pl+i*bw+bw/2,Y2(cp),cp]);
+    var lab=r.k.length>18?r.k.slice(0,17)+'…':r.k;
+    s+='<text transform="translate('+(x+w/2+3)+','+(Y(0)+10)+') rotate(40)" font-size="10" fill="#44546a">'+esc(lab)+'</text>';
+  });
+  s+='<polyline fill="none" stroke="#e8590c" stroke-width="2.2" points="'+pts.map(function(p){return p[0].toFixed(1)+','+p[1].toFixed(1);}).join(' ')+'"/>';
+  pts.forEach(function(p){s+='<circle cx="'+p[0]+'" cy="'+p[1]+'" r="3.2" fill="#e8590c"><title>Kumulatif '+nf(p[2],1)+'%</title></circle>';});
+  return s+'</svg><div class="so-legend"><span><i style="background:#2f7fd6"></i>Jumlah temuan</span><span><i style="background:#e8590c"></i>% kumulatif (sumbu kanan)</span></div>';
+}
+function matrix(title,def,list,rowFn,colFn,maxRows,maxCols,csv,rowHead){
+  var R=tally(list,rowFn).slice(0,maxRows),Cc=tally(list,colFn);
+  var cols=Cc.filter(function(c){return !c.blank;}).slice(0,maxCols).map(function(c){return c.k;});
+  var hasBlank=Cc.some(function(c){return c.blank;});
+  var grid={},rt={},ct={},gt=0;
+  list.forEach(function(x){
+    var rk=clean(rowFn(x)).toLowerCase()||'',ck=clean(colFn(x)).toLowerCase()||'';
+    var cn=cols.map(function(c){return c.toLowerCase();}).indexOf(ck);
+    var ckey=ck?(cn>=0?cols[cn]:'Lainnya'):'(belum diisi)';
+    grid[rk+'|'+ckey]=(grid[rk+'|'+ckey]||0)+1;
+  });
+  var colKeys=cols.slice();
+  var other=list.some(function(x){var ck=clean(colFn(x)).toLowerCase();return ck&&cols.map(function(c){return c.toLowerCase();}).indexOf(ck)<0;});
+  if(other)colKeys.push('Lainnya');if(hasBlank)colKeys.push('(belum diisi)');
+  if(!R.length)return '';
+  var body=R.map(function(r){
+    var rk=r.blank?'':r.k.toLowerCase(),tot=0;
+    var cells=colKeys.map(function(c){var v=grid[rk+'|'+c]||0;tot+=v;ct[c]=(ct[c]||0)+v;return '<td class="n">'+(v||'·')+'</td>';}).join('');
+    gt+=tot;return '<tr><td><b>'+esc(r.k)+'</b></td>'+cells+'<td class="n"><b>'+tot+'</b></td></tr>';
+  }).join('');
+  var foot='<tr class="tot"><td>Total (baris tampil)</td>'+colKeys.map(function(c){return '<td class="n">'+(ct[c]||0)+'</td>';}).join('')+'<td class="n">'+gt+'</td></tr>';
+  return '<h4>'+title+'</h4><p class="so-def">'+def+'</p><div class="so-scroll"><table data-lt="1" data-csv="'+esc(csv)+'"><thead><tr><th>'+rowHead+'</th>'+colKeys.map(function(c){return '<th class="n">'+esc(c)+'</th>';}).join('')+'<th class="n">Total</th></tr></thead><tbody>'+body+foot+'</tbody></table></div>';
+}
+function simpleTable(rows,total,label,csv,withBar){
+  return '<div class="so-scroll"><table data-lt="1" data-csv="'+esc(csv)+'"><thead><tr><th>'+label+'</th><th class="n">Total</th><th class="n">%</th><th class="n">Closed</th><th class="n">Open</th><th class="n">Open %</th></tr></thead><tbody>'+
+    rows.map(function(r){return '<tr'+(r.blank?' class="dim"':'')+'><td><b>'+esc(r.k)+'</b></td><td class="n">'+r.n+'</td><td class="n">'+(withBar?bar(r.n/total*100,100):'')+pf(r.n/total*100,1)+'</td><td class="n">'+r.c+'</td><td class="n">'+r.o+'</td><td class="n">'+badge(rate(r.o,r.n),OW,OB)+'</td></tr>';}).join('')+
+    '<tr class="tot"><td>Total</td><td class="n">'+total+'</td><td class="n">100%</td><td class="n">'+rows.reduce(function(a,r){return a+r.c;},0)+'</td><td class="n">'+rows.reduce(function(a,r){return a+r.o;},0)+'</td><td class="n"></td></tr></tbody></table></div>';
+}
+function secDefect(){
+  var L=defItems(),N=L.length;
+  var head='<div class="so-card"><h3>Analisis Defect (dari temuan Outstanding)</h3><p class="so-def">Dihitung dari semua temuan Outstanding (semua kategori) pada periode '+PL()+(S.proj?' · project '+esc(S.proj):'')+'. Penulisan dirapikan otomatis (spasi dan huruf besar/kecil disamakan). Agar analisis ini terisi, lengkapi kolom <b>Kategori Defect, 5M, Process, Component, dan PIC</b> di tabel Outstanding.</p>';
+  if(!N)return head+'<div class="so-empty">Belum ada temuan Outstanding pada periode ini.</div></div>';
+  var closed=L.filter(function(x){return x.st==='CLOSE';}).length,open=N-closed;
+  var miss={cat:0,m5:0,prc:0,comp:0,pic:0};L.forEach(function(x){for(var k in miss)if(!clean(x[k]))miss[k]++;});
+  var kp='<div class="so-kpis" style="margin-top:6px">'+
+    '<div class="so-kpi" style="--c:#14703a"><small>Closed</small><b>'+nf(closed)+'</b><span>'+pf(rate(closed,N),1)+' dari '+nf(N)+' temuan</span></div>'+
+    '<div class="so-kpi" style="--c:#c92a2a"><small>Open</small><b>'+nf(open)+'</b><span>'+pf(rate(open,N),1)+' dari '+nf(N)+' temuan</span></div>'+
+    '<div class="so-kpi" style="--c:#8a5a00"><small>Belum diisi lengkap</small><b>'+nf(Math.max(miss.cat,miss.m5,miss.prc,miss.comp,miss.pic))+'</b><span>Defect '+miss.cat+' · 5M '+miss.m5+' · Process '+miss.prc+' · Comp '+miss.comp+' · PIC '+miss.pic+'</span></div></div>';
+  /* Open vs Closed per project */
+  var pj=tally(L,function(x){return projOf(x.proj);}).sort(function(a,b){return b.n-a.n;});
+  var h1='<h4>Open vs Closed per project</h4>'+simpleTable(pj,N,'Project','Open vs Closed per project',true);
+  /* Pareto */
+  var cat=tally(L,function(x){return x.cat;}),named=cat.filter(function(r){return !r.blank;}),tn=named.reduce(function(a,r){return a+r.n;},0);
+  var top=named.slice(0,10),cum=0;
+  var h2='<h4>Pareto — Top 10 Category Defect</h4>'+(tn?paretoChart(top,tn)+'<div class="so-scroll" style="margin-top:8px"><table data-lt="1" data-csv="Pareto Category Defect"><thead><tr><th>Category Defect</th><th class="n">Jumlah</th><th class="n">%</th><th class="n">% Kumulatif</th><th class="n">Open</th></tr></thead><tbody>'+
+    top.map(function(r){cum+=r.n;return '<tr><td><b>'+esc(r.k)+'</b></td><td class="n">'+r.n+'</td><td class="n">'+pf(r.n/tn*100,1)+'</td><td class="n">'+pf(cum/tn*100,1)+'</td><td class="n">'+r.o+'</td></tr>';}).join('')+'</tbody></table></div>'+(miss.cat?'<p class="so-def">'+miss.cat+' temuan belum punya Category Defect dan tidak ikut dihitung di Pareto.</p>':''):'<div class="so-empty">Belum ada temuan dengan Category Defect terisi.</div>');
+  /* 5M */
+  var m5=tally(L,function(x){return x.m5;});
+  var h3='<h4>Analisis 5M</h4>'+simpleTable(m5,N,'5M','5M',true);
+  var h4=matrix('Category Defect × 5M','10 category defect teratas terhadap penyebab 5M.',L.filter(function(x){return clean(x.cat);}),function(x){return x.cat;},function(x){return x.m5;},10,6,'Category Defect x 5M','Category Defect');
+  /* PIC x Process */
+  var h5=matrix('PIC × Process','Jumlah temuan per PIC (departemen) menurut proses; 10 PIC teratas dan 8 proses teratas.',L,function(x){return x.pic;},function(x){return x.prc;},10,8,'PIC x Process','PIC');
+  /* Component */
+  var cp=tally(L,function(x){return x.comp;}).slice(0,15);
+  var h6='<h4>Temuan per Component (15 teratas)</h4>'+simpleTable(cp,N,'Component','Per Component',true);
+  return head+kp+h1+h2+'<div class="so-two"><div>'+h3+'</div><div>'+h6+'</div></div>'+h4+h5+'</div>';
+}
+
 /* ---------- render ---------- */
 function render(){
   var root=$('soView');if(!root)return;
@@ -18550,9 +18732,11 @@ function render(){
   root.innerHTML=head+
     safe(secKpi,'KPI')+
     '<div class="so-sec">Umum</div>'+safe(secMonthly,'Bulanan WSC1')+safe(secRepeat,'Report berulang')+safe(secComplete,'Completeness')+safe(secTotals,'Total report')+
+    '<div class="so-sec">Analisis temuan (defect)</div>'+safe(secPareto,'Pareto')+safe(sec5M,'5M')+safe(secProjOC,'Open vs Closed')+safe(secPicProc,'PIC x Process')+safe(secComp,'Component')+
     '<div class="so-sec">Per project</div>'+safe(secFab,'Fabrikasi')+safe(secWeld,'Welding')+
     safe(function(){return secOutMod('comp','FAT → Outstanding Rate (per project)');},'FAT')+
-    safe(function(){return secOutMod('ship','Pengiriman → Outstanding Rate (per project)','Belum ada temuan kategori Pengiriman. Tambahkan lewat Dashboard → Outstanding → Pengiriman.');},'Pengiriman');
+    safe(function(){return secOutMod('ship','Pengiriman → Outstanding Rate (per project)','Belum ada temuan kategori Pengiriman. Tambahkan lewat Dashboard → Outstanding → Pengiriman.');},'Pengiriman')+
+    '<div class="so-sec">Analisis Defect</div>'+safe(secDefect,'Analisis defect');
 }
 function csv(){
   var out=[];
