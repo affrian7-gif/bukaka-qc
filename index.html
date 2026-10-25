@@ -15118,16 +15118,54 @@ input::placeholder, textarea::placeholder {
           '</div>'+
           '<div style="flex:1;min-height:0;background:#525659;position:relative;">'+
             (mobile
-              ? '<div style="height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center;color:#fff;font-family:Arial,sans-serif;">'+
-                  '<div style="font-size:54px;line-height:1;">📄</div>'+
-                  '<div style="font-size:14px;font-weight:700;word-break:break-word;">'+E(name)+'</div>'+
-                  '<button type="button" data-pp="open" style="width:100%;max-width:280px;background:#c0392b;border:0;color:#fff;border-radius:10px;padding:14px;font:800 15px Arial,sans-serif;">Buka PDF</button>'+
-                  '<button type="button" data-pp="dl" style="width:100%;max-width:280px;background:#1f8a5f;border:0;color:#fff;border-radius:10px;padding:14px;font:800 15px Arial,sans-serif;">⬇ Unduh PDF</button>'+
-                '</div>'
+              ? '<div data-pp-view="1" style="height:100%;overflow:auto;-webkit-overflow-scrolling:touch;background:#525659;"><div style="height:100%;display:flex;align-items:center;justify-content:center;color:#fff;font:700 14px Arial,sans-serif;">⏳ Memuat PDF…</div></div>'
               : '<iframe title="PDF" src="'+url+'#toolbar=1&navpanes=0" style="width:100%;height:100%;border:0;background:#525659;display:block;"></iframe>')+
           '</div>'+
         '</div>';
       document.body.appendChild(ov);
+
+      if(mobile){
+        (async function(){
+          var box = ov.querySelector('[data-pp-view]');
+          var fallback = '<div style="height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center;color:#fff;font-family:Arial,sans-serif;">'+
+            '<div style="font-size:54px;line-height:1;">📄</div>'+
+            '<div style="font-size:14px;font-weight:700;word-break:break-word;">'+E(name)+'</div>'+
+            '<button type="button" data-pp="open" style="width:100%;max-width:280px;background:#c0392b;border:0;color:#fff;border-radius:10px;padding:14px;font:800 15px Arial,sans-serif;">Buka PDF</button>'+
+            '<button type="button" data-pp="dl" style="width:100%;max-width:280px;background:#1f8a5f;border:0;color:#fff;border-radius:10px;padding:14px;font:800 15px Arial,sans-serif;">⬇ Unduh PDF</button></div>';
+          try{
+            if(!window.pdfjsLib){
+              var base = ['https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/','https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/'];
+              for(var u=0;u<base.length && !window.pdfjsLib;u++){
+                try{ await loadScript(base[u]+'pdf.min.js'); window.__pdfjsBase = base[u]; }catch(e){}
+              }
+            }
+            if(!window.pdfjsLib) throw new Error('pdf.js tidak dapat dimuat');
+            if(!window.__pdfjsWorkerUrl){
+              try{
+                var wr = await fetch((window.__pdfjsBase||'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/')+'pdf.worker.min.js');
+                window.__pdfjsWorkerUrl = URL.createObjectURL(await wr.blob());
+              }catch(e){ window.__pdfjsWorkerUrl = (window.__pdfjsBase||'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/')+'pdf.worker.min.js'; }
+            }
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = window.__pdfjsWorkerUrl;
+            var doc = await window.pdfjsLib.getDocument({data:new Uint8Array(row.buf.slice(0))}).promise;
+            if(!document.body.contains(ov)) return;
+            box.innerHTML = '';
+            var pad = 8, w = Math.max(200, box.clientWidth - pad*2), dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+            for(var pn=1; pn<=doc.numPages; pn++){
+              if(!document.body.contains(ov)) return;
+              var pg = await doc.getPage(pn), v1 = pg.getViewport({scale:1}), sc = w / v1.width, vp = pg.getViewport({scale:sc*dpr});
+              var cv = document.createElement('canvas');
+              cv.width = Math.floor(vp.width); cv.height = Math.floor(vp.height);
+              cv.style.cssText = 'display:block;width:'+w+'px;height:'+Math.floor(vp.height/dpr)+'px;margin:'+pad+'px auto;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.45);';
+              box.appendChild(cv);
+              await pg.render({canvasContext:cv.getContext('2d'), viewport:vp}).promise;
+            }
+          }catch(e){
+            console.warn('[PDF mobile]', e);
+            if(document.body.contains(ov)) box.innerHTML = fallback;
+          }
+        })();
+      }
 
       function close(){
         document.removeEventListener('keydown', onKey, true);
