@@ -4411,6 +4411,9 @@ body.guest-mode .out-photo-box .rm-photo { display:none !important; }
     font-family: inherit;
   }
   .inc-filter-sel:focus, .inc-filter-inp:focus { outline: none; border-color: #1a5490; }
+  /* Kalender kecil: root memakai color-scheme:dark sehingga ikon kalender putih di atas input putih (tidak terlihat) */
+  .inc-filter-inp[type=date] { color-scheme: light; cursor: pointer; min-width: 128px; }
+  .inc-filter-inp[type=date]::-webkit-calendar-picker-indicator { opacity: 1; cursor: pointer; filter: none; }
   .inc-filter-reset {
     border: none; background: #e2e8f0; color: #4a5568; border-radius: 6px;
     padding: 6px 12px; font-size: 11px; font-weight: 700; cursor: pointer;
@@ -10679,13 +10682,25 @@ function incStoreForId(id){
 }
 
 function incAutoNo(){
+  // Nomor otomatis = nomor II numerik tertinggi dari SEMUA unit + 1 (mis. 1092 → 1093).
+  // Lebar angka dipertahankan (0570 → 0571). Jika belum ada nomor angka, pakai format lama.
+  let all = [];
+  try{ all = (typeof incStoreAll === 'function') ? incStoreAll() : incStore(); }catch(e){ all = incStore(); }
+  let max = -1, width = 0;
+  all.forEach(r=>{
+    const v = String(r && r.iiNo != null ? r.iiNo : '').trim();
+    if(/^\d+$/.test(v)){
+      const n = parseInt(v,10);
+      if(n > max){ max = n; width = v.length; }
+    }
+  });
+  if(max >= 0) return String(max+1).padStart(width,'0');
+
   const list = incStore();
-  // Format: II-YYYYMMDD-NNN
   const now = new Date();
   const prefix = 'II-' + now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0') + '-';
   const existing = list.filter(r=>r.iiNo && r.iiNo.startsWith(prefix));
-  const next = existing.length + 1;
-  return prefix + String(next).padStart(3,'0');
+  return prefix + String(existing.length + 1).padStart(3,'0');
 }
 
 function updateIncomingBadge(){
@@ -11927,7 +11942,7 @@ function renderMrsRow(rec, allRecs){
     <td style="max-width:110px;font-size:10px;">${esc(rec.keterangan||'—')}</td>
     <td style="font-size:9px;">${esc(rec.mtcStatus||'Not Available / Tidak Ada')}</td>
     <td>${esc(rec.namaInspektor||'—')}</td>
-    <td style="text-align:center;">${docBadge}${(rec.docLinks&&rec.docLinks.length)?`<div style="margin-top:3px;font-size:10px;line-height:1.5;">${rec.docLinks.map((u,n)=>`<a href="${esc(u)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${esc(u)}" style="color:#0b57d0;text-decoration:underline;white-space:nowrap;">🔗 Drive${rec.docLinks.length>1?' '+(n+1):''}</a>`).join('<br>')}</div>`:''}</td>
+    <td style="text-align:center;">${docBadge}${(rec.docPdf&&rec.docPdf.od&&window.incOneDrive)?`<div style="margin-top:3px;font-size:10px;"><a href="${esc(window.incOneDrive.url(rec.docPdf.name))}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#0b57d0;text-decoration:underline;white-space:nowrap;">☁ OneDrive</a></div>`:''}${(rec.docLinks&&rec.docLinks.length)?`<div style="margin-top:3px;font-size:10px;line-height:1.5;">${rec.docLinks.map((u,n)=>`<a href="${esc(u)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${esc(u)}" style="color:#0b57d0;text-decoration:underline;white-space:nowrap;">🔗 Drive${rec.docLinks.length>1?' '+(n+1):''}</a>`).join('<br>')}</div>`:''}</td>
   </tr>`;
 }
 
@@ -12842,6 +12857,9 @@ document.addEventListener('click', function(e){
     font-family: inherit;
   }
   .inc-filter-sel:focus, .inc-filter-inp:focus { outline: none; border-color: #1a5490; }
+  /* Kalender kecil: root memakai color-scheme:dark sehingga ikon kalender putih di atas input putih (tidak terlihat) */
+  .inc-filter-inp[type=date] { color-scheme: light; cursor: pointer; min-width: 128px; }
+  .inc-filter-inp[type=date]::-webkit-calendar-picker-indicator { opacity: 1; cursor: pointer; filter: none; }
   .inc-filter-reset {
     border: none; background: #e2e8f0; color: #4a5568; border-radius: 6px;
     padding: 6px 12px; font-size: 11px; font-weight: 700; cursor: pointer;
@@ -13117,6 +13135,12 @@ function wireIncFilterBar(){
   bind('incFPO',       'po');
   bind('incFDateFrom', 'dateFrom');
   bind('incFDateTo',   'dateTo');
+  // Klik di mana saja pada kolom tanggal → munculkan kalender kecil
+  ['incFDateFrom','incFDateTo'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.addEventListener('click', ()=>{ try{ el.showPicker && el.showPicker(); }catch(e){} });
+  });
   bind('incMrsSearch', 'search');
 
   const reset = document.getElementById('incFReset');
@@ -13367,7 +13391,7 @@ function startOverdueChecker(){
 }
 
 // ── 5. EXPORT EXCEL ──────────────────────────────────────────
-function exportIncomingExcel(){
+async function exportIncomingExcel(){
   // Memakai xlsx-js-style (window.XLSXS) karena SheetJS bawaan tidak bisa menulis styling.
   const X = window.XLSXS;
   if(!X){
@@ -13378,27 +13402,34 @@ function exportIncomingExcel(){
   const now     = new Date();
   const tanggal = now.toLocaleDateString('id-ID',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'-');
 
-  // ─── Data: semua unit, urut kronologis (lama → baru) seperti sheet "Incoming 2026" ───
+  // ─── Data: urutan SAMA dengan tabel di aplikasi (tanggal terbaru dulu, lalu No II terbesar) ───
   const list = incStoreAll().slice().sort((a,b)=>{
     const da = a.date || '', db = b.date || '';
-    if(da !== db) return da < db ? -1 : 1;
-    return (a.createdAt||0) - (b.createdAt||0);
+    if(da !== db) return da < db ? 1 : -1;
+    return String(b.iiNo||'').localeCompare(String(a.iiNo||''), 'id', {numeric:true});
   });
 
-  // ─── Format mengikuti file "Summary Incoming NEW 2026" ───
-  const NAVY   = '1C4587';   // judul
-  const PURPLE = '5B3F86';   // header + border tabel
+  // ─── Link PDF dokumentasi (format baru): membuka PDF record tsb. langsung di aplikasi ───
+  // Alamat aplikasi diambil dari halaman yang sedang terbuka; link = alamat + #incpdf=<id record>
+  const appBase = (/^(https?|file):/i.test(location.href)) ? location.href.split('#')[0].split('?')[0] : '';
+  const pdfLink = rec => {
+    if(!(rec.docPdf && rec.docPdf.name)) return '';
+    if(rec.docPdf.od && window.incOneDrive) return window.incOneDrive.url(rec.docPdf.name);   // PDF sudah di folder OneDrive
+    return appBase ? appBase + '#incpdf=' + encodeURIComponent(rec.id) : '';
+  };
+
+  // ─── Kolom: SAMA dengan tabel di aplikasi, urutan sama ───
+  const NAVY   = '1C4587';
+  const PURPLE = '5B3F86';
   const STRIPE = ['FFFFFF','F8F9FA'];
   const HEADERS = [
-    'Timestamp','Tanggal Inspeksi','Incoming Inspection Number (II No) :','Kode Project',
-    'Item Describtion','Quantity / Jumlah Keadatangan','Number of Sampling','Manufacturer',
-    'Supplier / Distributor','Nomor PO','Check Dimension','Appearance / Visual',
-    'Function / Performance Test','Inspection Result / Hasil Inspeksi',
-    'Keterangan Status Material','Staus MTC (Material Test Certificate)',
-    'Dokumentasi (Pengecheckan)','Nama Inspector'
+    'Tgl Inspeksi','Incoming No','Hit No','Kode Project','Item Description','Qty',
+    'Manufacturer','Supplier / Distributor','Nomor PO','Check Dim','Appear',
+    'Function / Performance','Inspection Result','Keterangan','Status MTC',
+    'Nama Inspektor','Dokumentasi'
   ];
-  const NCOL = HEADERS.length;           // A..R
-  const WIDTHS = [18.88,14.25,9.75,14.63,29.25,8.63,10.5,18.88,20.38,18.88,11.25,10.0,20.75,13.0,16.88,23.63,20.38,14.38];
+  const NCOL = HEADERS.length;           // A..Q
+  const WIDTHS = [13,12,8,15,32,12,20,22,19,12,10,24,15,24,20,15,34];
 
   const thin   = {style:'thin', color:{rgb:PURPLE}};
   const border = {top:thin, bottom:thin, left:thin, right:thin};
@@ -13406,24 +13437,23 @@ function exportIncomingExcel(){
   const ws = {};
   const put = (r,c,cell)=>{ ws[X.utils.encode_cell({r,c})] = cell; };
 
-  // Baris 1 – judul (B1:I1 digabung, Arial 25 bold underline putih di atas biru)
-  put(0,1,{v:'Material Receiving Status '+now.getFullYear()+' (QC-WSC1)', t:'s', s:{
-    font:{name:'Arial', sz:25, bold:true, underline:true, color:{rgb:'FFFFFF'}},
+  // Baris 1 – judul (A1:Q1 digabung)
+  put(0,0,{v:'Material Receiving Status '+now.getFullYear()+' (QC-WSC1)', t:'s', s:{
+    font:{name:'Arial', sz:22, bold:true, underline:true, color:{rgb:'FFFFFF'}},
     fill:{patternType:'solid', fgColor:{rgb:NAVY}, bgColor:{rgb:NAVY}},
     alignment:{horizontal:'center', vertical:'center'}
   }});
-  for(let c=2;c<=8;c++) put(0,c,{t:'z', s:{fill:{patternType:'solid', fgColor:{rgb:NAVY}, bgColor:{rgb:NAVY}}}});
+  for(let c=1;c<NCOL;c++) put(0,c,{t:'z', s:{fill:{patternType:'solid', fgColor:{rgb:NAVY}, bgColor:{rgb:NAVY}}}});
 
   // Baris 2 – header kolom
   HEADERS.forEach((h,c)=> put(1,c,{v:h, t:'s', s:{
     font:{name:'Arial', sz:10, bold:true, color:{rgb:'FFFFFF'}},
     fill:{patternType:'solid', fgColor:{rgb:PURPLE}, bgColor:{rgb:PURPLE}},
-    alignment:{horizontal:'left', vertical:'center'},
+    alignment:{horizontal:'left', vertical:'center', wrapText:true},
     border
   }}));
 
   // ─── Helper nilai ───
-  const serialLocal = d => (d.getTime() - d.getTimezoneOffset()*60000)/86400000 + 25569;
   const serialDate  = iso => {
     const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso||''); if(!m) return null;
     return Date.UTC(+m[1], +m[2]-1, +m[3]) / 86400000 + 25569;
@@ -13432,21 +13462,7 @@ function exportIncomingExcel(){
     const s = String(v==null?'':v).replace(/,/g,'').trim();
     return (s!=='' && !isNaN(Number(s))) ? Number(s) : null;
   };
-  const resultLabel = r => ({ACCEPT:'Accept', HOLD:'Hold', REJECT:'Reject'})[String(r||'').toUpperCase()] || '';
-  const funcLabel = v => {
-    v = String(v||'').trim();
-    if(!v) return 'Not Available / Tidak dilakukan Test';
-    return v === 'Not Available / Tidak dilakukan' ? v + ' Test' : v;
-  };
-  const photoUrl = rec => {
-    if(rec.docLinks && rec.docLinks.length) return {url:rec.docLinks[0], n:rec.docLinks.length};
-    const all = [].concat(rec.photoSuratJalan||[], rec.photoPO||[], rec.photoDokPendukung||[], rec.photoHasil||[]);
-    for(const p of all){
-      const u = typeof p === 'string' ? p : (p && (p.url||p.link||p.src||p.href)) || '';
-      if(/^https?:\/\//i.test(u)) return {url:u, n:all.length};
-    }
-    return {url:'', n:all.length};
-  };
+  const rowHeights = [{hpt:48}, {hpt:24}];
 
   // ─── Baris data ───
   list.forEach((rec,i)=>{
@@ -13458,53 +13474,71 @@ function exportIncomingExcel(){
       alignment:{vertical:'center'},
       border
     };
-    const text = (c,v,extra)=> put(r,c,{v:String(v==null?'':v), t:'s', s:Object.assign({}, base, extra||{})});
+    const wrap = Object.assign({}, base, {alignment:{vertical:'center', wrapText:true}});
+    const text = (c,v,st)=> put(r,c,{v:String(v==null?'':v), t:'s', s:st||base});
     const blank = c => put(r,c,{t:'z', s:base});
+    let lines = 1;
 
-    // A Timestamp
-    const ts = rec.createdAt ? new Date(rec.createdAt) : null;
-    ts && !isNaN(ts) ? put(r,0,{v:serialLocal(ts), t:'n', z:'m/d/yyyy h:mm:ss', s:base}) : blank(0);
-    // B Tanggal Inspeksi
+    // A Tgl Inspeksi
     const ds = serialDate(rec.date);
-    ds != null ? put(r,1,{v:ds, t:'n', z:'mm-dd-yy', s:base}) : blank(1);
-    // C II No (teks, seperti sampel: '0570')
-    text(2, rec.iiNo, {numFmt:'@'}); ws[X.utils.encode_cell({r,c:2})].z = '@';
-    // D–E
+    ds != null ? put(r,0,{v:ds, t:'n', z:'dd/mm/yyyy', s:base}) : blank(0);
+    // B Incoming No (teks, mis. '0570')
+    text(1, rec.iiNo); ws[X.utils.encode_cell({r,c:1})].z = '@';
+    // C Hit No
+    const hn = toNum(rec.hitNumber);
+    hn!=null ? put(r,2,{v:hn, t:'n', s:Object.assign({}, base, {alignment:{horizontal:'center', vertical:'center'}})})
+             : (rec.hitNumber ? text(2, rec.hitNumber) : blank(2));
+    // D Kode Project
     text(3, rec.project);
-    text(4, rec.partDesc);
-    // F Qty, G Sampling (angka)
-    const q = toNum(rec.qty);  q!=null ? put(r,5,{v:q, t:'n', s:base}) : (rec.qty ? text(5,rec.qty) : blank(5));
-    const sm = toNum(rec.hitNumber); sm!=null ? put(r,6,{v:sm, t:'n', s:base}) : blank(6);
-    // H–J
-    text(7, rec.brand);
-    text(8, rec.supplier);
-    text(9, rec.po);
-    // K–N
-    text(10, rec.checkDim || 'OK');
-    text(11, rec.appearance || 'OK');
-    text(12, funcLabel(rec.functionPerf));
-    text(13, resultLabel(rec.result));
-    // O Keterangan
-    rec.keterangan ? text(14, rec.keterangan) : blank(14);
-    // P MTC
-    text(15, rec.mtcStatus || 'Not Available / Tidak Ada');
-    // Q Dokumentasi → hyperlink biru bergaris bawah bila ada URL, selain itu teks
-    const ph = photoUrl(rec);
-    if(ph.url){
-      put(r,16,{v:ph.url, t:'s', l:{Target:ph.url}, s:Object.assign({}, base, {font:{name:'Roboto', sz:10, underline:true, color:{rgb:'0000FF'}}})});
+    // E Item Description & F Qty (multi-item → satu baris per item, seperti tabel)
+    const unit = rec.qtyUnit || '';
+    if(rec.items && rec.items.length > 1){
+      lines = rec.items.length + 1;
+      text(4, rec.items.map(it=>it.d).join('\n'), wrap);
+      const tot = rec.items.reduce((a,it)=>a+(toNum(it.q)||0),0);
+      text(5, rec.items.map(it=>it.q+(unit?' '+unit:'')).join('\n') + '\nΣ ' + (Math.round(tot*1000)/1000) + (unit?' '+unit:''), wrap);
     } else {
-      ph.n > 0 ? text(16, ph.n+' foto') : blank(16);
+      text(4, rec.partDesc, wrap);
+      const q = toNum(rec.qty);
+      if(q!=null){
+        put(r,5,{v:q, t:'n', z:(Number.isInteger(q)?'#,##0':'#,##0.###')+(unit?' "'+unit+'"':''), s:Object.assign({}, base, {alignment:{horizontal:'center', vertical:'center'}})});
+      } else rec.qty ? text(5, rec.qty+(unit?' '+unit:'')) : blank(5);
     }
-    // R Inspector
-    text(17, rec.namaInspektor);
+    // G–I
+    text(6, rec.brand);
+    text(7, rec.supplier);
+    text(8, rec.po);
+    // J–M (nilai persis seperti di tabel)
+    text(9,  rec.checkDim || 'OK');
+    text(10, rec.appearance || 'OK');
+    text(11, rec.functionPerf || 'Not Available / Tidak dilakukan');
+    text(12, rec.result || 'PENDING');
+    // N Keterangan
+    rec.keterangan ? text(13, rec.keterangan, wrap) : blank(13);
+    // O Status MTC
+    text(14, rec.mtcStatus || 'Not Available / Tidak Ada');
+    // P Nama Inspektor
+    text(15, rec.namaInspektor);
+    // Q Dokumentasi → PDF (format baru) diutamakan, lalu link Drive, lalu jumlah foto
+    const link = {font:{name:'Arial', sz:10, underline:true, color:{rgb:'0000FF'}}};
+    const lnkStyle = Object.assign({}, base, link);
+    if(pdfLink(rec)){
+      put(r,16,{v:rec.docPdf.name, t:'s', l:{Target:pdfLink(rec), Tooltip:(rec.docPdf.od ? 'Buka PDF di OneDrive' : 'Buka PDF dokumentasi di aplikasi')}, s:lnkStyle});
+    } else if(rec.docLinks && rec.docLinks.length){
+      put(r,16,{v:rec.docLinks[0], t:'s', l:{Target:rec.docLinks[0]}, s:lnkStyle});
+    } else {
+      const all = [].concat(rec.photoSuratJalan||[], rec.photoPO||[], rec.photoDokPendukung||[], rec.photoHasil||[]);
+      all.length ? text(16, all.length+' foto') : blank(16);
+    }
+    rowHeights.push({hpt: Math.max(22.5, lines*14+8)});
   });
 
   // ─── Metadata sheet ───
-  const lastRow = 2 + list.length;         // jumlah baris (1-based) = header(2) + data
+  const lastRow = 2 + list.length;
   ws['!ref']        = 'A1:' + X.utils.encode_cell({r:Math.max(lastRow,2)-1, c:NCOL-1});
-  ws['!merges']     = [{s:{r:0,c:1}, e:{r:0,c:8}}];
+  ws['!merges']     = [{s:{r:0,c:0}, e:{r:0,c:NCOL-1}}];
   ws['!cols']       = WIDTHS.map(w=>({wch:w}));
-  ws['!rows']       = [{hpt:59.25}, {hpt:22.5}].concat(list.map(()=>({hpt:22.5})));
+  ws['!rows']       = rowHeights;
   ws['!freeze']     = {xSplit:0, ySplit:2, topLeftCell:'A3', activePane:'bottomLeft', state:'frozen'};
   ws['!autofilter'] = {ref:'A2:' + X.utils.encode_cell({r:Math.max(lastRow,2)-1, c:NCOL-1})};
 
@@ -13513,9 +13547,26 @@ function exportIncomingExcel(){
 
   const fileName = 'Summary_Incoming_MRS_'+tanggal+'.xlsx';
   X.writeFile(wb, fileName);
-
   if(typeof showToastMsg === 'function') showToastMsg('✅ File MRS berhasil diunduh: '+fileName+' ('+list.length+' baris)');
 }
+
+// ── Buka PDF dari link Excel (…/index.html#incpdf=<id>) ──
+(function(){
+  var m = /(?:^|[#&?])incpdf=([^&]+)/.exec((location.hash||'') + '&' + (location.search||''));
+  if(!m) return;
+  var id; try{ id = decodeURIComponent(m[1]); }catch(e){ return; }
+  var tries = 0;
+  (function wait(){
+    var rec = null;
+    try{ rec = incStoreAll().find(function(r){ return r.id === id; }); }catch(e){}
+    if(rec && typeof window.incOpenSavedPdf === 'function'){
+      try{ window.incOpenSavedPdf(id); }catch(e){ console.error(e); }
+      return;
+    }
+    if(++tries < 120) setTimeout(wait, 500);   // tunggu data selesai dimuat (maks. 60 dtk)
+  })();
+})();
+
 // ── 6. IMPORT EXCEL INCOMING ────────────────────────────────────
 // Membaca file .xlsx yang strukturnya sama dengan hasil export:
 // Row 0 = judul, Row 1 = sub-header, Row 2 = header kolom, Row 3+ = data
@@ -13589,7 +13640,7 @@ function importIncomingFromExcel(){
       project:   colIdx('kode project','project'),
       desc:      colIdx('item desc','description','deskripsi'),
       qty:       colIdx('quantity','qty','jumlah'),
-      sampling:  colIdx('sampling'),
+      sampling:  colIdx('hit no','sampling'),
       brand:     colIdx('manufacturer','brand','merk'),
       supplier:  colIdx('supplier','distributor'),
       po:        colIdx('nomor po','no po','no. po','po number'),
@@ -13620,7 +13671,11 @@ function importIncomingFromExcel(){
     const numText = (r,c)=>{
       const x = rawCell(r,c); if(!x) return '';
       if(typeof x.v === 'number') return String(Math.round(x.v*1000)/1000);
-      return String(x.w!=null?x.w:x.v||'').trim().replace(/,/g,'');
+      const t = String(x.w!=null?x.w:x.v||'').trim();
+      const sg = t.match(/Σ\s*([\d.,]+)/);            // qty multi-item hasil export → pakai total
+      if(sg) return sg[1].replace(/,/g,'');
+      const one = t.match(/^([\d.,]+)\s*[A-Za-z]*$/);  // "6 pcs" → 6
+      return (one ? one[1] : t).replace(/,/g,'');
     };
 
     // Ambil semua link dokumentasi: target hyperlink + URL yang tertulis di teks sel
@@ -13832,6 +13887,24 @@ window.renderIncoming = function(){
     } else {
       addBtn.parentNode.insertBefore(impBtn, addBtn);
     }
+  }
+
+  // ── Tombol Folder OneDrive (di sebelah Import) ──
+  if(addBtn && !root.querySelector('.inc-od-btn')){
+    const odBtn = document.createElement('button');
+    odBtn.type = 'button';
+    odBtn.className = 'inc-od-btn';
+    odBtn.title = 'Atur folder OneDrive tujuan untuk PDF dokumentasi';
+    odBtn.style.cssText = 'display:inline-flex;align-items:center;gap:5px;background:linear-gradient(135deg,#0b57d0,#1a73e8);color:#fff;border:none;border-radius:7px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:.1px;box-shadow:0 2px 6px rgba(11,87,208,.25);';
+    odBtn.textContent = '📁 Folder OneDrive';
+    odBtn.addEventListener('click', ()=>{
+      if(window.incOneDrive && window.incOneDrive.openPanel) window.incOneDrive.openPanel();
+      else alert('Fitur OneDrive belum siap, coba reload halaman.');
+    });
+    const impEl = root.querySelector('.inc-import-btn');
+    if(impEl && impEl.nextSibling) impEl.parentNode.insertBefore(odBtn, impEl.nextSibling);
+    else if(impEl) impEl.parentNode.appendChild(odBtn);
+    else addBtn.parentNode.insertBefore(odBtn, addBtn);
   }
 
   // Cek overdue saat panel incoming dibuka
@@ -14603,6 +14676,138 @@ input::placeholder, textarea::placeholder {
       rq.onerror = function(){ no(rq.error); };
     });
   }
+  /* ---------- OneDrive: simpan PDF langsung ke folder sinkron di komputer (File System Access API) ---------- */
+  var OD_DEFAULT_BASE = 'https://bukakateknikutamabtu-my.sharepoint.com/personal/qc_central_bukk_bukakateknikutamabtu_onmicrosoft_com/Documents/Quality%20Control%20BTU/QC-WSC1/10.%20INCOMING%20%26%20MILLCERTIFICATE%20MATERIAL/Inspection%20Incoming';
+  function odBase(){ try{ return (localStorage.getItem('incOdBase') || OD_DEFAULT_BASE).replace(/\/+$/,''); }catch(e){ return OD_DEFAULT_BASE; } }
+  function odUrl(name){ return odBase() + '/' + encodeURIComponent(name); }
+  function odDB(){
+    return new Promise(function(ok,no){
+      var r = indexedDB.open('qc_incoming_od', 1);
+      r.onupgradeneeded = function(){ r.result.createObjectStore('k'); };
+      r.onsuccess = function(){ ok(r.result); };
+      r.onerror = function(){ no(r.error); };
+    });
+  }
+  async function odGet(){
+    var db = await odDB();
+    return new Promise(function(ok){
+      var q = db.transaction('k','readonly').objectStore('k').get('dir');
+      q.onsuccess = function(){ ok(q.result || null); };
+      q.onerror = function(){ ok(null); };
+    });
+  }
+  async function odSet(h){
+    var db = await odDB();
+    return new Promise(function(ok,no){
+      var tx = db.transaction('k','readwrite'); tx.objectStore('k').put(h,'dir');
+      tx.oncomplete = function(){ ok(); }; tx.onerror = tx.onabort = function(){ no(tx.error); };
+    });
+  }
+  // Kembalikan handle folder bila izin sudah ada (ask=true: minta izin — harus dari klik pengguna)
+  async function odReady(ask){
+    if(!window.showDirectoryPicker) return null;
+    var h = await odGet(); if(!h) return null;
+    var o = {mode:'readwrite'};
+    try{
+      if((await h.queryPermission(o)) === 'granted') return h;
+      if(ask && (await h.requestPermission(o)) === 'granted') return h;
+    }catch(e){ console.warn('[OneDrive] izin', e); }
+    return null;
+  }
+  async function odWriteTo(h, name, data){
+    var fh = await h.getFileHandle(name, {create:true});
+    var w = await fh.createWritable();
+    await w.write(data);
+    await w.close();
+  }
+  function odMarkUploaded(id){
+    try{
+      var l = incStoreForId(id); var r = l && l.find(function(x){ return x.id === id; });
+      if(r && r.docPdf){ r.docPdf.od = true; return true; }
+    }catch(e){}
+    return false;
+  }
+  window.incOneDrive = {
+    supported: function(){ return !!window.showDirectoryPicker; },
+    url: odUrl,
+    ready: odReady,
+    openPanel: async function(){
+      var old = document.getElementById('_incOdPanel'); if(old) old.remove();
+      var h = await odGet(), granted = false;
+      try{ granted = !!h && (await h.queryPermission({mode:'readwrite'})) === 'granted'; }catch(e){}
+      var withPdf = (typeof incStoreAll === 'function' ? incStoreAll() : []).filter(function(r){ return r.docPdf && r.docPdf.name; });
+      var ov = document.createElement('div');
+      ov.id = '_incOdPanel';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:9995;background:rgba(10,20,35,.7);display:flex;align-items:center;justify-content:center;padding:14px;box-sizing:border-box;';
+      var btn = 'border:0;border-radius:8px;padding:9px 14px;font:700 12.5px Arial,sans-serif;cursor:pointer;';
+      ov.innerHTML =
+        '<div style="width:100%;max-width:520px;background:#fff;color:#1a2733;border-radius:12px;box-shadow:0 18px 60px rgba(0,0,0,.5);font-family:Arial,sans-serif;overflow:hidden;">'+
+          '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:linear-gradient(135deg,#14314f,#1a5490);color:#fff;"><b>📁 Simpan PDF ke OneDrive</b><button data-od="close" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:7px;width:30px;height:30px;cursor:pointer;">✕</button></div>'+
+          '<div style="padding:16px;font-size:13px;line-height:1.6;">'+
+            (window.showDirectoryPicker ? '' : '<div style="background:#fdecea;color:#b3261e;border-radius:8px;padding:10px;margin-bottom:10px;">Browser ini tidak mendukung fitur pilih folder. Gunakan Chrome atau Edge di komputer.</div>')+
+            '<div style="margin-bottom:10px;"><b>Folder tujuan di komputer:</b><br><span id="_odStatus">'+(h ? ('📂 <b>'+E(h.name)+'</b> — '+(granted ? '<span style="color:#15803d">izin aktif</span>' : '<span style="color:#b45309">perlu izin lagi (klik Izinkan akses)</span>')) : '<span style="color:#b3261e">belum dipilih</span>')+'</span></div>'+
+            '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">'+
+              '<button data-od="pick" style="'+btn+'background:#1a5490;color:#fff;">Pilih folder…</button>'+
+              (h && !granted ? '<button data-od="grant" style="'+btn+'background:#b45309;color:#fff;">Izinkan akses</button>' : '')+
+              '<button data-od="all" style="'+btn+'background:#1f8a5f;color:#fff;" '+(withPdf.length?'':'disabled')+'>Kirim semua PDF tersimpan ('+withPdf.length+')</button>'+
+            '</div>'+
+            '<div style="margin-bottom:6px;"><b>Alamat folder di OneDrive/SharePoint</b> (untuk link di Excel):</div>'+
+            '<input id="_odBase" type="text" value="'+E(odBase())+'" style="width:100%;box-sizing:border-box;border:1px solid #c7d4e0;border-radius:6px;padding:7px 8px;font-size:11px;">'+
+            '<div style="font-size:11px;color:#667;margin-top:6px;">Pilih folder <b>Inspection Incoming</b> yang sudah tersinkron (ikon OneDrive di File Explorer). Setelah itu setiap klik <b>💾 Simpan</b> pada preview dokumen otomatis menaruh PDF di folder tersebut dan OneDrive mengunggahnya.</div>'+
+            '<div id="_odMsg" style="margin-top:10px;font-weight:700;"></div>'+
+          '</div></div>';
+      document.body.appendChild(ov);
+      var msg = function(t,c){ var m = ov.querySelector('#_odMsg'); m.style.color = c || '#1a2733'; m.textContent = t; };
+      ov.addEventListener('click', async function(e){
+        if(e.target === ov){ ov.remove(); return; }
+        var b = e.target.closest('[data-od]'); if(!b) return;
+        var a = b.getAttribute('data-od');
+        if(a === 'close'){ ov.remove(); return; }
+        var inp = ov.querySelector('#_odBase');
+        try{ if(inp && inp.value.trim()) localStorage.setItem('incOdBase', inp.value.trim()); }catch(e2){}
+        try{
+          if(a === 'pick'){
+            var dh = await window.showDirectoryPicker({mode:'readwrite'});
+            if(!/inspection\s*incoming/i.test(dh.name) && !confirm('Folder yang dipilih bernama "'+dh.name+'", bukan "Inspection Incoming". Tetap pakai folder ini?')) return;
+            await odSet(dh);
+            ov.querySelector('#_odStatus').innerHTML = '📂 <b>'+E(dh.name)+'</b> — <span style="color:#15803d">izin aktif</span>';
+            msg('✅ Folder tersimpan. Klik Simpan pada dokumen untuk menaruh PDF di sini.', '#15803d');
+          } else if(a === 'grant'){
+            var g = await odReady(true);
+            msg(g ? '✅ Izin aktif.' : '⚠️ Izin ditolak.', g ? '#15803d' : '#b3261e');
+          } else if(a === 'all'){
+            var dh2 = await odReady(true);
+            if(!dh2){ msg('⚠️ Pilih folder dan beri izin dulu.', '#b3261e'); return; }
+            var ok = 0, miss = 0, fail = 0, i = 0;
+            for(var k=0;k<withPdf.length;k++){
+              var r = withPdf[k]; msg('Mengirim '+(++i)+'/'+withPdf.length+'…');
+              try{
+                var row = await getPdf(r.id);
+                if(!row || !row.buf){ miss++; continue; }
+                await odWriteTo(dh2, r.docPdf.name, new Blob([row.buf], {type:'application/pdf'}));
+                odMarkUploaded(r.id); ok++;
+              }catch(err){ console.warn(err); fail++; }
+            }
+            if(ok && typeof saveState === 'function') saveState();
+            if(typeof renderIncoming === 'function') renderIncoming();
+            msg('✅ '+ok+' PDF dikirim ke folder'+(miss?(' · '+miss+' tidak ada di perangkat ini (buka Preview lalu Simpan)'):'')+(fail?(' · '+fail+' gagal'):''), fail ? '#b45309' : '#15803d');
+          }
+        }catch(err){
+          if(err && err.name === 'AbortError') return;
+          console.error('[OneDrive]', err);
+          msg('⚠️ '+(err && err.message || err), '#b3261e');
+        }
+      });
+    }
+  };
+
+  window._incPdf = {
+    get: getPdf,
+    name: pdfFileName,
+    busy: function(m){ return busy(m); },
+    build: async function(rec){ var b = await buildRecordPages(rec); return renderPdfBlob(b.html); }
+  };
+
   window.incOpenSavedPdf = async function(id){
     try{
       var row = await getPdf(id);
@@ -14709,6 +14914,8 @@ input::placeholder, textarea::placeholder {
     function lock(on){ [saveBtn,pdfBtn].forEach(function(b){ if(b) b.disabled = on; }); }
 
     if(saveBtn) saveBtn.onclick = async function(){
+      var odh = null;
+      try{ odh = await odReady(true); }catch(e){}   // minta izin folder SEGERA (harus dari klik pengguna)
       lock(true);
       busy('Membuat PDF…');
       try{
@@ -14718,10 +14925,15 @@ input::placeholder, textarea::placeholder {
         var name = pdfFileName(cur);
         await putPdf(cur.id, blob, name);
         cur.docPdf = {name:name, savedAt:Date.now(), size:blob.size, pages:fresh.count};
+        var odMsg = '';
+        if(odh){
+          try{ await odWriteTo(odh, name, blob); cur.docPdf.od = true; odMsg = ' PDF juga disimpan ke folder OneDrive.'; }
+          catch(e){ console.warn('[OneDrive]', e); odMsg = ' (Gagal menulis ke folder OneDrive: '+(e && e.message || e)+')'; }
+        }
         if(typeof saveState === 'function') saveState();
         if(typeof renderIncoming === 'function') renderIncoming();
         if(saveBtn) saveBtn.innerHTML = '✔ Tersimpan';
-        toast('✅ Tersimpan — PDF muncul di kolom Dokumentasi.');
+        toast('✅ Tersimpan — PDF muncul di kolom Dokumentasi.'+odMsg);
       }catch(err){
         console.error('[Simpan]', err);
         alert('Gagal menyimpan: ' + (err && err.message || err));
