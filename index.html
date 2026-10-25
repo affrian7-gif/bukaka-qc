@@ -10984,6 +10984,10 @@ function openIncAddModal(){
     const saveBtn = document.getElementById('_iaSave');
     saveBtn.disabled = true; saveBtn.textContent = '⏳ Menyimpan...';
 
+    // Minta izin folder OneDrive SEKARANG (harus dari klik pengguna, sebelum proses async lain)
+    let _iaOdh = null;
+    try{ if(window.incOneDrive && window.incOneDrive.prepare) _iaOdh = await window.incOneDrive.prepare(); }catch(e){}
+
     // Upload foto ke Firebase jika ada
     async function uploadPhotoList(dataUrls){
       const ids = [];
@@ -11029,6 +11033,11 @@ function openIncAddModal(){
       if(newRow) newRow.scrollIntoView({behavior:'smooth', block:'center'});
       if(typeof showToastMsg==='function') showToastMsg('✅ Record berhasil ditambahkan!');
     }, 120);
+
+    // Buat PDF dokumentasi + unggah ke OneDrive (nama file: "No II_Nama Suplier")
+    if(window.incSaveRecordPdf){
+      try{ await window.incSaveRecordPdf(rec, _iaOdh); }catch(e){ console.warn('[PDF otomatis]', e); }
+    }
   };
 
   // Focus ke field pertama
@@ -14626,8 +14635,12 @@ input::placeholder, textarea::placeholder {
   }
 
   function safeName(s){ return String(s||'').replace(/[\\\/:*?"<>|\s]+/g,'_').replace(/^_+|_+$/g,''); }
+  // Nama file: "No II_Nama Suplier" (karakter terlarang di nama file diganti "-", spasi dipertahankan)
+  function fileSafe(s){ return String(s||'').replace(/[\\\/:*?"<>|]+/g,'-').replace(/\s+/g,' ').replace(/^[\s.\-]+|[\s.\-]+$/g,''); }
   function pdfFileName(rec){
-    var n = 'Incoming_Inspection_' + (safeName(rec.iiNo) || 'II');
+    var n = fileSafe(rec.iiNo) || 'II';
+    var sup = fileSafe(rec.supplier);
+    if(sup) n += '_' + sup;
     if(rec.hitNumber != null && rec.hitNumber !== '') n += '_Hit' + safeName(rec.hitNumber);
     return n + '.pdf';
   }
@@ -14727,13 +14740,165 @@ input::placeholder, textarea::placeholder {
     }catch(e){}
     return false;
   }
+  /* ---------- OneDrive via Microsoft Graph (login Microsoft sekali per inspector; jalan di semua perangkat, tanpa folder sinkron) ---------- */
+  var OD_CLIENT_ID = '';              // ← isi Application (client) ID dari Azure App Registration (berlaku ke semua inspector)
+  var OD_TENANT    = 'organizations'; // atau isi Directory (tenant) ID perusahaan
+  var G_SCOPES     = ['Files.ReadWrite.All'];
+  function odClientId(){ try{ return (localStorage.getItem('incOdClientId') || OD_CLIENT_ID || '').trim(); }catch(e){ return (OD_CLIENT_ID||'').trim(); } }
+  function odRedirect(){ return location.origin + location.pathname; }
+  var _msal = null;
+  async function gLoad(){
+    if(window.msal) return true;
+    var urls = ['https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js','https://unpkg.com/@azure/msal-browser@2.38.3/lib/msal-browser.min.js'];
+    for(var i=0;i<urls.length && !window.msal;i++){ try{ await loadScript(urls[i]); }catch(e){} }
+    return !!window.msal;
+  }
+  async function gApp(){
+    var cid = odClientId(); if(!cid) return null;
+    if(!(await gLoad())) throw new Error('Library login Microsoft tidak dapat dimuat (cek koneksi internet).');
+    if(!_msal || _msal.__cid !== cid){
+      _msal = new window.msal.PublicClientApplication({auth:{clientId:cid, authority:'https://login.microsoftonline.com/'+OD_TENANT, redirectUri:odRedirect()}, cache:{cacheLocation:'localStorage'}});
+      _msal.__cid = cid;
+      if(_msal.initialize) await _msal.initialize();
+    }
+    return _msal;
+  }
+  async function gAccount(){ try{ var a = await gApp(); return a && a.getAllAccounts()[0] || null; }catch(e){ return null; } }
+  // interactive=true → boleh membuka popup login (harus dari klik pengguna)
+  async function gToken(interactive){
+    var app = await gApp(); if(!app) return null;
+    var acc = app.getAllAccounts()[0];
+    if(acc){
+      try{ return (await app.acquireTokenSilent({scopes:G_SCOPES, account:acc})).accessToken; }
+      catch(e){ if(!interactive) return null; }
+    }
+    if(!interactive) return null;
+    var res = await app.loginPopup({scopes:G_SCOPES, prompt: acc ? undefined : 'select_account'});
+    return res.accessToken;
+  }
+  function b64u(s){ return btoa(unescape(encodeURIComponent(s))).replace(/=+$/,'').replace(/\//g,'_').replace(/\+/g,'-'); }
+  var _gFolder = null;
+  async function gFolder(tok){
+    if(_gFolder && _gFolder.base === odBase()) return _gFolder;
+    var r = await fetch('https://graph.microsoft.com/v1.0/shares/u!'+b64u(odBase())+'/driveItem?$select=id,parentReference', {headers:{Authorization:'Bearer '+tok}});
+    if(!r.ok) throw new Error('Folder OneDrive tidak bisa diakses ('+r.status+'). Pastikan akun Microsoft ini punya akses edit ke folder tersebut.');
+    var j = await r.json();
+    _gFolder = {base:odBase(), drive:j.parentReference.driveId, id:j.id};
+    return _gFolder;
+  }
+  async function gUpload(tok, f, name, blob){
+    var path = 'https://graph.microsoft.com/v1.0/drives/'+f.drive+'/items/'+f.id+':/'+encodeURIComponent(name);
+    if(blob.size < 3500000){
+      var r = await fetch(path+':/content?@microsoft.graph.conflictBehavior=replace', {method:'PUT', headers:{Authorization:'Bearer '+tok, 'Content-Type':'application/pdf'}, body:blob});
+      if(!r.ok) throw new Error('Upload gagal ('+r.status+')');
+      return;
+    }
+    var s = await fetch(path+':/createUploadSession', {method:'POST', headers:{Authorization:'Bearer '+tok, 'Content-Type':'application/json'}, body:JSON.stringify({item:{'@microsoft.graph.conflictBehavior':'replace'}})});
+    if(!s.ok) throw new Error('Upload gagal membuat sesi ('+s.status+')');
+    var url = (await s.json()).uploadUrl, CH = 327680*10;
+    for(var pos=0; pos<blob.size; pos+=CH){
+      var end = Math.min(pos+CH, blob.size);
+      var rr = await fetch(url, {method:'PUT', headers:{'Content-Range':'bytes '+pos+'-'+(end-1)+'/'+blob.size}, body:blob.slice(pos,end)});
+      if(!rr.ok && rr.status !== 202) throw new Error('Upload gagal pada potongan '+pos+' ('+rr.status+')');
+    }
+  }
+  // Kirim PDF: Microsoft Graph dulu (jika Client ID diisi), cadangan: folder sinkron. Return 'graph' | 'folder' | null (belum bisa → antre)
+  async function odDeliver(name, blob, interactive, odh){
+    if(odClientId() && navigator.onLine !== false){
+      try{
+        var tok = await gToken(interactive);
+        if(tok){ var f = await gFolder(tok); await gUpload(tok, f, name, blob); return 'graph'; }
+      }catch(e){ console.warn('[OneDrive Graph]', e); if(!odh) throw e; }
+    }
+    if(odh){ await odWriteTo(odh, name, blob); return 'folder'; }
+    return null;
+  }
+  // Siapkan pengiriman di awal klik pengguna (login/izin harus dari gesture klik)
+  async function odPrepare(){
+    var odh = null;
+    if(odClientId()){
+      if(navigator.onLine !== false){ try{ await gToken(true); }catch(e){ console.warn('[OneDrive login]', e); } }
+      try{ odh = await odReady(false); }catch(e){}
+    } else {
+      try{ odh = await odReady(true); }catch(e){}
+    }
+    return odh;
+  }
+  // Antrean: kirim ulang PDF (di perangkat ini) yang belum terunggah ke OneDrive
+  var _flushing = false;
+  async function odFlush(interactive, odh){
+    if(_flushing) return {ok:0,fail:0,left:0};
+    if(!odClientId() && !odh) return {ok:0,fail:0,left:0};
+    if(navigator.onLine === false) return {ok:0,fail:0,left:0,offline:true};
+    _flushing = true;
+    var ok = 0, fail = 0, left = 0;
+    try{
+      var all = (typeof incStoreAll === 'function' ? incStoreAll() : []).filter(function(r){ return r.docPdf && r.docPdf.name && !r.docPdf.od; });
+      for(var i=0;i<all.length;i++){
+        var r = all[i];
+        try{
+          var row = await getPdf(r.id);
+          if(!row || !row.buf){ continue; }          // PDF dibuat di perangkat lain
+          var via = await odDeliver(r.docPdf.name, new Blob([row.buf],{type:'application/pdf'}), interactive && i===0, odh);
+          if(via){ r.docPdf.od = true; ok++; } else { left++; }
+        }catch(e){ console.warn('[OneDrive antre]', e); fail++; }
+      }
+      if(ok){ if(typeof saveState === 'function') saveState(); if(typeof renderIncoming === 'function') renderIncoming(); }
+    } finally { _flushing = false; }
+    return {ok:ok, fail:fail, left:left};
+  }
+  /* ---------- Mode server: komputer ini membuatkan PDF record inspector lain (termasuk dari HP) dan menaruhnya di folder OneDrive ---------- */
+  function idTs(id){ var m = /^II_([0-9a-z]+)_/.exec(String(id||'')); return m ? parseInt(m[1],36) : 0; }
+  function srvOn(){ try{ return localStorage.getItem('incOdSrv') === '1'; }catch(e){ return false; } }
+  function srvSince(){ try{ return Number(localStorage.getItem('incOdSrvSince')) || 0; }catch(e){ return 0; } }
+  function srvDone(){ try{ return JSON.parse(localStorage.getItem('incOdSrvDone') || '{}'); }catch(e){ return {}; } }
+  function srvSaveDone(d){ try{ localStorage.setItem('incOdSrvDone', JSON.stringify(d)); }catch(e){} }
+  async function odExists(h, name){ try{ await h.getFileHandle(name); return true; }catch(e){ return false; } }
+  var _srvBusy = false;
+  async function srvTick(){
+    if(_srvBusy || !srvOn() || navigator.onLine === false) return;
+    _srvBusy = true;
+    try{
+      var h = await odReady(false); if(!h) return;       // butuh folder + izin aktif
+      var since = srvSince(), done = srvDone(), made = 0;
+      var todo = (typeof incStoreAll === 'function' ? incStoreAll() : []).filter(function(r){
+        return r && r.id && idTs(r.id) >= since && !done[r.id] && !(r.docPdf && r.docPdf.od);
+      });
+      for(var i=0;i<todo.length;i++){
+        var r = todo[i], name = pdfFileName(r);
+        if(await odExists(h, name)){ done[r.id] = 1; continue; }          // sudah ada di folder (dibuat inspector lain)
+        var miss = 0;
+        for(var c=0;c<CATS.length;c++){ var l = r[CATS[c]] || []; for(var k=0;k<l.length;k++){ if(!(await loadPhoto(l[k]))) miss++; } }
+        if(miss && Date.now() - idTs(r.id) < 30*60000) continue;           // foto belum selesai tersinkron, coba lagi nanti
+        var fresh = await buildRecordPages(r), blob = await renderPdfBlob(fresh.html);
+        await odWriteTo(h, name, blob);
+        try{ await putPdf(r.id, blob, name); }catch(e){}
+        r.docPdf = {name:name, savedAt:Date.now(), size:blob.size, pages:fresh.count, od:true};
+        done[r.id] = 1; srvSaveDone(done); made++;
+      }
+      srvSaveDone(done);
+      if(made){ if(typeof saveState === 'function') saveState(); if(typeof renderIncoming === 'function') renderIncoming(); toast('🖥️ Mode server: '+made+' PDF baru dikirim ke OneDrive.'); }
+    }catch(e){ console.warn('[Mode server]', e); }
+    finally{ _srvBusy = false; }
+  }
+  setTimeout(srvTick, 10000);
+  setInterval(srvTick, 60000);
+  window.addEventListener('online', function(){ setTimeout(function(){ odFlush(false, null).catch(function(){}); srvTick(); }, 1500); });
+  setTimeout(function(){ odFlush(false, null).catch(function(){}); }, 6000);
+  setInterval(function(){ odFlush(false, null).catch(function(){}); }, 120000);
+
   window.incOneDrive = {
     supported: function(){ return !!window.showDirectoryPicker; },
     url: odUrl,
     ready: odReady,
+    prepare: odPrepare,
+    deliver: odDeliver,
+    flush: odFlush,
+    serverTick: srvTick,
     openPanel: async function(){
       var old = document.getElementById('_incOdPanel'); if(old) old.remove();
-      var h = await odGet(), granted = false;
+      var h = await odGet(), granted = false, acc = null;
+      try{ acc = await gAccount(); }catch(e){}
       try{ granted = !!h && (await h.queryPermission({mode:'readwrite'})) === 'granted'; }catch(e){}
       var withPdf = (typeof incStoreAll === 'function' ? incStoreAll() : []).filter(function(r){ return r.docPdf && r.docPdf.name; });
       var ov = document.createElement('div');
@@ -14751,9 +14916,20 @@ input::placeholder, textarea::placeholder {
               (h && !granted ? '<button data-od="grant" style="'+btn+'background:#b45309;color:#fff;">Izinkan akses</button>' : '')+
               '<button data-od="all" style="'+btn+'background:#1f8a5f;color:#fff;" '+(withPdf.length?'':'disabled')+'>Kirim semua PDF tersimpan ('+withPdf.length+')</button>'+
             '</div>'+
+            '<div style="border:1px solid #1f8a5f;border-radius:8px;padding:10px;margin-bottom:12px;background:#f1faf5;">'+
+              '<div style="margin-bottom:4px;"><b>🖥️ Mode server PDF</b> — <span id="_odSrvSt">'+(srvOn() ? '<span style="color:#15803d">AKTIF</span>' : '<span style="color:#b3261e">nonaktif</span>')+'</span></div>'+
+              '<div style="font-size:11px;color:#667;margin-bottom:8px;">Aktifkan di komputer yang tersambung ke OneDrive. Komputer ini akan otomatis membuat PDF untuk record baru dari inspector lain (termasuk dari HP) dan menaruhnya di folder di atas. Aplikasi harus terbuka (boleh di tab latar) dan komputer online.</div>'+
+              '<button data-od="srv" style="'+btn+'background:#1f8a5f;color:#fff;">'+(srvOn() ? 'Matikan mode server' : 'Aktifkan mode server')+'</button>'+
+            '</div>'+
+            '<div style="border:1px solid #c7d4e0;border-radius:8px;padding:10px;margin-bottom:12px;background:#f5f9fd;">'+
+              '<div style="margin-bottom:6px;"><b>☁️ Upload langsung (login Microsoft)</b> — semua perangkat, tanpa folder sinkron</div>'+
+              '<input id="_odCid" type="text" placeholder="Application (client) ID dari Azure" value="'+E(odClientId())+'" style="width:100%;box-sizing:border-box;border:1px solid #c7d4e0;border-radius:6px;padding:7px 8px;font-size:11px;">'+
+              '<div style="font-size:11px;color:#667;margin:6px 0;">Status: <span id="_odAcc">'+(acc ? '<span style="color:#15803d">masuk sebagai '+E(acc.username||'')+'</span>' : (odClientId() ? '<span style="color:#b45309">belum login</span>' : '<span style="color:#b3261e">Client ID belum diisi</span>'))+'</span><br>Redirect URI untuk didaftarkan di Azure (tipe SPA): <b style="word-break:break-all;">'+E(odRedirect())+'</b></div>'+
+              '<div style="display:flex;flex-wrap:wrap;gap:8px;"><button data-od="login" style="'+btn+'background:#0b5cad;color:#fff;">Login Microsoft</button><button data-od="flush" style="'+btn+'background:#1f8a5f;color:#fff;">Kirim antrean PDF sekarang</button></div>'+
+            '</div>'+
             '<div style="margin-bottom:6px;"><b>Alamat folder di OneDrive/SharePoint</b> (untuk link di Excel):</div>'+
             '<input id="_odBase" type="text" value="'+E(odBase())+'" style="width:100%;box-sizing:border-box;border:1px solid #c7d4e0;border-radius:6px;padding:7px 8px;font-size:11px;">'+
-            '<div style="font-size:11px;color:#667;margin-top:6px;">Pilih folder <b>Inspection Incoming</b> yang sudah tersinkron (ikon OneDrive di File Explorer). Setelah itu setiap klik <b>💾 Simpan</b> pada preview dokumen otomatis menaruh PDF di folder tersebut dan OneDrive mengunggahnya.</div>'+
+            '<div style="font-size:11px;color:#667;margin-top:6px;">Pilih folder <b>Inspection Incoming</b> yang sudah tersinkron (ikon OneDrive di File Explorer). Setelah itu setiap klik <b>+ Simpan Record</b> otomatis membuat PDF (nama: <b>No II_Nama Suplier</b>) dan menaruhnya di folder tersebut, lalu OneDrive mengunggahnya.</div>'+
             '<div id="_odMsg" style="margin-top:10px;font-weight:700;"></div>'+
           '</div></div>';
       document.body.appendChild(ov);
@@ -14766,7 +14942,39 @@ input::placeholder, textarea::placeholder {
         var inp = ov.querySelector('#_odBase');
         try{ if(inp && inp.value.trim()) localStorage.setItem('incOdBase', inp.value.trim()); }catch(e2){}
         try{
-          if(a === 'pick'){
+          var cidInp = ov.querySelector('#_odCid');
+          if(cidInp){ var cv = cidInp.value.trim(); if(cv !== odClientId()){ if(cv) localStorage.setItem('incOdClientId', cv); else localStorage.removeItem('incOdClientId'); _msal = null; _gFolder = null; } }
+        }catch(e3){}
+        try{
+          if(a === 'srv'){
+            if(srvOn()){
+              localStorage.setItem('incOdSrv','0');
+              ov.querySelector('#_odSrvSt').innerHTML = '<span style="color:#b3261e">nonaktif</span>'; b.textContent = 'Aktifkan mode server';
+              msg('Mode server dimatikan.');
+            } else {
+              var sh = await odReady(true);
+              if(!sh){ msg('⚠️ Pilih folder "Inspection Incoming" dan beri izin dulu, baru aktifkan mode server.', '#b3261e'); return; }
+              localStorage.setItem('incOdSrv','1');
+              localStorage.setItem('incOdSrvSince', String(Date.now()));
+              ov.querySelector('#_odSrvSt').innerHTML = '<span style="color:#15803d">AKTIF</span>'; b.textContent = 'Matikan mode server';
+              msg('✅ Mode server aktif untuk record baru mulai sekarang. Biarkan aplikasi terbuka di komputer ini.', '#15803d');
+              srvTick();
+            }
+          } else if(a === 'login'){
+            if(!odClientId()){ msg('⚠️ Isi Client ID dulu.', '#b3261e'); return; }
+            var tk = await gToken(true);
+            var fo = await gFolder(tk);
+            var ac = await gAccount();
+            ov.querySelector('#_odAcc').innerHTML = '<span style="color:#15803d">masuk sebagai '+E(ac && ac.username || '')+'</span>';
+            msg('✅ Login berhasil & folder OneDrive dapat diakses.', '#15803d');
+            var fl = await odFlush(false, null);
+            if(fl.ok) msg('✅ Login berhasil. '+fl.ok+' PDF antrean terkirim.', '#15803d');
+          } else if(a === 'flush'){
+            var hh = null; try{ hh = await odReady(true); }catch(e4){}
+            msg('Mengirim antrean…');
+            var f2 = await odFlush(true, hh);
+            msg(f2.offline ? '⚠️ Sedang offline.' : ('✅ '+f2.ok+' terkirim'+(f2.left?(' · '+f2.left+' menunggu login/folder'):'')+(f2.fail?(' · '+f2.fail+' gagal'):'')), f2.fail ? '#b45309' : '#15803d');
+          } else if(a === 'pick'){
             var dh = await window.showDirectoryPicker({mode:'readwrite'});
             if(!/inspection\s*incoming/i.test(dh.name) && !confirm('Folder yang dipilih bernama "'+dh.name+'", bukan "Inspection Incoming". Tetap pakai folder ini?')) return;
             await odSet(dh);
@@ -14777,14 +14985,15 @@ input::placeholder, textarea::placeholder {
             msg(g ? '✅ Izin aktif.' : '⚠️ Izin ditolak.', g ? '#15803d' : '#b3261e');
           } else if(a === 'all'){
             var dh2 = await odReady(true);
-            if(!dh2){ msg('⚠️ Pilih folder dan beri izin dulu.', '#b3261e'); return; }
+            if(!dh2 && !odClientId()){ msg('⚠️ Pilih folder dan beri izin dulu (atau isi Client ID & login Microsoft).', '#b3261e'); return; }
             var ok = 0, miss = 0, fail = 0, i = 0;
             for(var k=0;k<withPdf.length;k++){
               var r = withPdf[k]; msg('Mengirim '+(++i)+'/'+withPdf.length+'…');
               try{
                 var row = await getPdf(r.id);
                 if(!row || !row.buf){ miss++; continue; }
-                await odWriteTo(dh2, r.docPdf.name, new Blob([row.buf], {type:'application/pdf'}));
+                var via2 = await odDeliver(r.docPdf.name, new Blob([row.buf], {type:'application/pdf'}), k===0, dh2);
+                if(!via2){ fail++; continue; }
                 odMarkUploaded(r.id); ok++;
               }catch(err){ console.warn(err); fail++; }
             }
@@ -14798,6 +15007,35 @@ input::placeholder, textarea::placeholder {
           msg('⚠️ '+(err && err.message || err), '#b3261e');
         }
       });
+    }
+  };
+
+  // Dipanggil oleh "+ Simpan Record": buat PDF dokumentasi, simpan di aplikasi, dan unggah ke folder OneDrive
+  window.incSaveRecordPdf = async function(rec, odh){
+    busy('Membuat PDF dokumentasi…');
+    try{
+      var cur = findRec(rec.id) || rec;
+      var fresh = await buildRecordPages(cur);
+      var blob = await renderPdfBlob(fresh.html);
+      var name = pdfFileName(cur);
+      await putPdf(cur.id, blob, name);
+      cur.docPdf = {name:name, savedAt:Date.now(), size:blob.size, pages:fresh.count};
+      var odMsg = '';
+      busy('Mengunggah PDF ke OneDrive…');
+      try{
+        var via = await odDeliver(name, blob, false, odh);
+        if(via){ cur.docPdf.od = true; odMsg = ' PDF diunggah ke OneDrive: '+name; }
+        else if(navigator.onLine === false) odMsg = ' (Offline — PDF antre, terkirim otomatis saat online)';
+        else odMsg = ' (PDF antre: login Microsoft / pilih folder lewat "📁 Folder OneDrive"; terkirim otomatis setelah siap)';
+      }catch(e){ console.warn('[OneDrive]', e); odMsg = ' (Upload OneDrive gagal, dicoba ulang otomatis: '+(e && e.message || e)+')'; }
+      if(typeof saveState === 'function') saveState();
+      if(typeof renderIncoming === 'function') renderIncoming();
+      toast('✅ Record & PDF tersimpan.'+odMsg);
+    }catch(err){
+      console.error('[incSaveRecordPdf]', err);
+      toast('⚠️ Record tersimpan, tetapi PDF gagal dibuat: '+(err && err.message || err));
+    }finally{
+      busy(null);
     }
   };
 
@@ -14908,6 +15146,9 @@ input::placeholder, textarea::placeholder {
     var pdfBtn  = document.getElementById('ptbPdfBtn');
     var saveLbl = '💾 Simpan', pdfLbl = '📄 Simpan PDF';
     if(rec.docPdf) saveLbl = '💾 Simpan Ulang';
+    // PDF kini dibuat & diunggah ke OneDrive otomatis saat "+ Simpan Record" → tombol Simpan disembunyikan
+    // (tetap tampil hanya untuk record lama yang belum punya PDF)
+    if(saveBtn){ saveBtn.style.display = rec.docPdf ? 'none' : ''; }
     if(saveBtn){ saveBtn.disabled = false; saveBtn.innerHTML = saveLbl; }
     if(pdfBtn){  pdfBtn.disabled = false;  pdfBtn.innerHTML = pdfLbl; }
 
@@ -14926,10 +15167,8 @@ input::placeholder, textarea::placeholder {
         await putPdf(cur.id, blob, name);
         cur.docPdf = {name:name, savedAt:Date.now(), size:blob.size, pages:fresh.count};
         var odMsg = '';
-        if(odh){
-          try{ await odWriteTo(odh, name, blob); cur.docPdf.od = true; odMsg = ' PDF juga disimpan ke folder OneDrive.'; }
-          catch(e){ console.warn('[OneDrive]', e); odMsg = ' (Gagal menulis ke folder OneDrive: '+(e && e.message || e)+')'; }
-        }
+        try{ var via3 = await odDeliver(name, blob, true, odh); if(via3){ cur.docPdf.od = true; odMsg = ' PDF juga diunggah ke OneDrive.'; } }
+        catch(e){ console.warn('[OneDrive]', e); odMsg = ' (Gagal upload OneDrive: '+(e && e.message || e)+')'; }
         if(typeof saveState === 'function') saveState();
         if(typeof renderIncoming === 'function') renderIncoming();
         if(saveBtn) saveBtn.innerHTML = '✔ Tersimpan';
