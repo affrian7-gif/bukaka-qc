@@ -10309,9 +10309,7 @@ function openIncAddModal(){
         </div>
         <!-- Item Description -->
         <div>
-          <label style="font-size:11px;font-weight:700;color:var(--navy);display:block;margin-bottom:4px;">Part / Item Description <span style="color:var(--red);">*</span></label>
-          <input id="_iaPartDesc" type="text" placeholder="Nama item yang di-incoming"
-            style="width:100%;border:1.5px solid var(--line);border-radius:8px;padding:9px 11px;font-size:13px;box-sizing:border-box;outline:none;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;"><label style="font-size:11px;font-weight:700;color:var(--navy);display:block;margin-bottom:0;">Part / Item Description <span style="color:var(--red);">*</span></label><span style="white-space:nowrap"><button type="button" id="_iaAiBtn">✨ Generate AI dari Surat Jalan</button><button type="button" id="_iaAiCfg" title="Pengaturan kunci API AI">⚙</button></span></div><textarea id="_iaPartDesc" rows="3" placeholder="Satu item per baris — atau tekan ＋ Tambah Foto di “1. Surat Jalan” lalu pilih Scan AI" style="width:100%;border:1.5px solid var(--line);border-radius:8px;padding:9px 11px;font-size:13px;box-sizing:border-box;outline:none;resize:vertical;font-family:inherit;line-height:1.4;"></textarea><div id="_iaAiStat" class="info"></div>
         </div>
         <!-- Supplier & Brand -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
@@ -10343,8 +10341,7 @@ function openIncAddModal(){
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
           <div>
             <label style="font-size:11px;font-weight:700;color:var(--navy);display:block;margin-bottom:4px;">Quantity</label>
-            <input id="_iaQty" type="text" placeholder="Jumlah"
-              style="width:100%;border:1.5px solid var(--line);border-radius:8px;padding:9px 11px;font-size:13px;box-sizing:border-box;outline:none;">
+            <textarea id="_iaQty" rows="3" placeholder="Satu angka per baris, sejajar dengan deskripsi" style="width:100%;border:1.5px solid var(--line);border-radius:8px;padding:9px 11px;font-size:13px;box-sizing:border-box;outline:none;resize:vertical;font-family:inherit;line-height:1.4;"></textarea>
           </div>
           <div>
             <label style="font-size:11px;font-weight:700;color:var(--navy);display:block;margin-bottom:4px;">Satuan</label>
@@ -10440,13 +10437,15 @@ function openIncAddModal(){
     }
   };
 
-  function closeModal(){ modal.remove(); delete window._incAddSelectResult; delete window._iaPickPhoto; }
+  function closeModal(){ modal.remove(); const _c=document.getElementById('_iaSjChoose'); if(_c) _c.remove(); delete window._incAddSelectResult; delete window._iaPickPhoto; }
 
   document.getElementById('_incAddClose').onclick = closeModal;
   modal.addEventListener('click', e=>{ if(e.target===modal) closeModal(); });
 
   // ── Photo staging per kategori ─────────────────────────────────────
   const _iaPhotoStaging = { photoSuratJalan:[], photoPO:[], photoDokPendukung:[], photoHasil:[] };
+  window._iaStaging = _iaPhotoStaging; window._iaOrigMap = new Map();
+  window._iaAddThumb = function(du, cat, hires){ try{ const idx = _iaPhotoStaging[cat].length; _iaPhotoStaging[cat].push(du); if(hires) window._iaOrigMap.set(du, hires); _iaMkThumb(du, cat, idx); }catch(e){ console.warn(e); } };
 
   function _iaMkThumb(dataUrl, cat, idx){
     const box = document.getElementById('_iaPhotos_'+cat);
@@ -10473,7 +10472,7 @@ function openIncAddModal(){
     box.appendChild(wrap);
   }
 
-  window._iaPickPhoto = function(cat, btn){
+  const _iaPlainPick = function(cat, btn){
     const inp = document.createElement('input');
     inp.type='file'; inp.accept='image/*'; inp.multiple=true;
     inp.addEventListener('change', async ()=>{
@@ -10493,10 +10492,36 @@ function openIncAddModal(){
         }catch(e){ alert('Gagal baca foto: '+(e&&e.message?e.message:'error')); continue; }
         const idx = _iaPhotoStaging[cat].length;
         _iaPhotoStaging[cat].push(dataUrl);
+        try{ window._iaOrigMap.set(dataUrl, f); }catch(e){}
         _iaMkThumb(dataUrl, cat, idx);
       }
     });
     inp.click();
+  };
+
+  // Tambah Foto: untuk "1. Surat Jalan" menyatu dengan Scan Kamera (kamera / galeri + baca AI)
+  window._iaPickPhoto = function(cat, btn){
+    if(cat !== 'photoSuratJalan' || !(window._iaCam && window._iaCam.open)){ return _iaPlainPick(cat, btn); }
+    const old = document.getElementById('_iaSjChoose'); if(old) old.remove();
+    const sh = document.createElement('div');
+    sh.id = '_iaSjChoose';
+    sh.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(11,33,56,.55);display:flex;align-items:flex-end;justify-content:center;padding:12px;';
+    const bs = 'width:100%;text-align:left;border:0;border-radius:12px;padding:13px 14px;font-size:13px;font-weight:800;cursor:pointer;display:block;';
+    sh.innerHTML = `<div style="background:#fff;border-radius:16px;width:100%;max-width:420px;padding:14px;box-shadow:0 12px 50px rgba(0,0,0,.4);display:flex;flex-direction:column;gap:8px;font-family:var(--sans);">
+      <div style="font-size:14px;font-weight:800;color:var(--navy);">📄 Tambah Foto Surat Jalan</div>
+      <button type="button" data-sj="scan" style="${bs}background:linear-gradient(135deg,#7c3aed,#2563eb);color:#fff;">📷 Scan AI — kamera / galeri<br><span style="font-weight:600;font-size:11px;opacity:.9;">Foto masuk ke Surat Jalan + Deskripsi &amp; Qty terisi otomatis</span></button>
+      <button type="button" data-sj="plain" style="${bs}background:#e6f5ee;color:#1f8a5f;">🖼 Foto saja (tanpa AI)<br><span style="font-weight:600;font-size:11px;opacity:.85;">Pilih dari galeri / ambil foto biasa</span></button>
+      <button type="button" data-sj="cancel" style="${bs}background:#eef2f8;color:#44546a;text-align:center;">Batal</button>
+    </div>`;
+    document.body.appendChild(sh);
+    sh.addEventListener('click', function(e){
+      const b = e.target.closest('[data-sj]');
+      if(!b && e.target !== sh) return;
+      const a = b ? b.getAttribute('data-sj') : 'cancel';
+      sh.remove();
+      if(a === 'scan') window._iaCam.open();
+      else if(a === 'plain') _iaPlainPick(cat, btn);
+    });
   };
 
   document.getElementById('_iaSave').onclick = async ()=>{
@@ -10504,6 +10529,8 @@ function openIncAddModal(){
     errEl.style.display = 'none';
     const partDesc = document.getElementById('_iaPartDesc').value.trim();
     if(!partDesc){ errEl.textContent = '⚠️ Part/Item Description wajib diisi!'; errEl.style.display='block'; document.getElementById('_iaPartDesc').focus(); return; }
+    const _ivErr = window.incValidateItems && window.incValidateItems(document.getElementById('_iaPartDesc').value, document.getElementById('_iaQty').value);
+    if(_ivErr){ errEl.textContent = _ivErr; errEl.style.display='block'; return; }
 
     const saveBtn = document.getElementById('_iaSave');
     saveBtn.disabled = true; saveBtn.textContent = '⏳ Menyimpan...';
@@ -10529,6 +10556,7 @@ function openIncAddModal(){
     rec.project      = document.getElementById('_iaProject').value.trim();
     rec.po           = document.getElementById('_iaPO').value.trim();
     rec.qty          = document.getElementById('_iaQty').value.trim();
+    if(window.incApplyItems) window.incApplyItems(rec, document.getElementById('_iaPartDesc').value, document.getElementById('_iaQty').value);
     rec.qtyUnit      = document.getElementById('_iaQtyUnit').value.trim() || 'pcs';
     rec.namaInspektor= document.getElementById('_iaInspektor').value.trim();
     rec.keterangan   = document.getElementById('_iaKet').value.trim();
@@ -10934,7 +10962,7 @@ function renderIncItem(rec, idx){
           <!-- Row 1: Part Description (full width) -->
           <div class="inc-drec-cell inc-drec-full">
             <div class="inc-drec-label">Part / Item Description</div>
-            <input type="text" class="inc-drec-input" data-inc-field="partDesc" data-inc-id="${esc(rec.id)}" value="${esc(rec.partDesc)}" placeholder="Nama item yang di-incoming">
+            <input type="text" class="inc-drec-input" data-inc-field="partDesc" data-inc-id="${esc(rec.id)}" value="${esc(rec.partDesc)}" placeholder="Nama item yang di-incoming"${(rec.items&&rec.items.length>1)?' readonly title="Diatur dari Rincian Item di bawah"':''}>${(window.incDetailItems&&window.incDetailItems(rec,esc))||''}
           </div>
           <!-- Row 2: Supplier, Brand, Project, PO -->
           <div class="inc-drec-cell inc-drec-span2">
@@ -10956,7 +10984,7 @@ function renderIncItem(rec, idx){
           <!-- Row 3: Qty, Satuan, Number, Hit Number, Inspektor -->
           <div class="inc-drec-cell">
             <div class="inc-drec-label">Quantity</div>
-            <input type="text" class="inc-drec-input" data-inc-field="qty" data-inc-id="${esc(rec.id)}" value="${esc(rec.qty)}" placeholder="Jumlah">
+            <input type="text" class="inc-drec-input" data-inc-field="qty" data-inc-id="${esc(rec.id)}" value="${esc(rec.qty)}" placeholder="Jumlah"${(rec.items&&rec.items.length>1)?' readonly title="Total otomatis dari Rincian Item"':''}>
           </div>
           <div class="inc-drec-cell">
             <div class="inc-drec-label">Satuan</div>
@@ -11163,13 +11191,19 @@ function openIncDetailModal(recId){
   // Footer dengan tombol Cetak/Preview
   const ftr = document.createElement('div');
   ftr.style.cssText = [
-    'display:flex;align-items:center;justify-content:flex-end;gap:10px',
+    'display:flex;align-items:center;justify-content:space-between;gap:10px',
     'padding:12px 16px',
     'border-top:1px solid #e2e8ef',
     'background:#fafbfc',
     'border-radius:0 0 14px 14px'
   ].join(';');
   ftr.innerHTML = `
+    <button id="_incMdlDel" type="button"
+      style="display:flex;align-items:center;gap:7px;padding:9px 18px;border-radius:8px;
+             border:1px solid #e0a4a4;background:#fdecec;color:#b42318;
+             font-size:13px;font-weight:700;cursor:pointer;">
+      🗑 Hapus Record
+    </button>
     <button id="_incMdlPrint"
       style="display:flex;align-items:center;gap:7px;padding:9px 18px;border-radius:8px;border:none;
              background:linear-gradient(135deg,#1a5490,#14314f);color:#fff;
@@ -11236,6 +11270,20 @@ function openIncDetailModal(recId){
   modal.addEventListener('click', e=>{ if(e.target===modal) closeModal(); });
   hdr.querySelector('#_incMdlClose').addEventListener('click', closeModal);
   document.addEventListener('keydown', function onEsc(e){ if(e.key==='Escape'){ closeModal(); document.removeEventListener('keydown', onEsc); } });
+
+  // Tombol Hapus Record (seluruh record + foto)
+  ftr.querySelector('#_incMdlDel').addEventListener('click', ()=>{
+    if(!confirm('Hapus record incoming ini?\n\n'+(rec.iiNo||rec.incNo||rec.id)+'\n\nSemua foto juga akan dihapus dan tidak bisa dikembalikan.')) return;
+    const list = incStoreForId(rec.id);
+    ['photoSuratJalan','photoPO','photoDokPendukung','photoHasil'].forEach(cat=>{
+      (rec[cat]||[]).forEach(pid=>{ try{ deletePhotoFile(pid); }catch(e){} });
+    });
+    if(list){ const i = list.findIndex(r=>r.id===rec.id); if(i!==-1) list.splice(i,1); }
+    try{ saveState(); }catch(e){}
+    modal.remove();
+    try{ renderIncoming(); }catch(e){}
+    try{ updateIncomingBadge(); }catch(e){}
+  });
 
   // Tombol Cetak / Preview — langsung build preview dari data rec tanpa bergantung DOM panel
   ftr.querySelector('#_incMdlPrint').addEventListener('click', async ()=>{
@@ -11418,8 +11466,8 @@ function renderMrsRow(rec, allRecs){
     <td style="font-weight:700;color:#14314f;">${esc(rec.iiNo)||'—'}</td>
     <td style="text-align:center;">${hitCell}</td>
     <td>${esc(rec.project)||'—'}</td>
-    <td style="max-width:140px;">${esc(rec.partDesc)||'—'}</td>
-    <td style="text-align:center;">${esc(rec.qty)||'—'} ${esc(rec.qtyUnit||'')}</td>
+    <td style="max-width:140px;">${(window.incItemsCol&&window.incItemsCol(rec,'d',esc))||esc(rec.partDesc)||'—'}</td>
+    <td style="text-align:center;">${(window.incItemsCol&&window.incItemsCol(rec,'q',esc))||(esc(rec.qty)||'—')+' '+esc(rec.qtyUnit||'')}</td>
     <td>${esc(rec.brand)||'—'}</td>
     <td style="min-width:110px;max-width:150px;">${supplierCell}</td>
     <td>${esc(rec.po)||'—'}</td>
@@ -12164,7 +12212,7 @@ async function exportIncomingPdf(recIds){
         <table class="inc-pdf-data-table">
           <tr>
             <td class="td-label">Part / Item Description</td>
-            <td class="td-val td-val-strong" colspan="3">${esc(rec.partDesc)||'—'}</td>
+            <td class="td-val td-val-strong" colspan="3">${(window.incItemsCombined&&window.incItemsCombined(rec,esc))||esc(rec.partDesc)||'—'}</td>
           </tr>
           <tr>
             <td class="td-label">Supplier / Distributor</td>
@@ -13974,7 +14022,7 @@ input::placeholder, textarea::placeholder {
 
   function detailPage(rec, shNo, shTotal, isLast){
     var rows =
-      '<tr>'+cellL('Part / Item Description')+cellV(E(rec.partDesc||'—'),3,true)+'</tr>'+
+      '<tr>'+cellL('Part / Item Description')+cellV((window.incItemsCombined&&window.incItemsCombined(rec,E))||E(rec.partDesc||'—'),3,true)+'</tr>'+
       '<tr>'+cellL('Supplier / Distributor')+cellV(E(rec.supplier||'—'))+cellL('Manufacturer / Brand')+cellV(E(rec.brand||'—'))+'</tr>'+
       '<tr>'+cellL('Kode Project')+cellV(E(rec.project||'—'))+cellL('No. PO')+cellV(E(rec.po||'—'))+'</tr>'+
       '<tr>'+cellL('Quantity')+cellV(E((rec.qty||'—')+' '+(rec.qtyUnit||'')))+cellL('Jumlah Dokumen (SJ)')+cellV(E(rec.number||'—'))+'</tr>'+
@@ -18798,6 +18846,486 @@ if(typeof rh==='function'){
 }
 try{inject();}catch(e){}
 window.QCSummary={render:render,open:window.showSummary};
+})();
+</script>
+
+<style id="inc-ai-css">
+.inc-itx{margin-top:8px;border:1.5px dashed #9db4d3;border-radius:8px;padding:8px;background:#f6f9fd}
+.inc-itx-h{font-size:10.5px;font-weight:800;color:#14314f;margin-bottom:6px}
+.inc-itx-r{display:grid;grid-template-columns:28px 1fr 110px 28px;gap:6px;margin-bottom:5px;align-items:center}
+.inc-itx-r span{font-size:11px;font-weight:800;color:#44546a;text-align:center}
+.inc-itx-r input{width:100%;border:1px solid #c7cfd6;border-radius:6px;padding:6px 8px;font-size:12px;box-sizing:border-box}
+.inc-itx-r input[data-itx="q"]{text-align:center}
+.inc-itx-r button,.inc-itx-add{border:0;border-radius:6px;cursor:pointer;font-weight:800}
+.inc-itx-r button{background:#fde0de;color:#b42318;height:28px}
+.inc-itx-add{background:#e3edfa;color:#14314f;padding:6px 10px;font-size:11px;margin-top:2px}
+#_iaAiStat{font-size:11.5px;margin-top:5px;line-height:1.45}
+#_iaAiStat.ok{color:#14703a}#_iaAiStat.err{color:#b42318}#_iaAiStat.info{color:#44546a}
+#_iaAiStat input{border:1.5px solid #c7cfd6;border-radius:6px;padding:6px 8px;font-size:12px;box-sizing:border-box}
+#_iaAiBtn{background:linear-gradient(135deg,#7c3aed,#2563eb);color:#fff;border:0;border-radius:8px;padding:6px 12px;font-size:11.5px;font-weight:800;cursor:pointer}
+#_iaAiBtn:disabled{opacity:.6;cursor:wait}
+#_iaAiCfg{background:#eef2f8;border:1px solid #c7cfd6;border-radius:8px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px}
+</style>
+<script id="inc-ai-module">
+/* ============================================================
+   INCOMING — Generate AI dari Surat Jalan + rincian item (multi-baris, 1 PO)
+   - Foto Surat Jalan (asli, bukan thumbnail) dikirim ke Google Gemini API (kunci gratis aistudio.google.com,
+     disimpan hanya di localStorage browser ini: qc_gemini_key).
+   - Hasil: deskripsi & qty ditulis ke bawah (satu item per baris).
+   - Disimpan: rec.items=[{d,q}] ; rec.partDesc = gabungan "A; B; C" ; rec.qty = TOTAL (agar rate/rekap tetap benar).
+   ============================================================ */
+(function(){
+'use strict';
+if(window.incApplyItems) return;
+var KEY='qc_gemini_key',MK='qc_gemini_model',DEF='gemini-2.5-flash';
+function ls(k){try{return localStorage.getItem(k)||'';}catch(e){return '';}}
+function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+function $(id){return document.getElementById(id);}
+function E(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function parseQty(s){
+  var m=String(s==null?'':s).match(/\d[\d.,]*/);if(!m)return null;var t=m[0].replace(/[.,]+$/,'');
+  if(/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(t))t=t.replace(/\./g,'').replace(',','.');
+  else if(/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(t))t=t.replace(/,/g,'');
+  else t=t.replace(',','.');
+  var n=parseFloat(t);return isFinite(n)?n:null;
+}
+function keepLines(t){var a=String(t||'').split(/\r?\n/).map(function(s){return s.trim();});while(a.length&&!a[a.length-1])a.pop();return a;}
+function fmt(n){return String(Math.round(n*1000)/1000);}
+
+/* ---------- validasi & penerapan ke record ---------- */
+window.incValidateItems=function(descText,qtyText){
+  var d=keepLines(descText),q=keepLines(qtyText);
+  if(d.length<=1&&q.length<=1)return null;
+  if(d.length!==q.length)return '⚠️ Jumlah baris Deskripsi ('+d.length+') dan Quantity ('+q.length+') harus sama — satu angka per item.';
+  for(var i=0;i<d.length;i++){
+    if(!d[i]&&!q[i])continue;
+    if(!d[i])return '⚠️ Baris '+(i+1)+': deskripsi kosong tetapi quantity terisi.';
+    if(parseQty(q[i])==null)return '⚠️ Baris '+(i+1)+': quantity harus berupa angka.';
+  }
+  return null;
+};
+window.incApplyItems=function(rec,descText,qtyText){
+  var d=keepLines(descText),q=keepLines(qtyText);
+  if(d.length<=1&&q.length<=1){delete rec.items;return;}
+  var items=[],total=0;
+  d.forEach(function(x,i){if(!x)return;var n=parseQty(q[i]);items.push({d:x,q:fmt(n)});total+=n;});
+  if(items.length<2){delete rec.items;if(items.length){rec.partDesc=items[0].d;rec.qty=items[0].q;}return;}
+  rec.items=items;rec.partDesc=items.map(function(i){return i.d;}).join('; ');rec.qty=fmt(total);
+};
+function total(rec){return (rec.items||[]).reduce(function(a,i){return a+(parseQty(i.q)||0);},0);}
+function multi(rec){return !!(rec&&rec.items&&rec.items.length>1);}
+
+/* ---------- tampilan ---------- */
+window.incItemsCol=function(rec,kind,esc){
+  if(!multi(rec))return '';var e=esc||E,u=rec.qtyUnit||'';
+  if(kind==='d')return rec.items.map(function(i){return e(i.d);}).join('<br>');
+  return rec.items.map(function(i){return e(i.q)+(u?' '+e(u):'');}).join('<br>')+'<br><b>Σ '+fmt(total(rec))+(u?' '+e(u):'')+'</b>';
+};
+window.incItemsCombined=function(rec,esc){
+  if(!multi(rec))return '';var e=esc||E,u=rec.qtyUnit||'';
+  return rec.items.map(function(i,k){return (k+1)+'. '+e(i.d)+' — <b>'+e(i.q)+(u?' '+e(u):'')+'</b>';}).join('<br>');
+};
+window.incDetailItems=function(rec,esc){
+  if(!multi(rec))return '';var e=esc||E;
+  return '<div class="inc-itx" data-itx-id="'+e(rec.id)+'"><div class="inc-itx-h">Rincian item ('+rec.items.length+' baris, 1 PO) — total '+fmt(total(rec))+' '+e(rec.qtyUnit||'')+'</div>'+
+    rec.items.map(function(i,k){return '<div class="inc-itx-r"><span>'+(k+1)+'</span><input data-itx="d" data-i="'+k+'" value="'+e(i.d)+'" placeholder="Deskripsi"><input data-itx="q" data-i="'+k+'" value="'+e(i.q)+'" placeholder="Qty" inputmode="decimal"><button type="button" data-itx-del="'+k+'" title="Hapus baris">×</button></div>';}).join('')+
+    '<button type="button" class="inc-itx-add" data-itx-add="1">＋ Tambah baris</button></div>';
+};
+function recOf(el){
+  var box=el.closest('[data-itx-id]');if(!box)return null;var id=box.getAttribute('data-itx-id');
+  try{var l=incStoreForId(id);var r=l&&l.find(function(x){return x.id===id;});return r?{rec:r,box:box}:null;}catch(e){return null;}
+}
+function recompute(h){
+  var r=h.rec;r.partDesc=r.items.map(function(i){return i.d;}).join('; ');r.qty=fmt(total(r));
+  try{saveState();}catch(e){}
+  var card=h.box.parentNode;
+  var pd=card.querySelector('[data-inc-field="partDesc"]'),qt=document.querySelector('[data-inc-field="qty"][data-inc-id="'+r.id+'"]');
+  if(pd)pd.value=r.partDesc;if(qt)qt.value=r.qty;
+  var hd=h.box.querySelector('.inc-itx-h');if(hd)hd.textContent='Rincian item ('+r.items.length+' baris, 1 PO) — total '+fmt(total(r))+' '+(r.qtyUnit||'');
+  var body=h.box.closest('.inc-item-body');if(body&&body.previousElementSibling){var de=body.previousElementSibling.querySelector('.inc-ii-desc');if(de)de.textContent=r.partDesc;}
+}
+document.addEventListener('input',function(e){
+  var t=e.target;if(!t.getAttribute||!t.getAttribute('data-itx'))return;
+  var h=recOf(t);if(!h)return;var i=+t.getAttribute('data-i'),f=t.getAttribute('data-itx');
+  if(!h.rec.items[i])return;
+  if(f==='d')h.rec.items[i].d=t.value;else h.rec.items[i].q=t.value;
+  recompute(h);
+});
+document.addEventListener('click',function(e){
+  var t=e.target.closest&&e.target.closest('[data-itx-del],[data-itx-add],#_iaAiBtn,#_iaAiCfg,#_iaAiKeySave');if(!t)return;
+  if(t.id==='_iaAiBtn'){run();return;}
+  if(t.id==='_iaAiCfg'){showCfg(false);return;}
+  if(t.id==='_iaAiKeySave'){var k=($('_iaAiKey')||{}).value||'';k=k.trim();if(!k){stat('Isi kunci API terlebih dahulu.','err');return;}lsSet(KEY,k);var m=($('_iaAiModel')||{}).value||'';if(m.trim())lsSet(MK,m.trim());stat('Kunci tersimpan di browser ini. Klik ✨ Generate AI lagi.','ok');return;}
+  var h=recOf(t);if(!h)return;
+  if(t.hasAttribute('data-itx-del')){
+    if(h.rec.items.length<=2&&!confirm('Tinggal 2 baris. Hapus baris ini dan kembali ke 1 item?'))return;
+    h.rec.items.splice(+t.getAttribute('data-itx-del'),1);
+    if(h.rec.items.length<2){var only=h.rec.items[0]||{d:'',q:''};h.rec.partDesc=only.d;h.rec.qty=only.q;delete h.rec.items;try{saveState();}catch(x){}try{renderIncoming();}catch(x){}return;}
+  }else{h.rec.items.push({d:'',q:'0'});}
+  recompute(h);
+  var nb=document.createElement('div');nb.innerHTML=window.incDetailItems(h.rec,E);h.box.replaceWith(nb.firstChild);
+});
+
+/* ---------- AI ---------- */
+function stat(msg,kind){var s=$('_iaAiStat');if(!s)return;s.className=kind||'info';s.textContent=msg;}
+function showCfg(pending){
+  var s=$('_iaAiStat');if(!s)return;s.className='info';
+  s.innerHTML=(pending?'Untuk memakai Scan / Generate AI, masukkan <b>kunci API Gemini</b> (gratis — buat di <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>). ':'Pengaturan AI (Gemini). ')+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px"><input id="_iaAiKey" type="password" placeholder="AIza…" autocomplete="off" style="flex:1;min-width:180px" value="'+E(ls(KEY))+'">'+
+    '<input id="_iaAiModel" type="text" style="width:150px" value="'+E(ls(MK)||DEF)+'" title="Model"><button type="button" id="_iaAiKeySave" style="background:#14314f;color:#fff;border:0;border-radius:6px;padding:6px 12px;font-weight:800;cursor:pointer">Simpan</button></div>'+
+    '<div style="margin-top:4px;color:#6b7a93">Kunci hanya disimpan di browser ini dan dikirim langsung ke Google. Jangan dipakai di komputer umum. Model bawaan: gemini-2.5-flash. Jika model dihentikan Google, aplikasi otomatis mencari model lain yang aktif untuk kunci Anda (mis. gemini-flash-latest).</div>';
+  try{s.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){}
+}
+function srcImages(){
+  var st=window._iaStaging||{},list=(st.photoSuratJalan||[]);
+  var orig=window._iaOrigMap;
+  return list.map(function(du){return {du:du,file:orig&&orig.get(du)};}).slice(0,4);
+}
+function toJpegB64(src){
+  if(src.file&&typeof src.file==='string'){src={du:src.file};}
+  return new Promise(function(res,rej){
+    function fromUrl(url,revoke){
+      var im=new Image();im.onload=function(){
+        var MAX=1800,s=Math.min(1,MAX/Math.max(im.width,im.height)),c=document.createElement('canvas');
+        c.width=Math.max(1,Math.round(im.width*s));c.height=Math.max(1,Math.round(im.height*s));
+        var g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.drawImage(im,0,0,c.width,c.height);
+        if(revoke)URL.revokeObjectURL(url);res(c.toDataURL('image/jpeg',0.85).split(',')[1]);
+      };im.onerror=function(){if(revoke)URL.revokeObjectURL(url);rej(new Error('Gambar tidak bisa dibaca'));};im.src=url;
+    }
+    if(src.file)fromUrl(URL.createObjectURL(src.file),true);else fromUrl(src.du,false);
+  });
+}
+
+/* ---------- Gemini (tier gratis) ---------- */
+function gemMsg(status,msg,model){
+  if(status===400&&/API key/i.test(msg))return 'Kunci API Gemini tidak valid. Periksa kunci di ⚙.';
+  if(status===401||status===403)return 'Kunci API Gemini ditolak ('+status+'). Periksa kunci di ⚙ (atau API belum diaktifkan untuk kunci ini).';
+  if(status===429)return 'Kuota gratis Gemini habis sementara (429). Tunggu 1 menit lalu coba lagi.';
+  if(status===404)return 'Model "'+model+'" tidak ditemukan. Ganti nama model di ⚙ (mis. gemini-2.5-flash).';
+  return 'Server Gemini menjawab '+status+(msg?': '+msg:'');
+}
+async function gemList(key){
+  var r=await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key='+encodeURIComponent(key));
+  if(!r.ok){var em='';try{var j=await r.json();em=(j.error&&j.error.message)||'';}catch(x){}throw new Error(gemMsg(r.status,em,'(daftar model)'));}
+  var d=await r.json(),out=[];
+  (d.models||[]).forEach(function(m){
+    var n=String(m.name||'').replace(/^models\//,'');
+    if(!/^gemini/.test(n)||/embed|tts|image|live|audio|robot|computer|imagen|aqa|exp|thinking|learn|deep/i.test(n))return;
+    if((m.supportedGenerationMethods||[]).indexOf('generateContent')<0)return;
+    var ver=parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)/)||[0,0])[1])||0;
+    var sc=(/flash/.test(n)?100:0)+(/lite/.test(n)?-30:0)+(/preview|beta/.test(n)?-10:0)+(/latest/.test(n)?5:0)+ver*10;
+    if(/pro/.test(n))sc-=50;
+    out.push({n:n,sc:sc});
+  });
+  out.sort(function(x,y){return y.sc-x.sc;});
+  return out.map(function(o){return o.n;});
+}
+async function gemini(b64s,prompt){
+  var key=ls(KEY);if(!key)throw new Error('Kunci API Gemini belum diisi (klik ⚙).');
+  var parts=b64s.map(function(b){return {inline_data:{mime_type:'image/jpeg',data:b}};});
+  parts.push({text:prompt});
+  var body=JSON.stringify({contents:[{role:'user',parts:parts}],generationConfig:{temperature:0,maxOutputTokens:8192,responseMimeType:'application/json'}});
+  var tried={},lastErr=null,hard404=0,quotaErr=null;
+  async function attempt(model){
+    tried[model]=1;
+    var r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent?key='+encodeURIComponent(key),{method:'POST',headers:{'content-type':'application/json'},body:body});
+    if(!r.ok){
+      var em='';try{var j=await r.json();em=(j.error&&j.error.message)||'';}catch(x){}
+      var e=new Error(gemMsg(r.status,em,model));e.status=r.status;throw e;
+    }
+    var data=await r.json(),c=(data.candidates||[])[0];
+    if(!c){var br=data.promptFeedback&&data.promptFeedback.blockReason;throw new Error('Gemini tidak memberi jawaban'+(br?' (diblokir: '+br+')':'')+'. Coba foto lain.');}
+    var txt=((c.content&&c.content.parts)||[]).map(function(x){return x.text||'';}).join('');
+    if(!txt.trim())throw new Error('Jawaban Gemini kosong (finishReason: '+(c.finishReason||'?')+'). Coba foto yang lebih jelas.');
+    lsSet(MK,model);   /* ingat model yang berhasil */
+    return txt;
+  }
+  async function run(list){
+    for(var i=0;i<list.length;i++){
+      if(tried[list[i]])continue;
+      try{return await attempt(list[i]);}
+      catch(e){lastErr=e;if(e.status===404){hard404++;if(list[i]===ls(MK))lsSet(MK,'');continue;}if(e.status===429){quotaErr=e;continue;}if(e.status===503||e.status===500)continue;throw e;}
+    }
+    return null;
+  }
+  var t=await run([ls(MK)||DEF,DEF,'gemini-flash-latest','gemini-2.5-flash','gemini-flash-lite-latest','gemini-2.5-flash-lite']);
+  if(t!=null)return t;
+  /* model bawaan sudah dihentikan / tidak ada -> cari model yang aktif untuk kunci ini */
+  var names=[];try{names=await gemList(key);}catch(e){if(quotaErr)throw quotaErr;throw e;}
+  t=await run(names.slice(0,8));
+  if(t!=null)return t;
+  if(quotaErr)throw quotaErr;
+  if(hard404){
+    var tl=Object.keys(tried).join(', ');
+    throw new Error('Tidak ada model Gemini yang bisa dipakai oleh kunci ini (dicoba: '+tl+'). Isi nama model yang valid di ⚙ (lihat daftar di aistudio.google.com) atau buat kunci baru di aistudio.google.com/apikey.');
+  }
+  throw lastErr||new Error('Gemini tidak bisa dihubungi.');
+}
+var PROMPT='Ini foto surat jalan / delivery order / packing list (bisa beberapa halaman) untuk SATU PO. Baca tabel barangnya dan keluarkan SEMUA baris item.\n'+
+ 'Balas HANYA dengan JSON valid, tanpa teks lain, format persis:\n{"po":"nomor PO jika tertulis, kalau tidak ada isi \\"\\"","supplier":"nama pengirim/supplier jika tertulis, kalau tidak ada isi \\"\\"","unit":"satuan dominan, mis. pcs/kg/m/set/btg","items":[{"description":"deskripsi barang apa adanya, ringkas","qty":12,"unit":"pcs"}]}\n'+
+ 'Aturan: satu objek per baris barang; qty harus ANGKA (bukan teks); jangan menggabungkan atau menjumlahkan baris; jangan mengarang item yang tidak terbaca — lewati saja; pertahankan urutan dokumen.';
+function parseJson(t){
+  t=String(t||'').replace(/^```(?:json)?/i,'').replace(/```\s*$/,'').trim();
+  var a=t.indexOf('{'),b=t.lastIndexOf('}');if(a<0||b<a)throw new Error('Jawaban AI bukan JSON');
+  return JSON.parse(t.slice(a,b+1));
+}
+window._iaAI={gemini:gemini,ls:ls,KEY:KEY,MK:MK,DEF:DEF,PROMPT:PROMPT,parseJson:parseJson,parseQty:parseQty,fmt:fmt,E:E,stat:stat,showCfg:showCfg};
+var busy=false;
+async function run(){
+  if(busy)return;
+  var key=ls(KEY);if(!key){showCfg(true);return;}
+  var srcs=srcImages();
+  if(!srcs.length){stat('Upload dulu foto Surat Jalan di bagian “Upload Foto → 1. Surat Jalan” di bawah, lalu klik ✨ Generate AI lagi.','err');
+    var up=$('_iaPhotos_photoSuratJalan');if(up&&up.scrollIntoView)up.scrollIntoView({behavior:'smooth',block:'center'});return;}
+  var d0=($('_iaPartDesc')||{}).value||'',q0=($('_iaQty')||{}).value||'';
+  if((d0.trim()||q0.trim())&&!confirm('Isian Deskripsi/Quantity yang sudah ada akan ditimpa hasil AI. Lanjutkan?'))return;
+  busy=true;var btn=$('_iaAiBtn');if(btn){btn.disabled=true;btn.textContent='⏳ Membaca surat jalan…';}
+  stat('Mengirim '+srcs.length+' foto ke AI…','info');
+  try{
+    var b64s=[];
+    for(var i=0;i<srcs.length;i++){b64s.push(await toJpegB64(srcs[i]));}
+    var txt=await gemini(b64s,PROMPT);
+    var out=parseJson(txt),items=(out.items||[]).map(function(it){return {d:String(it.description||it.desc||'').replace(/\s+/g,' ').trim(),q:parseQty(it.qty),u:String(it.unit||'').trim()};}).filter(function(it){return it.d&&it.q!=null;});
+    if(!items.length)throw new Error('AI tidak menemukan baris item yang terbaca. Coba foto yang lebih jelas/lurus.');
+    $('_iaPartDesc').value=items.map(function(i){return i.d;}).join('\n');
+    $('_iaQty').value=items.map(function(i){return fmt(i.q);}).join('\n');
+    $('_iaPartDesc').rows=Math.min(10,Math.max(3,items.length));$('_iaQty').rows=$('_iaPartDesc').rows;
+    var cnt={};items.forEach(function(i){if(i.u)cnt[i.u]=(cnt[i.u]||0)+1;});
+    var unit=Object.keys(cnt).sort(function(a,b){return cnt[b]-cnt[a];})[0]||String(out.unit||'').trim();
+    if(unit&&$('_iaQtyUnit'))$('_iaQtyUnit').value=unit;
+    var mixed=Object.keys(cnt).length>1;
+    if(out.po&&$('_iaPO')&&!$('_iaPO').value.trim())$('_iaPO').value=String(out.po).trim();
+    if(out.supplier&&$('_iaSupplier')&&!$('_iaSupplier').value.trim())$('_iaSupplier').value=String(out.supplier).trim();
+    var tot=items.reduce(function(a,i){return a+i.q;},0);
+    stat('✅ '+items.length+' item terbaca, total '+fmt(tot)+' '+(unit||'')+(mixed?' (satuan di dokumen berbeda-beda — periksa kolom Satuan)':'')+'. Periksa dan koreksi sebelum menyimpan; AI bisa salah baca.','ok');
+  }catch(e){
+    var m=e&&e.message?e.message:String(e);
+    if(/Failed to fetch|NetworkError|Load failed/i.test(m))m='Tidak bisa terhubung ke Google Gemini (periksa internet).';
+    stat('❌ '+m,'err');
+  }finally{busy=false;var b2=$('_iaAiBtn');if(b2){b2.disabled=false;b2.textContent='✨ Generate AI dari Surat Jalan';}}
+}
+})();
+</script>
+
+<style id="inc-cam-css">
+#_iaCamBtn{background:#0f766e;color:#fff;border:0;border-radius:8px;padding:6px 12px;font-size:11.5px;font-weight:800;cursor:pointer;margin-right:4px}
+#_camOv{position:fixed;inset:0;z-index:2147483000;background:#0b1220;color:#e6f0ff;display:flex;flex-direction:column;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
+#_camOv *{box-sizing:border-box}
+#_camOv .cm-top{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#111c33;font-weight:800}
+#_camOv .cm-top button{background:#1e2c4a;color:#fff;border:0;border-radius:8px;width:34px;height:34px;font-size:16px;cursor:pointer}
+#_camOv .cm-main{flex:1;min-height:0;display:flex;gap:12px;padding:10px;overflow:auto;flex-wrap:wrap;align-content:flex-start;justify-content:center}
+#_camOv .cm-stage{position:relative;background:#000;border-radius:10px;overflow:hidden;width:min(100%,760px);aspect-ratio:4/3;flex:0 0 auto}
+#_camOv .cm-stage video,#_camOv .cm-stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#_camOv .cm-stage svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#_camOv .cm-side{flex:1 1 320px;min-width:280px;max-width:620px;display:flex;flex-direction:column;gap:8px}
+#_camOv .cm-stat{font-size:12px;line-height:1.45;padding:8px 10px;background:#15233f;border-radius:8px;color:#bcd0ee}
+#_camOv .cm-stat.err{background:#3a1520;color:#ffb4b4}#_camOv .cm-stat.ok{background:#10301f;color:#a6f0c0}
+#_camOv .cm-leg{display:flex;gap:14px;font-size:11px;color:#9db8d8;flex-wrap:wrap}
+#_camOv .cm-leg i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-2px}
+#_camOv .cm-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+#_camOv button.cm-b{border:0;border-radius:9px;padding:10px 14px;font-weight:800;font-size:13px;cursor:pointer;background:#1e2c4a;color:#fff}
+#_camOv button.cm-b.pri{background:linear-gradient(135deg,#7c3aed,#2563eb)}
+#_camOv button.cm-b.ok{background:#16a34a}
+#_camOv button.cm-b:disabled{opacity:.5;cursor:wait}
+#_camOv label.cm-chk{font-size:12px;color:#bcd0ee;display:flex;align-items:center;gap:6px}
+#_camOv .cm-res{display:flex;flex-direction:column;gap:5px;max-height:44vh;overflow:auto}
+#_camOv .cm-row{display:grid;grid-template-columns:26px 1fr 90px 28px;gap:6px;align-items:center;padding:4px;border-radius:8px;border-left:4px solid #2563eb;background:#111c33}
+#_camOv .cm-row.sel{background:#1b2d52;outline:1px solid #60a5fa}
+#_camOv .cm-row span{text-align:center;font-weight:800;font-size:12px}
+#_camOv .cm-row input{width:100%;background:#0b1220;color:#fff;border:1px solid #2b3d63;border-radius:6px;padding:7px 8px;font-size:13px}
+#_camOv .cm-row input[data-cmf="q"]{text-align:center;border-color:#b7791f}
+#_camOv .cm-row button{background:#3a1520;color:#ffb4b4;border:0;border-radius:6px;height:30px;cursor:pointer;font-weight:800}
+#_camOv .cm-foot{display:flex;gap:8px;padding:10px;background:#111c33;flex-wrap:wrap}
+#_camOv .cm-foot .cm-b{flex:1;min-width:140px}
+</style>
+<script id="inc-cam-module">
+/* ============================================================
+   SCAN KAMERA — pratinjau kamera + kotak deteksi Deskripsi (biru) & Qty (oranye)
+   Deteksi dilakukan AI (Google Gemini, tier gratis) pada frame yang dikirim; "Deteksi langsung" mengirim frame
+   kecil berkala (± tiap 6 dtk) sehingga kotak mengikuti dengan jeda — bukan real-time per frame.
+   ============================================================ */
+(function(){
+'use strict';
+var A=window._iaAI;if(!A||window._iaCam)return;
+function $(id){return document.getElementById(id);}
+var S={stream:null,facing:'environment',frozen:false,items:[],pages:[],page:0,busy:false,liveTimer:null,live:false,sel:-1,open:false};
+var BOXP='\nTAMBAHAN: untuk setiap item sertakan juga posisi kotak di gambar: "box_d":[ymin,xmin,ymax,xmax] untuk sel DESKRIPSI dan "box_q":[ymin,xmin,ymax,xmax] untuk sel QTY, dalam skala 0–1000 relatif terhadap tinggi (y, atas→bawah) dan lebar (x, kiri→kanan) gambar. Jika posisi tidak bisa ditentukan, isi null.';
+function stat(m,k){var s=$('cmStat');if(!s)return;s.className='cm-stat'+(k?' '+k:'');s.textContent=m;}
+function clampBox(b){
+  if(!Array.isArray(b)||b.length<4)return null;var n=b.slice(0,4).map(Number);if(n.some(function(v){return !isFinite(v);}))return null;
+  var x1=Math.max(0,Math.min(n[0],n[2])),x2=Math.min(1000,Math.max(n[0],n[2])),y1=Math.max(0,Math.min(n[1],n[3])),y2=Math.min(1000,Math.max(n[1],n[3]));
+  return (x2-x1>3&&y2-y1>3)?[x1,y1,x2,y2]:null;
+}
+function swapYX(b){return (Array.isArray(b)&&b.length>=4)?[b[1],b[0],b[3],b[2]]:null;}
+async function detect(b64){
+  var txt=await A.gemini([b64],A.PROMPT+BOXP);
+  var out=A.parseJson(txt);
+  var items=(out.items||[]).map(function(it){return {d:String(it.description||it.desc||'').replace(/\s+/g,' ').trim(),q:A.parseQty(it.qty),u:String(it.unit||'').trim(),bd:clampBox(swapYX(it.box_d)),bq:clampBox(swapYX(it.box_q))};}).filter(function(it){return it.d&&it.q!=null;});
+  return {items:items,po:String(out.po||'').trim(),supplier:String(out.supplier||'').trim(),unit:String(out.unit||'').trim()};
+}
+/* ---------- kamera ---------- */
+async function startStream(){
+  stopStream();
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){stat('Kamera tidak tersedia di sini (butuh https:// atau file lokal). Pakai tombol 🖼 Dari galeri.','err');return false;}
+  try{
+    S.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:S.facing},width:{ideal:1920},height:{ideal:1080}},audio:false});
+  }catch(e){stat('Kamera tidak bisa dibuka: '+(e&&e.name==='NotAllowedError'?'izin kamera ditolak. Izinkan kamera di pengaturan browser.':(e&&e.message||e))+' — pakai 🖼 Dari galeri.','err');return false;}
+  var v=$('cmVid');v.srcObject=S.stream;
+  await new Promise(function(res){if(v.readyState>=1)return res();v.onloadedmetadata=res;setTimeout(res,2500);});
+  try{await v.play();}catch(e){}
+  if(v.videoWidth)$('cmStage').style.aspectRatio=v.videoWidth+' / '+v.videoHeight;
+  return true;
+}
+function stopStream(){if(S.stream){S.stream.getTracks().forEach(function(t){t.stop();});S.stream=null;}}
+function grab(src,w,h,max){
+  var s=Math.min(1,max/Math.max(w,h)),c=document.createElement('canvas');c.width=Math.max(1,Math.round(w*s));c.height=Math.max(1,Math.round(h*s));
+  var g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.drawImage(src,0,0,c.width,c.height);return c;
+}
+/* ---------- gambar kotak & daftar ---------- */
+function pageItems(){return S.items.filter(function(i){return i.page===S.page;});}
+function drawBoxes(list){
+  var svg=$('cmSvg');if(!svg)return;var h='';
+  list.forEach(function(it){
+    var idx=S.items.indexOf(it),sel=idx===S.sel;
+    function box(b,col,label){if(!b)return '';
+      return '<rect x="'+b[0]+'" y="'+b[1]+'" width="'+(b[2]-b[0])+'" height="'+(b[3]-b[1])+'" rx="6" fill="'+col+'" fill-opacity="'+(sel?.28:.12)+'" stroke="'+col+'" stroke-width="'+(sel?5:3)+'" vector-effect="non-scaling-stroke"/>'+
+        '<text x="'+(b[0]+6)+'" y="'+Math.max(26,b[1]-6)+'" font-size="26" font-weight="800" fill="'+col+'" stroke="#000" stroke-width="3" paint-order="stroke">'+label+'</text>';}
+    h+=box(it.bd,'#3b82f6','D'+(idx+1))+box(it.bq,'#f59e0b','Q'+(idx+1)+': '+esc(A.fmt(it.q)));
+  });
+  svg.innerHTML=h;
+}
+function esc(s){return A.E(s);}
+function renderRows(){
+  var box=$('cmRes');if(!box)return;
+  box.innerHTML=S.items.map(function(it,i){return '<div class="cm-row'+(i===S.sel?' sel':'')+'" data-i="'+i+'"><span>'+(i+1)+'</span><input data-cmf="d" value="'+esc(it.d)+'"><input data-cmf="q" value="'+esc(A.fmt(it.q))+'" inputmode="decimal"><button type="button" data-cm="del" title="Hapus">×</button></div>';}).join('');
+  var u=$('cmUse');if(u)u.textContent='✔ Gunakan hasil ('+S.items.length+' item)';
+  var tot=S.items.reduce(function(a,i){return a+(+i.q||0);},0);var t=$('cmTot');if(t)t.textContent=S.items.length?('Total '+A.fmt(tot)):'';
+}
+/* ---------- proses ---------- */
+async function process(srcEl,w,h,fromVideo){
+  if(S.busy)return;S.busy=true;setBusy(true);
+  try{
+    var hi=grab(srcEl,w,h,1800);
+    var fz=$('cmFrz');fz.width=hi.width;fz.height=hi.height;fz.getContext('2d').drawImage(hi,0,0);fz.style.display='block';$('cmVid').style.visibility='hidden';
+    $('cmStage').style.aspectRatio=hi.width+' / '+hi.height;S.frozen=true;stopLive();
+    stat('⏳ AI membaca dan menandai kotak…');
+    var b64=hi.toDataURL('image/jpeg',0.85).split(',')[1];
+    var res=await detect(b64);
+    if(!res.items.length){stat('Tidak ada baris item terbaca. Ulangi dengan foto yang lebih jelas dan lurus.','err');drawBoxes([]);return;}
+    var pg=S.pages.length;S.pages.push({jpeg:hi.toDataURL('image/jpeg',0.85),small:grab(hi,hi.width,hi.height,1000).toDataURL('image/jpeg',0.7),po:res.po,supplier:res.supplier,unit:res.unit});
+    res.items.forEach(function(it){it.page=pg;S.items.push(it);});S.page=pg;S.sel=-1;
+    drawBoxes(pageItems());renderRows();
+    stat('✅ '+res.items.length+' item pada halaman ini ('+S.items.length+' total). Kotak biru = Deskripsi, oranye = Qty (perkiraan AI). Periksa, koreksi di daftar, lalu “Gunakan hasil”.','ok');
+  }catch(e){var m=e&&e.message?e.message:String(e);if(/Failed to fetch|NetworkError|Load failed/i.test(m))m='Tidak bisa terhubung ke Google Gemini (periksa internet).';stat('❌ '+m,'err');}
+  finally{S.busy=false;setBusy(false);}
+}
+function setBusy(b){['cmShot','cmFile'].forEach(function(id){var e=$(id);if(e)e.disabled=b;});}
+/* deteksi langsung (berkala) */
+function stopLive(){clearTimeout(S.liveTimer);S.liveTimer=null;}
+function liveTick(){
+  stopLive();if(!S.live||S.frozen||!S.open)return;
+  S.liveTimer=setTimeout(async function(){
+    var v=$('cmVid');
+    if(!S.live||S.frozen||!S.open||S.busy||!v||!v.videoWidth){return liveTick();}
+    S.busy=true;
+    try{
+      stat('🔴 Deteksi langsung… (frame dikirim ke AI)');
+      var c=grab(v,v.videoWidth,v.videoHeight,900),res=await detect(c.toDataURL('image/jpeg',0.8).split(',')[1]);
+      if(S.live&&!S.frozen){
+        drawLive(res.items);stat('🔴 Live: '+res.items.length+' baris terdeteksi. Arahkan kamera lurus ke tabel, lalu tekan 📸 Ambil & Baca.');}
+    }catch(e){stat('Live berhenti: '+(e&&e.message||e),'err');S.live=false;var c2=$('cmLive');if(c2)c2.checked=false;}
+    finally{S.busy=false;liveTick();}
+  },S.firstLive?6000:200);
+  S.firstLive=true;
+}
+function drawLive(items){
+  var svg=$('cmSvg');if(!svg)return;var h='';
+  items.forEach(function(it,i){
+    function box(b,col,label){if(!b)return '';return '<rect x="'+b[0]+'" y="'+b[1]+'" width="'+(b[2]-b[0])+'" height="'+(b[3]-b[1])+'" rx="6" fill="'+col+'" fill-opacity=".12" stroke="'+col+'" stroke-width="3" vector-effect="non-scaling-stroke"/><text x="'+(b[0]+6)+'" y="'+Math.max(26,b[1]-6)+'" font-size="26" font-weight="800" fill="'+col+'" stroke="#000" stroke-width="3" paint-order="stroke">'+label+'</text>';}
+    h+=box(it.bd,'#3b82f6','D'+(i+1))+box(it.bq,'#f59e0b',esc(A.fmt(it.q)));
+  });
+  svg.innerHTML=h;
+}
+function unfreeze(){
+  S.frozen=false;$('cmFrz').style.display='none';$('cmVid').style.visibility='visible';$('cmSvg').innerHTML='';
+  var v=$('cmVid');if(v&&v.videoWidth)$('cmStage').style.aspectRatio=v.videoWidth+' / '+v.videoHeight;
+  stat(S.items.length?'Arahkan ke halaman berikutnya lalu tekan 📸 Ambil & Baca (hasil ditambahkan di bawah item yang ada).':'Arahkan kamera ke tabel barang surat jalan, lalu tekan 📸 Ambil & Baca.');
+  liveTick();
+}
+function use(){
+  if(!S.items.length){stat('Belum ada item.','err');return;}
+  var d=S.items.map(function(i){return i.d;}),q=S.items.map(function(i){return A.fmt(i.q);});
+  var pd=$('_iaPartDesc'),pq=$('_iaQty');
+  if(pd){pd.value=d.join('\n');pd.rows=Math.min(10,Math.max(3,d.length));}
+  if(pq){pq.value=q.join('\n');pq.rows=pd?pd.rows:3;}
+  var cnt={};S.items.forEach(function(i){if(i.u)cnt[i.u]=(cnt[i.u]||0)+1;});
+  var unit=Object.keys(cnt).sort(function(a,b){return cnt[b]-cnt[a];})[0]||(S.pages.length&&S.pages[0].unit)||'';
+  if(unit&&$('_iaQtyUnit'))$('_iaQtyUnit').value=unit;
+  S.pages.forEach(function(p){
+    if(p.po&&$('_iaPO')&&!$('_iaPO').value.trim())$('_iaPO').value=p.po;
+    if(p.supplier&&$('_iaSupplier')&&!$('_iaSupplier').value.trim())$('_iaSupplier').value=p.supplier;
+    if(typeof window._iaAddThumb==='function')window._iaAddThumb(p.small,'photoSuratJalan',p.jpeg);
+  });
+  var n=S.items.length,tot=S.items.reduce(function(a,i){return a+(+i.q||0);},0);
+  close();A.stat('✅ Hasil scan kamera: '+n+' item, total '+A.fmt(tot)+' '+unit+'. Foto halaman masuk ke Surat Jalan. Periksa sebelum menyimpan.','ok');
+}
+/* ---------- buka/tutup ---------- */
+function build(){
+  var ov=document.createElement('div');ov.id='_camOv';
+  ov.innerHTML='<div class="cm-top"><span>📷 Scan Surat Jalan — kotak Deskripsi &amp; Qty</span><button type="button" data-cm="close" aria-label="Tutup">✕</button></div>'+
+   '<div class="cm-main"><div class="cm-stage" id="cmStage"><video id="cmVid" playsinline muted autoplay></video><canvas id="cmFrz" style="display:none"></canvas><svg id="cmSvg" viewBox="0 0 1000 1000" preserveAspectRatio="none"></svg></div>'+
+   '<div class="cm-side"><div class="cm-stat" id="cmStat"></div>'+
+   '<div class="cm-leg"><span><i style="background:#3b82f6"></i>Deskripsi</span><span><i style="background:#f59e0b"></i>Qty</span><span id="cmTot" style="margin-left:auto;font-weight:800;color:#fff"></span></div>'+
+   '<div class="cm-bar"><button type="button" class="cm-b pri" id="cmShot" data-cm="shot">📸 Ambil &amp; Baca</button><button type="button" class="cm-b" id="cmFile" data-cm="file">🖼 Dari galeri</button><button type="button" class="cm-b" data-cm="flip" title="Ganti kamera">🔄</button>'+
+   '<label class="cm-chk" title="Mengirim frame kecil ke AI sekitar tiap 6 detik (memakai kuota gratis Gemini)"><input type="checkbox" id="cmLive"> 🔴 Deteksi langsung (± tiap 6 dtk)</label></div>'+
+   '<div class="cm-res" id="cmRes"></div></div></div>'+
+   '<div class="cm-foot"><button type="button" class="cm-b" data-cm="again">↩ Halaman berikutnya / ulang</button><button type="button" class="cm-b ok" id="cmUse" data-cm="use">✔ Gunakan hasil (0 item)</button></div>';
+  document.body.appendChild(ov);return ov;
+}
+async function open(){
+  if(S.open)return;
+  if(!A.ls(A.KEY)){A.showCfg(true);return;}
+  S.items=[];S.pages=[];S.page=0;S.sel=-1;S.frozen=false;S.live=false;S.firstLive=false;S.open=true;
+  build();renderRows();stat('Membuka kamera…');
+  var ok=await startStream();
+  if(ok)stat('Arahkan kamera ke tabel barang surat jalan (tegak lurus, terang), lalu tekan 📸 Ambil & Baca. Opsional: aktifkan 🔴 Deteksi langsung untuk melihat kotak sambil mengarahkan.');
+}
+function close(){
+  S.open=false;stopLive();stopStream();var ov=$('_camOv');if(ov)ov.remove();
+}
+document.addEventListener('click',function(e){
+  var t=e.target.closest&&e.target.closest('#_iaCamBtn,[data-cm]');if(!t)return;
+  if(t.id==='_iaCamBtn'){open();return;}
+  var a=t.getAttribute('data-cm');
+  if(a==='close')close();
+  else if(a==='shot'){var v=$('cmVid');if(!S.frozen&&v&&v.videoWidth)process(v,v.videoWidth,v.videoHeight,true);else if(S.frozen)stat('Tekan ↩ untuk mengambil halaman lain.','err');else stat('Kamera belum siap. Pakai 🖼 Dari galeri.','err');}
+  else if(a==='file'){
+    var inp=document.createElement('input');inp.type='file';inp.accept='image/*';
+    inp.onchange=function(){var f=inp.files&&inp.files[0];if(!f)return;var im=new Image(),u=URL.createObjectURL(f);im.onload=function(){URL.revokeObjectURL(u);process(im,im.naturalWidth,im.naturalHeight,false);};im.onerror=function(){stat('Gambar tidak bisa dibaca.','err');};im.src=u;};
+    inp.click();
+  }
+  else if(a==='flip'){S.facing=S.facing==='environment'?'user':'environment';startStream();}
+  else if(a==='again'){if(S.frozen)unfreeze();}
+  else if(a==='use')use();
+  else if(a==='del'){var row=t.closest('.cm-row');if(!row)return;S.items.splice(+row.getAttribute('data-i'),1);S.sel=-1;renderRows();drawBoxes(pageItems());}
+});
+document.addEventListener('change',function(e){
+  if(e.target&&e.target.id==='cmLive'){S.live=e.target.checked;if(S.live){S.firstLive=false;if(S.frozen)unfreeze();else liveTick();}else{stopLive();if(!S.frozen)$('cmSvg').innerHTML='';}}
+});
+document.addEventListener('input',function(e){
+  var f=e.target.getAttribute&&e.target.getAttribute('data-cmf');if(!f)return;
+  var row=e.target.closest('.cm-row');if(!row)return;var it=S.items[+row.getAttribute('data-i')];if(!it)return;
+  if(f==='d')it.d=e.target.value;else{var n=A.parseQty(e.target.value);it.q=n==null?0:n;}
+  var tot=S.items.reduce(function(a,i){return a+(+i.q||0);},0);var t=$('cmTot');if(t)t.textContent='Total '+A.fmt(tot);
+  if(S.frozen)drawBoxes(pageItems());
+});
+document.addEventListener('focusin',function(e){
+  var row=e.target.closest&&e.target.closest('.cm-row');if(!row)return;S.sel=+row.getAttribute('data-i');
+  document.querySelectorAll('#_camOv .cm-row').forEach(function(r){r.classList.toggle('sel',+r.getAttribute('data-i')===S.sel);});
+  if(S.frozen)drawBoxes(pageItems());
+});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'&&S.open)close();});
+window._iaCam={open:open,close:close};
 })();
 </script>
 
