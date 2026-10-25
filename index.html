@@ -14881,6 +14881,51 @@ input::placeholder, textarea::placeholder {
     }catch(e){ console.warn('[Mode server]', e); }
     finally{ _srvBusy = false; }
   }
+  /* ---------- Hapus record → PDF-nya ikut terhapus dari folder OneDrive (di komputer yang punya akses folder) ---------- */
+  function namesGet(){ try{ return JSON.parse(localStorage.getItem('incOdNames') || '{}'); }catch(e){ return {}; } }
+  function namesSet(m){ try{ localStorage.setItem('incOdNames', JSON.stringify(m)); }catch(e){} }
+  var _missCnt = {}, _chk = {}, _sweepBusy = false;
+  async function odSweep(){
+    if(_sweepBusy) return; _sweepBusy = true;
+    try{
+      var h = await odReady(false); if(!h) return;
+      var all = (typeof incStoreAll === 'function') ? incStoreAll() : [];
+      if(!all.length) return;                         // data belum termuat → jangan hapus apa pun
+      var map = namesGet(), present = {}, inUse = {}, changed = false, deleted = 0;
+      for(var i=0;i<all.length;i++){
+        var r = all[i]; present[r.id] = 1; delete _missCnt[r.id];
+        var nm = (r.docPdf && r.docPdf.od && r.docPdf.name) ? r.docPdf.name : null;
+        if(!nm && !map[r.id] && !_chk[r.id]){ _chk[r.id] = 1; var cand = pdfFileName(r); if(await odExists(h, cand)) nm = cand; }
+        if(nm && map[r.id] !== nm){ map[r.id] = nm; changed = true; }
+        inUse[(map[r.id] || (r.docPdf && r.docPdf.name) || pdfFileName(r))] = 1;
+      }
+      var gone = Object.keys(map).filter(function(id){ return !present[id]; });
+      if(gone.length > 5 && gone.length > Object.keys(map).length * 0.3){ console.warn('[OneDrive] terlalu banyak record hilang sekaligus, penghapusan PDF dibatalkan'); if(changed) namesSet(map); return; }
+      for(var g=0;g<gone.length;g++){
+        var id = gone[g]; _missCnt[id] = (_missCnt[id] || 0) + 1;
+        if(_missCnt[id] < 2) continue;                // harus hilang di 2 pengecekan berturut-turut
+        if(inUse[map[id]]){ delete map[id]; changed = true; continue; }   // nama file dipakai record lain
+        try{ await h.removeEntry(map[id]); }
+        catch(e){ if(!e || e.name !== 'NotFoundError'){ console.warn('[OneDrive] gagal hapus', map[id], e); continue; } }
+        delete map[id]; delete _missCnt[id]; changed = true; deleted++;
+      }
+      if(changed) namesSet(map);
+      if(deleted) toast('🗑️ '+deleted+' PDF ikut dihapus dari folder OneDrive.');
+    }catch(e){ console.warn('[OneDrive sweep]', e); }
+    finally{ _sweepBusy = false; }
+  }
+  document.addEventListener('click', function(e){
+    if(e.target.closest && e.target.closest('[data-inc-del],#_incMdlDel')){
+      try{   // catat nama PDF record yang ada SEKARANG (sebelum dihapus), supaya bisa ikut dihapus
+        var m = namesGet();
+        (typeof incStoreAll === 'function' ? incStoreAll() : []).forEach(function(r){ if(r.docPdf && r.docPdf.od && r.docPdf.name) m[r.id] = r.docPdf.name; });
+        namesSet(m);
+      }catch(e2){}
+      setTimeout(odSweep, 3000); setTimeout(odSweep, 25000);
+    }
+  }, true);
+  setTimeout(odSweep, 15000);
+  setInterval(odSweep, 60000);
   setTimeout(srvTick, 10000);
   setInterval(srvTick, 60000);
   window.addEventListener('online', function(){ setTimeout(function(){ odFlush(false, null).catch(function(){}); srvTick(); }, 1500); });
@@ -18676,19 +18721,8 @@ body.is-wi #qoBtn{display:none}
       var tb=document.getElementById('wiOutBtn');
       if(tb){var n=count({mod:'wi',proj:null});tb.querySelector('span').textContent=badgeTxt(n);}
       if(!wiBody)return;
-      wiBody.querySelectorAll('table.wi-data tbody tr[data-id]').forEach(function(tr){
-        if(tr.querySelector('.qo-mini'))return;
-        var cell=tr.querySelector('td[data-l="Foto"] .cv')||tr.querySelector('td[data-l="Foto"]'); if(!cell)return;
-        var id=tr.getAttribute('data-id');
-        var mk=tr.querySelector('td[data-l="Marking ID"]'), pj=tr.querySelector('td[data-l="Project"]');
-        var n=count({mod:'wi',proj:null,ref:id});
-        var b=document.createElement('button');
-        b.type='button'; b.className='qo-mini'+(n.o?' has':(n.c?' done':'')); b.setAttribute('data-qo-wi',id);
-        b.setAttribute('data-qo-lbl',mk?mk.textContent.trim():id); b.setAttribute('data-qo-proj',pj?pj.textContent.trim():'');
-        b.title='Outstanding untuk record ini';
-        b.textContent='📌'+(n.o?' '+n.o:(n.c?' ✓':''));
-        cell.appendChild(document.createElement('br')); cell.appendChild(b);
-      });
+      // Tombol 📌 per-baris di kolom Foto WI & NDT tidak ditampilkan (cukup tombol Outstanding di toolbar)
+      wiBody.querySelectorAll('.qo-mini').forEach(function(b){var br=b.previousSibling; if(br&&br.nodeName==='BR')br.remove(); b.remove();});
     }catch(e){}
   }
   if(wiRoot){
