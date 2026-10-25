@@ -8313,6 +8313,11 @@ async function push(){
           const pv = window.QCOut ? await window.QCOut.photoGet(key) : undefined;
           if (pv === undefined) { drop.push(id); continue; }              // foto belum ada di perangkat ini: jangan kirim penghapusan
           v = pv || null;
+        } else if (kind === 'n' || kind === 'g') {
+          const pv = window.QCInc ? await window.QCInc.getForSync(kind, key) : undefined;
+          if (pv === undefined) { drop.push(id); continue; }
+          if (pv && pv.wait) { deferred.add(id); continue; }   // foto belum selesai tersimpan: coba lagi nanti
+          v = pv;
         } else if (kind === 'd') { v = raw('boqdwg_' + key); } else if (kind === 'a') { v = raw('qcadd_' + key); } else if (kind === 'c') {
           v = (key in chk) ? String(!!chk[key]) : null;
         } else if (kind === 'u') {
@@ -8390,6 +8395,7 @@ function applyRecords(recs){
     if (kind === 'u') { pendU.push(r); return; }
     if (kind === 'r') { pendR.push(r); return; }
     if (kind === 'o') { try { if (r.v === null) { if (raw('qcout_' + key) != null) { _rem.call(LS, 'qcout_' + key); window.__qoCh = true; } } else if (raw('qcout_' + key) !== r.v) { _set.call(LS, 'qcout_' + key, r.v); window.__qoCh = true; } } catch(e) { console.warn('QCSync: penyimpanan penuh, lewati', key); } return; }
+    if (kind === 'n' || kind === 'g') { try { if (window.QCInc && window.QCInc.apply(kind, key, r.v)) window.__qcIncCh = true; } catch(e) { console.warn('QCSync: gagal menerapkan record Incoming', key, e); } return; }
     if (kind === 'f') { try { if (window.QCOut) window.QCOut.applyPhoto(key, r.v); } catch(e) {} return; }
     if (kind === 'a') { try { if (r.v === null) _rem.call(LS, 'qcadd_' + key); else _set.call(LS, 'qcadd_' + key, r.v); window.__qcAddCh = true; } catch(e) { console.warn('QCSync: penyimpanan penuh, lewati', key); } return; }
     if (kind === 'd') { try { if (window.__boqApplyDwg) window.__boqApplyDwg(key, r.v, _set, _rem, LS); } catch(e) {} return; }
@@ -8418,6 +8424,7 @@ function applyRecords(recs){
   if (chkCh) silentPatch(chkKeys);
   if (window.__qoCh) { window.__qoCh = false; try { if (window.QCOut) window.QCOut.reload(); } catch(e) {} }
   if (window.__qcAddCh) { window.__qcAddCh = false; try { if (window.QCAdd) window.QCAdd.refresh(); } catch(e) {} }
+  if (window.__qcIncCh) { window.__qcIncCh = false; try { if (window.QCInc) window.QCInc.refresh(); } catch(e) {} }
   return recs.length;
 }
 
@@ -10039,6 +10046,148 @@ window.addEventListener('load',function(){
   }
 })();
 </script>
+<script id="qcinc-sync">
+/* ===== Sinkron record Incoming ke semua inspector (lewat QCSync) =====
+   - Record  : kind 'n:<id>'  -> JSON record (tanpa docPdf; PDF dibuat ulang dari data di tiap perangkat)
+   - Foto    : kind 'g:<pid>' -> data URL foto (IndexedDB 'qc_incoming_photos'), dikecilkan bila > batas 1 catatan
+   Perubahan lokal dideteksi saat saveState() dipanggil; perubahan inspector lain masuk lewat QCSync.pull. */
+(function(){
+  'use strict';
+  if(window.QCInc) return;
+  var LS=window.localStorage, SK='qc_sync_inc_snap', PK='qc_sync_inc_ph';
+  var CATS=['photoSuratJalan','photoPO','photoDokPendukung','photoHasil'];
+  var MAXV=800000, tries={};
+  function jget(k,d){try{var v=LS.getItem(k);return v?JSON.parse(v):d;}catch(e){return d;}}
+  function jset(k,v){try{LS.setItem(k,JSON.stringify(v));}catch(e){}}
+  var SNAP=jget(SK,{}), PSEEN=jget(PK,{});
+  function hash(s){var x=5381;for(var i=0;i<s.length;i++)x=((x<<5)+x+s.charCodeAt(i))|0;return x+':'+s.length;}
+  function connected(){try{return !!(window.QCSync&&window.QCSync.state().url);}catch(e){return false;}}
+  function mark(id){try{window.QCSync.mark(id);}catch(e){}}
+  function isSample(r){return !r||!r.id||/sample/i.test(r.id);}
+  function recs(){
+    var out=[],s=window.state; if(!s||!Array.isArray(s.workUnits)) return out;
+    s.workUnits.forEach(function(w){
+      var ud=s.dataByWorkUnit&&s.dataByWorkUnit[w.key];
+      if(ud&&Array.isArray(ud.incoming)) ud.incoming.forEach(function(r){ if(!isSample(r)) out.push({r:r,w:w}); });
+    });
+    return out;
+  }
+  function payload(e){
+    var o=Object.assign({},e.r); delete o.docPdf;
+    o._wu={key:e.w.key,unit:e.w.unit,project:e.w.project};
+    return JSON.stringify(o);
+  }
+  function scan(){
+    if(!connected()) return;
+    var all=recs(),seen={},ch=false;
+    all.forEach(function(e){
+      var id=e.r.id; seen[id]=1;
+      var h=hash(payload(e));
+      if(SNAP[id]!==h){ SNAP[id]=h; ch=true; mark('n:'+id); }
+      CATS.forEach(function(c){ (e.r[c]||[]).forEach(function(pid){ if(!PSEEN[pid]){ PSEEN[pid]=1; ch=true; mark('g:'+pid); } }); });
+    });
+    Object.keys(SNAP).forEach(function(id){ if(!seen[id]){ delete SNAP[id]; ch=true; mark('n:'+id); } }); // dihapus lokal -> kirim penghapusan
+    if(ch){ jset(SK,SNAP); jset(PK,PSEEN); }
+  }
+
+  /* ---------- foto ---------- */
+  function photoDB(){return new Promise(function(ok,no){var r=indexedDB.open('qc_incoming_photos',1);r.onupgradeneeded=function(){r.result.createObjectStore('p');};r.onsuccess=function(){ok(r.result);};r.onerror=function(){no(r.error);};});}
+  function pGet(pid){
+    return Promise.resolve().then(function(){ return window.getPhotoData?window.getPhotoData(pid):null; }).catch(function(){return null;});
+  }
+  function pPut(pid,data){
+    return photoDB().then(function(db){return new Promise(function(ok,no){var tx=db.transaction('p','readwrite');tx.objectStore('p').put(data,pid);tx.oncomplete=ok;tx.onerror=function(){no(tx.error);};});})
+      .then(function(){try{window.photoCache=window.photoCache||{};window.photoCache[pid]=data;}catch(e){}});
+  }
+  function shrink(du){
+    return new Promise(function(res){
+      var im=new Image();
+      im.onload=function(){
+        var dims=[1400,1100,900,700],qs=[.75,.7,.65,.6],out=du;
+        for(var i=0;i<dims.length;i++){
+          var s=Math.min(1,dims[i]/Math.max(im.width,im.height)),c=document.createElement('canvas');
+          c.width=Math.max(1,Math.round(im.width*s));c.height=Math.max(1,Math.round(im.height*s));
+          var g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.drawImage(im,0,0,c.width,c.height);
+          out=c.toDataURL('image/jpeg',qs[i]); if(out.length<=MAXV) break;
+        }
+        res(out);
+      };
+      im.onerror=function(){res(du);};
+      im.src=du;
+    });
+  }
+
+  /* ---------- dipanggil QCSync ---------- */
+  async function getForSync(kind,key){
+    if(kind==='n'){
+      var f=recs().filter(function(e){return e.r.id===key;})[0];
+      return f?payload(f):null;
+    }
+    var d=await pGet(key);
+    if(!d){ tries[key]=(tries[key]||0)+1; return tries[key]>6?undefined:{wait:true}; }
+    if(d.length>MAXV) d=await shrink(d);
+    return d.length>MAXV?undefined:d;
+  }
+  function removeRec(id){
+    var s=window.state,ch=false; if(!s||!s.workUnits) return false;
+    s.workUnits.forEach(function(w){
+      var ud=s.dataByWorkUnit&&s.dataByWorkUnit[w.key];
+      if(ud&&Array.isArray(ud.incoming)){ var i=ud.incoming.findIndex(function(r){return r.id===id;}); if(i>=0){ud.incoming.splice(i,1);ch=true;} }
+    });
+    return ch;
+  }
+  function apply(kind,key,v){
+    var s=window.state; if(!s) return false;
+    if(kind==='g'){
+      if(v==null||PSEEN[key]&&window.photoCache&&window.photoCache[key]) return false;
+      PSEEN[key]=1; jset(PK,PSEEN);
+      pPut(key,v).then(function(){ refresh(); });
+      return false;
+    }
+    if(v==null){ if(!removeRec(key)) return false; delete SNAP[key]; jset(SK,SNAP); finish(); return true; }
+    var o; try{o=JSON.parse(v);}catch(e){return false;}
+    if(!o||!o.id) return false;
+    var wu=o._wu||{key:'default',unit:'Unit 1',project:''}; delete o._wu;
+    if(!Array.isArray(s.workUnits)) s.workUnits=[];
+    if(!s.dataByWorkUnit) s.dataByWorkUnit={};
+    if(!s.workUnits.some(function(w){return w.key===wu.key;})) s.workUnits.push({key:wu.key,unit:wu.unit,project:wu.project});
+    var ud=s.dataByWorkUnit[wu.key]||(s.dataByWorkUnit[wu.key]={});
+    if(!Array.isArray(ud.incoming)) ud.incoming=[];
+    var keepPdf=null;
+    recs().forEach(function(e){ if(e.r.id===o.id&&e.r.docPdf) keepPdf=e.r.docPdf; });
+    removeRec(o.id); // pindahkan bila unit berbeda
+    if(keepPdf) o.docPdf=keepPdf;
+    ud.incoming.push(o);
+    CATS.forEach(function(c){ (o[c]||[]).forEach(function(pid){ PSEEN[pid]=PSEEN[pid]||0; }); });
+    SNAP[o.id]=hash(JSON.stringify(Object.assign({},o,{docPdf:undefined,_wu:{key:wu.key,unit:wu.unit,project:wu.project}})));
+    finish(); return true;
+  }
+  function finish(){ jset(SK,SNAP); try{ if(typeof window.saveState==='function') window.saveState(); }catch(e){} }
+  function refresh(){
+    try{ if(typeof renderIncoming==='function'&&document.getElementById('incomingView')&&document.getElementById('incomingView').style.display!=='none') renderIncoming(); }catch(e){}
+    try{ if(typeof updateIncomingBadge==='function') updateIncomingBadge(); }catch(e){}
+  }
+
+  /* ---------- hook saveState + penanda status di tombol Sinkron ---------- */
+  function hook(){
+    if(typeof window.saveState!=='function'||window.saveState.__qcinc) return !!(window.saveState&&window.saveState.__qcinc);
+    var orig=window.saveState;
+    var w=function(){ var r=orig.apply(this,arguments); try{scan();}catch(e){} return r; };
+    w.__qcinc=1; window.saveState=w; return true;
+  }
+  function dot(){
+    var d=document.getElementById('incSyncDot'); if(!d||!window.QCSync) return;
+    var s=window.QCSync.state(),c='#94a3b8',t='Belum terhubung — klik untuk menghubungkan';
+    if(s.url){ var k=s.status&&s.status.kind; c=k==='ok'?'#22c55e':k==='err'?'#ef4444':'#f59e0b'; t=(s.status&&s.status.msg)||'Terhubung'; }
+    d.style.color=c; var b=document.getElementById('incSyncBtn'); if(b) b.title='Sinkron ke semua inspector — '+t;
+  }
+  window.QCInc={getForSync:getForSync,apply:apply,refresh:refresh,scan:scan};
+  var n=0,iv=setInterval(function(){ if(hook()||++n>40) clearInterval(iv); },250);
+  setInterval(function(){ try{scan();}catch(e){} dot(); },5000);
+  window.addEventListener('load',function(){ setTimeout(function(){ hook(); try{scan();}catch(e){} },3500); });
+})();
+</script>
+
 <script>
 function showIncoming() {
   // Mode khusus Incoming: semua elemen Project (dropdown project, pencarian,
@@ -10614,6 +10763,7 @@ function renderIncoming(){
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <button type="button" class="inc-back-btn" id="incBackBtn" onclick="showHome()" title="Kembali ke Dashboard">← Dashboard</button>
+        <button type="button" class="inc-back-btn" id="incSyncBtn" onclick="window.QCSync&&QCSync.open()" title="Sinkron ke semua inspector">🔄 Sinkron <span id="incSyncDot" style="color:#94a3b8">●</span></button>
         <button type="button" class="inc-add-btn" id="incAddBtn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Tambah Record
@@ -10741,6 +10891,16 @@ function renderIncoming(){
       if(pdfLink){
         e.stopPropagation();
         if(typeof window.incOpenSavedPdf === 'function') window.incOpenSavedPdf(pdfLink.dataset.incPdf);
+        return;
+      }
+
+      // ── Ikon PDF belum tersimpan: buat & buka PDF dari data record ──
+      const prevLink = e.target.closest('[data-inc-prev]');
+      if(prevLink){
+        e.stopPropagation();
+        if(typeof window.incOpenDocPreview === 'function'){
+          Promise.resolve(window.incOpenDocPreview(prevLink.dataset.incPrev)).catch(err=>{ console.error(err); alert('Gagal membuka PDF: '+(err&&err.message?err.message:err)); });
+        }
         return;
       }
 
@@ -11415,12 +11575,9 @@ function renderMrsRow(rec, allRecs){
   const resultLbl = rec.result||'PENDING';
   const dateDisp  = rec.date ? new Date(rec.date+'T00:00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
   const totalFoto = (rec.photoSuratJalan||[]).length+(rec.photoPO||[]).length+(rec.photoDokPendukung||[]).length+(rec.photoHasil||[]).length;
-  const docBadge  = (rec.docPdf && rec.docPdf.name)
-    ? `<span class="mrs-pdf-link" data-inc-pdf="${esc(rec.id)}" title="${esc(rec.docPdf.name)} — klik untuk membuka PDF">📄 PDF</span>`
-      + `<span class="mrs-pdf-date">${rec.docPdf.savedAt ? new Date(rec.docPdf.savedAt).toLocaleDateString('id-ID',{day:'2-digit',month:'2-digit',year:'numeric'}) : ''}</span>`
-    : (totalFoto > 0
-      ? `<span class="mrs-doc-link" data-inc-open="${esc(rec.id)}" title="Lihat ${totalFoto} foto">${totalFoto} foto 📎</span>`
-      : `<span style="color:#aaa;font-size:10px;">Belum ada</span>`);
+  const hasSavedPdf = !!(rec.docPdf && rec.docPdf.name);
+  const docBadge  = `<span class="mrs-pdf-ico" ${hasSavedPdf?'data-inc-pdf':'data-inc-prev'}="${esc(rec.id)}" role="button" tabindex="0" aria-label="Buka PDF" title="${hasSavedPdf?esc(rec.docPdf.name)+' — klik untuk membuka PDF':'Klik untuk membuka PDF dokumen'}">`
+    + `<svg width="26" height="32" viewBox="0 0 26 32" aria-hidden="true"><path d="M3 1h14l7 7v21a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2z" fill="#fff" stroke="#c0392b" stroke-width="1.6"/><path d="M17 1v7h7" fill="#fbe3e0" stroke="#c0392b" stroke-width="1.6" stroke-linejoin="round"/><rect x="1" y="14" width="22" height="10" rx="2" fill="#c0392b"/><text x="12" y="21.7" text-anchor="middle" font-family="Arial,sans-serif" font-weight="800" font-size="7.4" fill="#fff">PDF</text></svg></span>`;
   const checkOk = v => (v==='OK')?`<span class="mrs-ok">OK</span>`:`<span class="mrs-na">${v||'—'}</span>`;
 
   // ── Supplier stacked bar (accept=hijau / reject=merah / pending=abu) ──
@@ -14205,7 +14362,7 @@ input::placeholder, textarea::placeholder {
   window.incOpenSavedPdf = async function(id){
     try{
       var row = await getPdf(id);
-      if(!row){ toast('⚠️ File PDF tidak ada di perangkat ini. Buka Cetak / Preview lalu klik Simpan lagi.'); return; }
+      if(!row){ if(typeof window.incOpenDocPreview==='function'){ await window.incOpenDocPreview(id); return; } toast('⚠️ File PDF tidak ada di perangkat ini. Buka Cetak / Preview lalu klik Simpan lagi.'); return; }
       var blob = new Blob([row.buf], {type:'application/pdf'});
       var url = URL.createObjectURL(blob);
       var name = row.name || 'dokumen.pdf';
@@ -14213,9 +14370,11 @@ input::placeholder, textarea::placeholder {
       var old = document.getElementById('_incPdfPopup');
       if(old) old.remove();
 
+      var mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || navigator.pdfViewerEnabled === false;
+      var opened = false;
       var ov = document.createElement('div');
       ov.id = '_incPdfPopup';
-      ov.style.cssText = 'position:fixed;inset:0;z-index:9990;background:rgba(10,20,35,.78);display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box;';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:9990;background:rgba(10,20,35,.78);display:flex;align-items:center;justify-content:center;padding:'+(mobile?'10px':'18px')+';box-sizing:border-box;';
       ov.innerHTML =
         '<div style="width:100%;max-width:980px;height:100%;max-height:94vh;background:#fff;border-radius:12px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 18px 60px rgba(0,0,0,.5);">'+
           '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:linear-gradient(135deg,#14314f,#1a5490);color:#fff;">'+
@@ -14226,7 +14385,14 @@ input::placeholder, textarea::placeholder {
             '</div>'+
           '</div>'+
           '<div style="flex:1;min-height:0;background:#525659;position:relative;">'+
-            '<iframe title="PDF" src="'+url+'#toolbar=1&navpanes=0" style="width:100%;height:100%;border:0;background:#525659;display:block;"></iframe>'+
+            (mobile
+              ? '<div style="height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center;color:#fff;font-family:Arial,sans-serif;">'+
+                  '<div style="font-size:54px;line-height:1;">📄</div>'+
+                  '<div style="font-size:14px;font-weight:700;word-break:break-word;">'+E(name)+'</div>'+
+                  '<button type="button" data-pp="open" style="width:100%;max-width:280px;background:#c0392b;border:0;color:#fff;border-radius:10px;padding:14px;font:800 15px Arial,sans-serif;">Buka PDF</button>'+
+                  '<button type="button" data-pp="dl" style="width:100%;max-width:280px;background:#1f8a5f;border:0;color:#fff;border-radius:10px;padding:14px;font:800 15px Arial,sans-serif;">⬇ Unduh PDF</button>'+
+                '</div>'
+              : '<iframe title="PDF" src="'+url+'#toolbar=1&navpanes=0" style="width:100%;height:100%;border:0;background:#525659;display:block;"></iframe>')+
           '</div>'+
         '</div>';
       document.body.appendChild(ov);
@@ -14234,7 +14400,7 @@ input::placeholder, textarea::placeholder {
       function close(){
         document.removeEventListener('keydown', onKey, true);
         ov.remove();
-        setTimeout(function(){ URL.revokeObjectURL(url); }, 500);
+        if(!opened) setTimeout(function(){ URL.revokeObjectURL(url); }, 500);
       }
       function onKey(e){ if(e.key === 'Escape'){ e.stopPropagation(); close(); } }
       document.addEventListener('keydown', onKey, true);
@@ -14243,6 +14409,7 @@ input::placeholder, textarea::placeholder {
         var b = e.target.closest('[data-pp]');
         if(!b) return;
         if(b.dataset.pp === 'close') close();
+        if(b.dataset.pp === 'open'){ opened = true; window.open(url, '_blank'); }
         if(b.dataset.pp === 'dl'){
           var a = document.createElement('a');
           a.href = url; a.download = name;
@@ -14529,6 +14696,9 @@ input::placeholder, textarea::placeholder {
     'background:#c0392b;border-radius:20px;padding:3px 10px;white-space:nowrap;transition:.12s;}'+
     '.mrs-pdf-link:hover{background:#e8a33d;transform:translateY(-1px);}'+
     '.mrs-pdf-date{display:block;font-size:8.5px;color:#7b8a99;margin-top:2px;white-space:nowrap;}'+
+    '.mrs-pdf-ico{display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:3px;border-radius:8px;transition:.12s;-webkit-tap-highlight-color:transparent;}'+
+    '.mrs-pdf-ico:hover{background:#fdecea;transform:translateY(-1px);}'+
+    '.mrs-pdf-ico svg{display:block;}'+
     '#ptbSaveBtn:disabled,#ptbPdfBtn:disabled{opacity:.55;cursor:wait;}'+
 
     /* ===== Tabel rekap: muat di lebar layar (tanpa geser samping) ===== */
@@ -18177,7 +18347,7 @@ var t;new MutationObserver(function(){clearTimeout(t);t=setTimeout(ensure,150);}
 .controls{gap:10px;flex-wrap:wrap;align-items:center}.controls .search-input{flex:1 1 220px;min-width:180px}
 .gx-more{position:relative;display:inline-flex}.gx-mb{display:inline-flex;align-items:center;gap:7px;cursor:pointer}
 .gx-mdot{width:9px;height:9px;border-radius:50%;background:#64748b;display:inline-block}.gx-mn:empty{display:none}.gx-mn{background:#e5484d;color:#fff;border-radius:99px;font-size:.68rem;font-style:normal;padding:1px 7px;font-weight:800}
-.gx-mp{position:fixed;z-index:99995;min-width:240px;max-width:calc(100vw - 16px);background:#fff;border:1px solid #dbe6f3;border-radius:14px;padding:8px;box-shadow:0 24px 60px -16px #000a;display:grid;gap:5px}.gx-mp[hidden]{display:none}
+.gx-mp{position:fixed;z-index:99995;min-width:240px;max-width:calc(100vw - 16px);background:#fff;border:1px solid #dbe6f3;border-radius:14px;padding:8px;box-shadow:0 24px 60px -16px #000a;display:grid;gap:5px}.gx-mp[hidden]{display:none}@media(max-width:600px){.gx-mp{width:min(320px,calc(100vw - 16px));box-sizing:border-box}}
 .gx-sec{font-size:.68rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#7b8fa8;padding:6px 8px 2px}
 .gx-mp button{width:100%!important;display:flex!important;justify-content:flex-start!important;align-items:center;gap:8px;text-align:left!important;margin:0!important;background:#f7faff!important;color:#10243e!important;border:1px solid #e3ebf5!important;border-radius:10px!important;box-shadow:none!important;padding:9px 12px!important;font-size:.88rem!important;cursor:pointer}
 .gx-mp button:hover{background:#eaf2ff!important;border-color:#2563eb!important}
@@ -18220,7 +18390,7 @@ function ensure(){try{outCard();}catch(e){console.warn('[outCard]',e);}[].forEac
 function closeAll(){[].forEach.call(document.querySelectorAll('.gx-mp'),function(p){p.hidden=true;});}
 document.addEventListener('click',closeAll);document.addEventListener('keydown',function(e){if(e.key==='Escape')closeAll();});window.addEventListener('resize',closeAll);
 function mkMore(label){var w=document.createElement('span');w.className='gx-more';var b=document.createElement('button');b.type='button';b.className='gx-mb';b.innerHTML='☰ '+label+' <i class="gx-mdot"></i><em class="gx-mn"></em>';var p=document.createElement('div');p.className='gx-mp';p.hidden=true;w.appendChild(b);w.appendChild(p);
- b.onclick=function(e){e.stopPropagation();var open=p.hidden;closeAll();if(open){var host=w.closest('.qo-ov')||document.body;if(p.parentNode!==host)host.appendChild(p);var r=b.getBoundingClientRect();p.style.top=(r.bottom+8)+'px';p.style.right=Math.max(8,innerWidth-r.right)+'px';p.hidden=false;}};p._w=w;p.onclick=function(){setTimeout(closeAll,0);};return w;}
+ b.onclick=function(e){e.stopPropagation();var open=p.hidden;closeAll();if(open){var host=w.closest('.qo-ov')||document.body;if(p.parentNode!==host)host.appendChild(p);var r=b.getBoundingClientRect();p.style.right='auto';p.style.left='8px';p.style.top=(r.bottom+8)+'px';p.hidden=false;var pw=p.offsetWidth,lf=Math.min(r.right-pw,innerWidth-pw-8);p.style.left=Math.max(8,lf)+'px';p.style.maxHeight=Math.max(160,innerHeight-r.bottom-20)+'px';p.style.overflowY='auto';}};p._w=w;p.onclick=function(){setTimeout(closeAll,0);};return w;}
 function sec(p,t){var d=document.createElement('div');d.className='gx-sec';d.textContent=t;p.appendChild(d);}
 function tidyControls(){var c=document.querySelector('.controls');if(!c||c.querySelector('.gx-more'))return;var add=c.querySelector('button[onclick*="QCAdd.open"]'),unit=c.querySelector('#unitBtn'),bell=c.querySelector('#bqBell'),sy=c.querySelector('#qcSyncBtn');if(!sy&&!bell&&!unit&&!add)return;
  var w=mkMore('Lainnya'),p=w.querySelector('.gx-mp');sec(p,'Data');[unit,add,bell].forEach(function(b){if(b)p.appendChild(b);});if(sy){sec(p,'Sinkronisasi');p.appendChild(sy);}c.appendChild(w);}
