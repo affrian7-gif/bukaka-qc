@@ -8269,6 +8269,97 @@ function diffUnits(){
   if (n) { jset(K.dirty, d); schedulePush(); }
 }
 
+/* ---------- Coating Inspection: project (per bagian), layout, foto Outstanding ---------- */
+const CK = 'dcs_bb_state', CL = 'dcs_bb_layout', INI3 = 'qc_sync_inited3';
+const coatPend = [], coatPendM = [];
+function coatLoad(){ return jget(CK, null); }
+function coatPieces(st){
+  const m = {};
+  ((st && st.projects) || []).forEach(p => {
+    if (!p || !p.id) return;
+    const meta = {}; for (const f in p) if (f !== 'parts' && f !== 'out' && f !== 'forms' && f !== 'na' && f !== 'rep') meta[f] = p[f];
+    m[p.id] = JSON.stringify(meta);
+    for (const k in (p.parts || {})) m[p.id + '|p|' + k] = JSON.stringify(p.parts[k]);
+    (p.forms || []).forEach(x => { if (x && x.id) m[p.id + '|f|' + x.id] = JSON.stringify(x); });
+    (p.out || []).forEach(x => { if (x && x.id) m[p.id + '|o|' + x.id] = JSON.stringify(x); });
+    if (p.na && Object.keys(p.na).length) m[p.id + '|n'] = JSON.stringify(p.na);
+    if (p.rep && Object.keys(p.rep).length) m[p.id + '|r'] = JSON.stringify(p.rep);
+  });
+  return m;
+}
+let coatSnap = coatPieces(coatLoad());
+const coatOn = () => getUrl() && !window.__gxGuest;
+function coatSaved(st){
+  const cur = coatPieces(st), d = jget(K.dirty, {}), now = Date.now(); let n = 0;
+  for (const k in cur) if (cur[k] !== coatSnap[k]) { d['k:' + k] = now; n++; }
+  for (const k in coatSnap) if (!(k in cur)) { d['k:' + k] = now; n++; }
+  coatSnap = cur;
+  if (n && coatOn()) { jset(K.dirty, d); schedulePush(); }
+}
+function coatPiece(key){ return key === '~layout' ? raw(CL) : (coatPieces(coatLoad())[key] ?? null); }
+let _cdb = null;
+const cdb = () => _cdb || (_cdb = new Promise((ok, no) => { const q = indexedDB.open('dcs_bb_photos', 1); q.onupgradeneeded = () => q.result.createObjectStore('p'); q.onsuccess = () => ok(q.result); q.onerror = () => no(q.error); }));
+const cpGet = k => cdb().then(d => new Promise(ok => { const r = d.transaction('p').objectStore('p').get(k); r.onsuccess = () => ok(r.result || ''); r.onerror = () => ok(''); })).catch(() => '');
+const cpPut = (k, v) => cdb().then(d => new Promise((ok, no) => { const t = d.transaction('p', 'readwrite'), s = t.objectStore('p'); if (v) s.put(v, k); else s.delete(k); t.oncomplete = ok; t.onerror = () => no(t.error); }));
+async function coatPhotoGet(key){   // string = ada · null = dihapus · undefined = belum ada di perangkat ini
+  const v = await cpGet(key); if (v) return v;
+  const i = key.lastIndexOf('_'), id = key.slice(0, i), sd = key.slice(i + 1), st = coatLoad();
+  for (const p of ((st && st.projects) || [])) for (const x of (p.out || [])) if (x && x.id === id) return x['p' + sd] ? undefined : null;
+  return null;
+}
+function coatMerge(st, recs){
+  st.projects = st.projects || [];
+  recs.forEach(r => {
+    try {
+      const key = r.k.slice(2);
+      if (key === '~layout') { st.__layout = r.v; return; }
+      const sg = key.split('|'), pid = sg[0], arr = st.projects;
+      let p = arr.find(x => x.id === pid);
+      if (sg.length === 1) {
+        if (r.v === null) { if (p) arr.splice(arr.indexOf(p), 1); return; }
+        const m = JSON.parse(r.v);
+        if (!p) { p = {id: pid, parts: {}}; arr.push(p); }
+        Object.assign(p, m); p.parts = p.parts || {}; return;
+      }
+      if (!p) { if (r.v === null) return; p = {id: pid, parts: {}}; arr.push(p); }
+      const t = sg[1], id = sg[2];
+      if (t === 'p') { p.parts = p.parts || {}; if (r.v === null) delete p.parts[id]; else p.parts[id] = JSON.parse(r.v); }
+      else if (t === 'f' || t === 'o') {
+        const nm = t === 'f' ? 'forms' : 'out', L = p[nm] = p[nm] || [], ix = L.findIndex(x => x && x.id === id);
+        if (r.v === null) { if (ix >= 0) L.splice(ix, 1); } else if (ix >= 0) L[ix] = JSON.parse(r.v); else L.push(JSON.parse(r.v));
+      }
+      else if (t === 'n' || t === 'r') { const nm = t === 'n' ? 'na' : 'rep'; if (r.v === null) delete p[nm]; else p[nm] = JSON.parse(r.v); }
+    } catch(e) { console.warn('QCSync: record Coating gagal diterapkan', r.k, e); }
+  });
+}
+function coatWin(){ try { const f = document.querySelector('#ctHolder iframe'); return f && f.contentWindow && f.contentWindow.__qcCoatApply ? f.contentWindow : null; } catch(e) { return null; } }
+async function flushCoat(){
+  if (!coatPend.length && !coatPendM.length) return;
+  const R = coatPend.splice(0), M = coatPendM.splice(0), win = coatWin();
+  for (const r of M) { const key = r.k.slice(2); try { await cpPut(key, r.v || ''); if (win && win.__qcCoatPhoto) win.__qcCoatPhoto(key, r.v || ''); } catch(e) {} }
+  if (!R.length) return;
+  const recs = R.sort((a, b) => (a.k.indexOf('|') < 0 ? 0 : 1) - (b.k.indexOf('|') < 0 ? 0 : 1));   // meta project lebih dulu
+  if (win) win.__qcCoatApply(st => { coatMerge(st, recs); coatSnap = coatPieces(st); });
+  else {
+    const st = coatLoad() || {projects: [], active: null}; coatMerge(st, recs);
+    if (st.__layout !== undefined) { try { _set.call(LS, CL, st.__layout || '{}'); } catch(e) {} delete st.__layout; }
+    coatSnap = coatPieces(st);
+    try { _set.call(LS, CK, JSON.stringify(st)); } catch(e) { console.warn('QCSync: penyimpanan penuh (Coating)'); }
+  }
+}
+function coatInitial(){   // sekali: kirim data Coating yang sudah ada di perangkat ini (ts=1: tidak menimpa data server yang lebih baru)
+  const st = coatLoad(), d = jget(K.dirty, {}), m = coatPieces(st);
+  for (const k in m) if (!d['k:' + k]) d['k:' + k] = 1;
+  ((st && st.projects) || []).forEach(p => (p.out || []).forEach(x => {
+    if (!x || !x.id) return;
+    if (x.pb && !d['m:' + x.id + '_b']) d['m:' + x.id + '_b'] = 1;
+    if (x.pa && !d['m:' + x.id + '_a']) d['m:' + x.id + '_a'] = 1;
+  }));
+  if (raw(CL) && !d['k:~layout']) d['k:~layout'] = 1;
+  jset(K.dirty, d); _set.call(LS, INI3, '1');
+}
+window.QCCoat = {saved: coatSaved, layout: () => { if (coatOn()) markDirty('k:~layout'); }, photo: k => { if (coatOn()) markDirty('m:' + k); }};
+
 /* ---------- deteksi perubahan lokal ---------- */
 function markDirty(id){
   const d = jget(K.dirty, {}); d[id] = Date.now(); jset(K.dirty, d);
@@ -8340,7 +8431,7 @@ async function push(){
           if (pv === undefined) { drop.push(id); continue; }
           if (pv && pv.wait) { deferred.add(id); continue; }   // foto belum selesai tersimpan: coba lagi nanti
           v = pv;
-        } else if (kind === 'd') { v = raw('boqdwg_' + key); } else if (kind === 'a') { v = raw('qcadd_' + key); } else if (kind === 'c') {
+        } else if (kind === 'k') { const ck = coatPiece(key); v = (ck === undefined) ? null : ck; } else if (kind === 'm') { const pv = await coatPhotoGet(key); if (pv === undefined) { drop.push(id); continue; } v = pv || null; } else if (kind === 'd') { v = raw('boqdwg_' + key); } else if (kind === 'a') { v = raw('qcadd_' + key); } else if (kind === 'c') {
           v = (key in chk) ? String(!!chk[key]) : null;
         } else if (kind === 'u') {
           v = (key in uc) ? String(uc[key]) : null;
@@ -8413,6 +8504,8 @@ function applyRecords(recs){
   recs.forEach(r => {
     if (d[r.k] && d[r.k] > r.ts) return;            // perubahan lokal yang belum terkirim lebih baru
     const kind = r.k.charAt(0), key = r.k.slice(2);
+    if (kind === 'k') { coatPend.push(r); return; }
+    if (kind === 'm') { coatPendM.push(r); return; }
     if (kind === 'p') { pendP.push(r); return; }
     if (kind === 'u') { pendU.push(r); return; }
     if (kind === 'r') { pendR.push(r); return; }
@@ -8452,6 +8545,7 @@ function applyRecords(recs){
 
 /* Terapkan project & jumlah unit dari inspector lain, lalu muat ulang tampilan. */
 async function flushExtra(){
+  await flushCoat();
   if (!pendP.length && !pendU.length && !pendR.length) return;
   const R = pendR.splice(0), P = pendP.splice(0), U = pendU.splice(0), Q = window.QCProj, UN = window.QCUnits;
   let changed = false;
@@ -8550,6 +8644,7 @@ function start(){
   if (!getUrl()) { setStatus('off', 'Belum terhubung'); return; }
   lastChk = jget(CHK, {});
   if (!raw(K.inited)) initialUpload();
+  if (!raw('qc_sync_inited3')) coatInitial();
   tick(true);
   pollTimer = setInterval(tick, getPoll());
 }
@@ -8589,13 +8684,13 @@ async function saveUrl(){
   setStatus('busy', 'Menguji koneksi…');
   try { await req(withQ(u, 'ping=1')); }
   catch(e) { setStatus('err', 'Tidak bisa terhubung: ' + (e.message || e) + '. Pastikan akses Web app = Anyone.'); return; }
-  if (u !== getUrl()) { _rem.call(LS, K.cursor); _rem.call(LS, K.inited); _rem.call(LS, K.inited2); }
+  if (u !== getUrl()) { _rem.call(LS, K.cursor); _rem.call(LS, K.inited); _rem.call(LS, K.inited2); _rem.call(LS, 'qc_sync_inited3'); }
   _rem.call(LS, K.off); _set.call(LS, K.src, 'manual'); _set.call(LS, K.url, u);
   start();
 }
 function disconnect(){
   if (!confirm('Putuskan sinkronisasi di perangkat ini? Data lokal tetap ada.')) return;
-  [K.url, K.cursor, K.dirty, K.inited, K.inited2, K.last, K.src].forEach(k => _rem.call(LS, k)); _set.call(LS, K.off, '1');
+  [K.url, K.cursor, K.dirty, K.inited, K.inited2, 'qc_sync_inited3', K.last, K.src].forEach(k => _rem.call(LS, k)); _set.call(LS, K.off, '1');
   clearInterval(pollTimer); $('qcsUrl').value = '';
   setStatus('off', 'Belum terhubung');
 }
@@ -8607,7 +8702,7 @@ function openModal(){
     m.innerHTML =
       '<div style="background:#1e293b;color:#f8fafc;border:1px solid #334155;border-radius:12px;max-width:580px;width:100%;max-height:92vh;overflow:auto;padding:18px;font-size:.9rem;line-height:1.5">' +
       '<h3 style="margin:0 0 6px;color:#38bdf8">🔄 Sinkronisasi antar Inspector</h3>' +
-      '<p style="color:#94a3b8;margin:0 0 10px">Centang, hasil inspeksi, Outstanding (termasuk foto before/after), project (import Excel) dan jumlah unit dikirim ke Google Sheet, lalu diterima inspector lain secara otomatis di latar belakang, tanpa perlu reload.</p>' +
+      '<p style="color:#94a3b8;margin:0 0 10px">Centang, hasil inspeksi, Outstanding (termasuk foto before/after), Coating Inspection (project, progres sub komponen, form QC, foto Outstanding Blasting &amp; Painting), project (import Excel) dan jumlah unit dikirim ke Google Sheet, lalu diterima inspector lain secara otomatis di latar belakang, tanpa perlu reload.</p>' +
       '<details style="margin-bottom:12px"><summary style="cursor:pointer;color:#38bdf8">Cara setup (sekali saja, oleh 1 orang, ±3 menit)</summary>' +
       '<ol style="margin:8px 0 0;padding-left:20px;color:#cbd5e1">' +
       '<li>Buat <b>Google Sheet</b> baru → menu <b>Extensions → Apps Script</b>.</li>' +
@@ -16722,8 +16817,18 @@ function loadLayout(){
 var state=load(), layout=loadLayout(), sel=null, editPos=false, drag=null;
 if(!state.projects.some(function(p){return p.id===state.active;})) state.active=state.projects.length?state.projects[0].id:null;
 
-function save(){ if(!lsSet(LS_STATE,JSON.stringify(state))) toast('Penyimpanan browser tidak tersedia — data tidak tersimpan'); }
-function saveLayout(){ lsSet(LS_LAYOUT,JSON.stringify(layout)); }
+function save(){ if(!lsSet(LS_STATE,JSON.stringify(state))) toast('Penyimpanan browser tidak tersedia — data tidak tersimpan'); try{parent.QCCoat&&parent.QCCoat.saved(state);}catch(e){} }
+function saveLayout(){ lsSet(LS_LAYOUT,JSON.stringify(layout)); try{parent.QCCoat&&parent.QCCoat.layout();}catch(e){} }
+/* ---- sinkron antar inspector: terapkan perubahan dari inspector lain ---- */
+window.__qcCoatApply=function(fn){
+  try{fn(state);}catch(e){console.warn('QCCoat apply',e);}
+  if(state.__layout!==undefined){try{layout=state.__layout?JSON.parse(state.__layout):{};lsSet(LS_LAYOUT,JSON.stringify(layout));}catch(e){}delete state.__layout;}
+  if(!state.projects.some(function(p){return p.id===state.active;}))state.active=state.projects.length?state.projects[0].id:null;
+  lsSet(LS_STATE,JSON.stringify(state));
+  var a=document.activeElement,rr=function(){try{renderAll();}catch(e){}};
+  if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)){a.addEventListener('blur',function f(){a.removeEventListener('blur',f);setTimeout(rr,80);});}else rr();
+};
+window.__qcCoatPhoto=function(k,v){try{if(v)PH[k]=v;else delete PH[k];hydrate();}catch(e){}};
 function proj(){ return state.projects.find(function(p){return p.id===state.active;})||null; }
 function ro(pr,k){ return (pr&&pr.parts&&pr.parts[k])||EMPTY; }
 function rw(pr,k){
@@ -17344,7 +17449,7 @@ function projForm(p){
 var curOut=false, PH={}, ofT=null, _db=null;
 function idb(){return _db||(_db=new Promise(function(res,rej){var q=indexedDB.open('dcs_bb_photos',1);q.onupgradeneeded=function(){q.result.createObjectStore('p');};q.onsuccess=function(){res(q.result);};q.onerror=function(){rej(q.error);};}));}
 function pget(k){return idb().then(function(d){return new Promise(function(res){var r=d.transaction('p').objectStore('p').get(k);r.onsuccess=function(){res(r.result||'');};r.onerror=function(){res('');};});}).catch(function(){return '';});}
-function pput(k,v){return idb().then(function(d){return new Promise(function(res,rej){var t=d.transaction('p','readwrite'),s=t.objectStore('p');if(v)s.put(v,k);else s.delete(k);t.oncomplete=res;t.onerror=function(){rej(t.error);};});});}
+function pput(k,v){return idb().then(function(d){return new Promise(function(res,rej){var t=d.transaction('p','readwrite'),s=t.objectStore('p');if(v)s.put(v,k);else s.delete(k);t.oncomplete=function(){try{parent.QCCoat&&parent.QCCoat.photo(k);}catch(e){}res();};t.onerror=function(){rej(t.error);};});});}
 function shrink(f){return new Promise(function(res,rej){var fr=new FileReader();fr.onload=function(){var im=new Image();im.onload=function(){var s=Math.min(1,1000/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*s);c.height=Math.round(im.height*s);c.getContext('2d').drawImage(im,0,0,c.width,c.height);res(c.toDataURL('image/jpeg',.72));};im.onerror=rej;im.src=fr.result;};fr.onerror=rej;fr.readAsDataURL(f);});}
 function outs(pr){return pr.out=pr.out||[];}
 function isoToday(){var t=new Date();return t.getFullYear()+'-'+('0'+(t.getMonth()+1)).slice(-2)+'-'+('0'+t.getDate()).slice(-2);}
@@ -20422,6 +20527,22 @@ svg.ann text{paint-order:stroke;stroke:#fff;stroke-width:3px;stroke-linejoin:rou
 .bir-ed-bar3{background:#0b3a8f}
 .bir-col{width:34px;height:30px;border:1px solid rgba(255,255,255,.35);border-radius:8px;background:none;padding:0;cursor:pointer}
 </style>
+<style id="nv-align">
+/* rapikan kartu "Inspeksi & Monitoring Project": tinggi sama per baris, atas & bawah sejajar */
+#homeView .nv-bays{align-items:stretch;row-gap:24px}
+#homeView .nv-bg>.nv-card{flex:1}
+#homeView .nv-bg>.nv-g2{flex:1;align-items:stretch}
+#homeView .nv-bg>.nv-g2>.nv-card{height:100%}
+#homeView .nv-gs{display:block;min-height:1.2em;line-height:1.2}
+#homeView .nv-gs.ph{visibility:hidden}
+#homeView .nv-bays .nv-ct{min-height:64px}
+#homeView .nv-bays .nv-card h4{line-height:1.25}
+#homeView .nv-bays .nv-bayh{flex-wrap:nowrap;min-width:0}
+#homeView .nv-bays .nv-bayh span{flex:none;white-space:nowrap}
+#homeView .nv-bays .nv-bayh h3{min-width:0;font-size:1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#homeView .nv-gs{min-height:1.1em}
+@media(max-width:700px){#homeView .nv-gs.ph{display:none}#homeView .nv-bays .nv-ct{min-height:0}}
+</style>
 <script id="bir-js">
 (function(){
 'use strict';
@@ -21858,7 +21979,7 @@ function monitorHtml(D){
       ring:null,stat:'Kategori Pengiriman',open:oc('ship').o,go:'Buka outstanding →'}
   };
   BAYS=C;
-  function grp(tag,t,inner,span,sub,cls){return '<div class="nv-bg" style="grid-column:span '+span+'"><div class="nv-bayh '+(cls||'')+'"><span>'+tag+'</span><h3>'+t+'</h3></div>'+(sub?'<small class="nv-gs">'+sub+'</small>':'')+inner+'</div>';}
+  function grp(tag,t,inner,span,sub,cls){return '<div class="nv-bg" style="grid-column:span '+span+'"><div class="nv-bayh '+(cls||'')+'"><span>'+tag+'</span><h3>'+t+'</h3></div>'+'<small class="nv-gs'+(sub?'':' ph')+'">'+(sub||'&nbsp;')+'</small>'+inner+'</div>';}
   return '<div class="nv-ph"><h2>Inspeksi &amp; Monitoring Project</h2><p>Kartu disusun per bay. Klik kartu untuk membuka inspeksi, atau klik angka <b>outstanding</b> untuk melihat detail temuan. Inspeksi baru diurutkan per project, kecuali Incoming dan WI &amp; NDT.</p></div>'+
     '<div class="nv-grid nv-bays">'+
     grp('Incoming','Penerimaan material',card(C.inc),1)+
