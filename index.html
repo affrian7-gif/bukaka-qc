@@ -16696,6 +16696,7 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
   };
   window._wiCount = function(){ return allRecords().length; };
   window._wiRecords = allRecords;
+  window._wiOpen = function(id){ try{ detailModal(id); }catch(e){ console.error(e); } };
 
   var _sh = window.showHome;
   if(typeof _sh==='function') window.showHome = function(){ leaveWi(); return _sh.apply(this, arguments); };
@@ -22166,7 +22167,7 @@ window.BankIR={open:window.showBir};
 .nv-tbl tr.nvr td:first-child b:after{content:" ›";color:#9aaac2;font-weight:700}
 .nv-tbl tr.sel td{background:#dcebff!important;color:#002060!important}
 .nv-tbl tr.sel td:first-child b:after{content:" ▾";color:#1688f8}
-.nv-atbl tbody tr{cursor:pointer}.nv-atbl tbody tr:hover td{background:#eef3fc!important}
+.nv-atbl tbody tr.clk{cursor:pointer}.nv-atbl tbody tr.clk:hover td{background:#eef3fc!important}
 .nv-atbl td:nth-child(3){max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nv-atbl td:nth-child(5){max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nv-atbl thead th{position:sticky;top:0;z-index:1}
@@ -22472,10 +22473,10 @@ function dayRecords(D,day,carry){
     if(carry?(!isOut&&rd!==day):rd!==day)return;
     /* inspector = Nama Inspektor pada record incoming; jam = waktu input record, hanya bila diinput pada tanggal inspeksi yang sama */
     var _cT=+r.createdAt||0,_by=String(r.namaInspektor||r.inspector||r.by||'').replace(/\s+/g,' ').trim();
-    rows.push({kind:'INC',out:isOut,t:r.t||((_cT&&iso(_cT)===rd)?_cT:0),by:_by,name:r.partDesc||r.iiNo||'Incoming',sub:(r.project||'')+(r.supplier?' · '+r.supplier:'')+(carry&&isOut&&rd&&rd!==day?' · masuk '+rd:''),
+    rows.push({kind:'INC',id:r.id,out:isOut,t:r.t||((_cT&&iso(_cT)===rd)?_cT:0),by:_by,name:r.partDesc||r.iiNo||'Incoming',sub:(r.project||'')+(r.supplier?' · '+r.supplier:'')+(carry&&isOut&&rd&&rd!==day?' · masuk '+rd:''),
       st:isOut?'hold':s.res==='ACCEPT'?'accept':s.res==='REJECT'?'reject':'hold',stLbl:isOut?'HOLD':(s.res||'HOLD'),stC:s.res==='ACCEPT'?'#16a34a':s.res==='REJECT'?'#dc2626':'#d97706'});});
   D.wi.forEach(function(r){if(String(r.t||'').slice(0,10)!==day)return;
-    rows.push({kind:'WI',t:0,by:r.i||r.insp||'',name:(r.m||'Welding')+(r.w?' · '+r.w:''),sub:(r.p||'')+' · '+nf(num(r.l))+' mm',
+    rows.push({kind:'WI',id:r.id,t:0,by:r.i||r.insp||'',name:(r.m||'Welding')+(r.w?' · '+r.w:''),sub:(r.p||'')+' · '+nf(num(r.l))+' mm',
       st:(r.cat==='acc'||r.cat==='accr')?'accept':'reject',stLbl:String(r.x||'').toUpperCase()||'-',stC:(r.cat==='acc'||r.cat==='accr')?'#16a34a':'#dc2626'});});
   return rows;
 }
@@ -22497,7 +22498,8 @@ function dayHtml(D){
   var kLbl='';kinds.forEach(function(k){if(k[0]===NV.kind)kLbl=k[1];});if(NV.kind==='ALL')kLbl='Semua jenis';
   var empty='<div class="nv-empty">'+(NV.day===today?'Belum ada kegiatan inspeksi hari ini.':'Tidak ada kegiatan inspeksi pada tanggal ini.')+'</div>';
   var rowsH=fk.slice().sort(function(a,b){return (b.t||0)-(a.t||0);}).slice(0,200).map(function(r,i){
-    return '<tr class="nv-ar" '+(r.key?'data-key="'+esc(r.key)+'" title="Klik untuk membuka hasil inspeksi"':'')+'><td class="n">'+(i+1)+'</td><td>'+hhmm(r.t)+'</td><td><b>'+esc(r.name)+'</b></td><td>'+esc(r.kind==='FAB'?'Fabrikasi':r.kind)+'</td><td>'+esc(r.sub)+'</td><td>'+esc(r.by||'-')+'</td><td><span class="nv-st nv-st-'+(r.st==='hold'?'hold':(r.st==='reject'?'rej':'ok'))+'">'+esc(r.stLbl)+'</span></td></tr>';}).join('');
+    var _ca=r.key?'data-key="'+esc(r.key)+'" title="Klik untuk membuka hasil inspeksi"':(r.kind==='INC'&&r.id)?'data-nv-inc="'+esc(r.id)+'" title="Klik untuk membuka detail Incoming"':(r.kind==='WI'&&r.id)?'data-nv-wi="'+esc(r.id)+'" title="Klik untuk membuka detail WI &amp; NDT"':'';
+    return '<tr class="nv-ar'+(_ca?' clk':'')+'" '+_ca+'><td class="n">'+(i+1)+'</td><td>'+hhmm(r.t)+'</td><td><b>'+esc(r.name)+'</b></td><td>'+esc(r.kind==='FAB'?'Fabrikasi':r.kind)+'</td><td>'+esc(r.sub)+'</td><td>'+esc(r.by||'-')+'</td><td><span class="nv-st nv-st-'+(r.st==='hold'?'hold':(r.st==='reject'?'rej':'ok'))+'">'+esc(r.stLbl)+'</span></td></tr>';}).join('');
   var list=rowsH?'<div class="nv-scroll nv-dl"><table class="nv-tbl nv-atbl"><thead><tr><th class="n">No</th><th>Jam</th><th>Kegiatan</th><th>Jenis</th><th>Project / Detail</th><th>Inspector</th><th>Status</th></tr></thead><tbody>'+rowsH+'</tbody></table></div>'+(fk.length>200?'<p class="nv-def">Menampilkan 200 dari '+fk.length+' kegiatan.</p>':''):empty;
   var actHtml=NV.kind?'<h3>Aktivitas · '+esc(kLbl)+'</h3><p class="nv-def">Klik baris hasil inspeksi untuk membukanya. <a href="#" data-nv-kind="">Tutup</a></p>'+list
     :'<h3>Aktivitas</h3><p class="nv-def">Klik salah satu jenis inspeksi pada tabel untuk menampilkan aktivitasnya.</p><div class="nv-hint">👆 Pilih FAT, Fabrikasi, Incoming, WI &amp; NDT, atau Total</div>';
@@ -22782,6 +22784,8 @@ if(root0){
     var ac=t.closest('[data-nv-acc]');if(ac){toggleAcc(ac.getAttribute('data-nv-acc'));return;}
     var a=t.closest('[data-nv-act]');if(a){e.preventDefault();act(a.getAttribute('data-nv-act'));return;}
     var di=t.closest('.nv-di[data-key],.nv-ar[data-key]');if(di){openItem(di.getAttribute('data-key'));return;}
+    var ci=t.closest('.nv-ar[data-nv-inc]');if(ci){try{openIncDetailModal(ci.getAttribute('data-nv-inc'));}catch(er){toast('Detail Incoming belum tersedia');}return;}
+    var cw=t.closest('.nv-ar[data-nv-wi]');if(cw){if(typeof window._wiOpen==='function')window._wiOpen(cw.getAttribute('data-nv-wi'));else toast('Detail WI & NDT belum tersedia');return;}
     var pr=t.closest('[data-nv-proj]');if(pr){setP(pr.getAttribute('data-nv-proj'));build(false);toast('Project aktif: '+curP());return;}
   });
   root0.addEventListener('keydown',function(e){if((e.key==='Enter'||e.key===' ')&&e.target.matches&&e.target.matches('.nv-tbl tr.nvr')){e.preventDefault();e.target.click();return;}
