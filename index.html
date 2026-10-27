@@ -8087,6 +8087,16 @@ async function renameProject(old,nw){
     try{localStorage.setItem(pre+nw+m[1],localStorage.getItem(k));localStorage.removeItem(k)}catch(e){console.warn('rename',k,e)}})});
   /* jumlah unit */
   try{const c=JSON.parse(localStorage.getItem('qc_units')||'{}');if(c[old]){c[nw]=c[old];delete c[old];localStorage.setItem('qc_units',JSON.stringify(c))}}catch(e){}
+  /* komponen Additional: definisi (qcadd_) + centang/inspeksi (~add_) ikut nama baru */
+  try{
+    const eo=old.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),ra=new RegExp('^'+eo+'((?: - Unit \\d+)?~add_.+)$'),rq=new RegExp('^qcadd_'+eo+'((?: - Unit \\d+)?\\|.+)$');
+    const mv2=[];Object.keys(checkedState).forEach(k=>{const m=ra.exec(k);if(m)mv2.push([k,nw+m[1]])});
+    mv2.forEach(a=>{checkedState[a[1]]=checkedState[a[0]];delete checkedState[a[0]]});
+    if(mv2.length)saveChecked();
+    Object.keys(localStorage).forEach(k=>{let m;
+      if(k.indexOf('qcadd_')===0&&(m=rq.exec(k))){localStorage.setItem('qcadd_'+nw+m[1],localStorage.getItem(k));localStorage.removeItem(k)}
+      else{['insp_','inspst_'].forEach(pre=>{if(k.indexOf(pre)===0&&(m=ra.exec(k.slice(pre.length)))){localStorage.setItem(pre+nw+m[1],localStorage.getItem(k));localStorage.removeItem(k)}})}});
+  }catch(e){console.warn('rename additional',e)}
   /* markup PDF (IndexedDB iq_store) */
   await new Promise(ok=>{try{const r=indexedDB.open('iq_store',1);r.onerror=()=>ok();r.onsuccess=()=>{try{const db=r.result;if(!db.objectStoreNames.contains('kv')){ok();return}
     const tx=db.transaction('kv','readwrite'),os=tx.objectStore('kv'),cur=os.openCursor();
@@ -9072,6 +9082,19 @@ function wipe(name){
     cur.onsuccess=function(){var c=cur.result;if(!c)return;var k=String(c.key);if(k.indexOf(p)===0||k.indexOf('_'+p)>=0)c.delete();c.continue()}}catch(e){}}}catch(e){}
 }
 
+/* ---------- salin komponen ADDITIONAL (beserta PDF drawing-nya) dari Unit 1 ke unit baru ---------- */
+function copyAdd(src,dst){
+  var pre='qcadd_'+src+'|',items=[],n=0;
+  try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf(pre)===0)items.push([k,k.slice(pre.length)]);}}catch(e){}
+  items.forEach(function(it){
+    var nk='qcadd_'+dst+'|'+it[1];
+    try{if(localStorage.getItem(nk)!==null)return;localStorage.setItem(nk,localStorage.getItem(it[0]));n++;}catch(e){return;}
+    try{var r=indexedDB.open('iq_store',1);r.onsuccess=function(){try{var db=r.result,ks='pdf_qcadd://'+encodeURIComponent(src)+'/'+it[1],kd='pdf_qcadd://'+encodeURIComponent(dst)+'/'+it[1],g=db.transaction('kv','readonly').objectStore('kv').get(ks);
+      g.onsuccess=function(){if(g.result==null)return;try{db.transaction('kv','readwrite').objectStore('kv').put(g.result,kd);}catch(e){}};}catch(e){}};}catch(e){}
+  });
+  return n;
+}
+
 /* ---------- ubah jumlah unit ---------- */
 function setUnits(base,n){
   n=Math.max(1,Math.min(MAXU,Math.floor(+n)||1));
@@ -9086,9 +9109,12 @@ function setUnits(base,n){
     for(var j=n+1;j<=cur;j++)wipe(unitName(base,j));
     if(unitSet.has(currentProject)&&unitNo(currentProject)>n&&currentProject.slice(0,currentProject.lastIndexOf(SEP))===base)currentProject=base;
   }
+  var cp=0;
   if(n>1)cfg[base]=n;else delete cfg[base];
-  saveCfg();rebuild();refreshUI();renderUnits();
-  toast(n>cur?('✅ '+base+' sekarang punya '+n+' unit'):('🗑️ '+base+' sekarang punya '+n+' unit'));
+  saveCfg();rebuild();
+  if(n>cur){for(var u=cur+1;u<=n;u++)cp+=copyAdd(base,unitName(base,u));}
+  refreshUI();renderUnits();
+  toast(n>cur?('✅ '+base+' sekarang punya '+n+' unit'+(cp?' · '+cp+' komponen additional disalin':'')):('🗑️ '+base+' sekarang punya '+n+' unit'));
 }
 function toast(t){var d=document.createElement('div');d.textContent=t;d.style.cssText='position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:100001;padding:11px 18px;border-radius:12px;font-size:.85rem;font-weight:700;color:#fff;box-shadow:0 10px 30px #0008;background:#047857';document.body.appendChild(d);setTimeout(function(){d.remove()},3200)}
 
@@ -9217,6 +9243,7 @@ window.onload=async function(){
 
 /* API untuk sinkron antar inspector (QCSync) */
 window.QCUnits={
+  setUnits:setUnits,count:function(b){return Math.min(MAXU,+cfg[b]||1);},
   unitName:unitName,
   wipe:wipe,
   reload:function(){try{cfg=JSON.parse(localStorage.getItem(CFG_KEY)||'{}')||{}}catch(e){cfg={}}return rebuild()},
@@ -9331,8 +9358,9 @@ window.QCUnits={
         if(!k||k.indexOf('insp_')!==0||k==='insp_by_last')continue;
         var raw=localStorage.getItem(k);if(!raw||raw.charAt(0)!=='{')continue;
         var d;try{d=JSON.parse(raw)}catch(e){continue}
-        var key=k.slice(5),u=key.lastIndexOf('_'),proj=key.slice(0,u),idx=+key.slice(u+1);
-        var row=(projectData[proj]||[])[idx];
+        var key=k.slice(5),ai=key.indexOf('~add_'),u=ai>=0?ai:key.lastIndexOf('_'),proj=key.slice(0,u),idx=+key.slice(u+1),ao=null;
+        if(ai>=0){try{ao=JSON.parse(localStorage.getItem('qcadd_'+proj+'|'+key.slice(ai+5))||'null');}catch(e){} if(!ao)continue;}   /* komponen Additional */
+        var row=ao?{part_name:(ao.part_name||ao.no||'Additional'),drawing_no:'Additional'+(ao.drawing_no?' · '+ao.drawing_no:'')}:(projectData[proj]||[])[idx];
         var st=d.status||localStorage.getItem('inspst_'+key)||'';
         if(!st&&!d.approved)continue;
         var nm=row?(row.part_name||row.level||''):'';nm=String(nm).replace(/^▶\s*/,'');
@@ -9369,6 +9397,14 @@ window.QCUnits={
   }
 
   function openItem(key){
+    var ai=key.indexOf('~add_');
+    if(ai>=0){
+      var ap=key.slice(0,ai),ao=null;try{ao=JSON.parse(localStorage.getItem('qcadd_'+ap+'|'+key.slice(ai+5))||'null');}catch(e){}
+      if(!ao)return;
+      currentProject=ap;openView('complete');
+      setTimeout(function(){openInspected(key,String(ao.part_name||ao.no||'Additional'))},60);
+      return;
+    }
     var u=key.lastIndexOf('_'),p=key.slice(0,u),idx=+key.slice(u+1),r=(projectData[p]||[])[idx];if(!r)return;
     currentProject=p;
     openView(isMainRow(r)?'main':'complete');
@@ -16936,7 +16972,7 @@ textarea{resize:vertical;min-height:70px}
 .rpage .rw{display:flex;align-items:center;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.1;overflow:hidden;cursor:text}.rpage .rcn{justify-content:center;text-align:center}.rpage .opq{background:#fff!important}
 .rpage input.rf[inputmode]{text-align:center}.rpage .rd.ctr{justify-content:center}.rpage .rv{justify-content:center}
 .ubar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:12px}.ubar:empty{display:none}.utab{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer;font-weight:700}.utab:hover{border-color:var(--accent)}.utab.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}.utab small{margin-left:8px;opacity:.85;font-weight:600}
-.rpage .rin{position:absolute;inset:0}.rpage .seg{position:absolute;left:0;width:100%;overflow:hidden}.rpage .seg img{position:absolute;left:0;top:0;width:100%}
+.rpage .rin{position:absolute;inset:0}.rpage .rlb{position:absolute;box-sizing:border-box;background:#fff;color:#000;font:700 .95cqw/1 Arial,Helvetica,sans-serif;display:flex;align-items:center;padding-left:.2cqw;pointer-events:none}.rpage .seg{position:absolute;left:0;width:100%;overflow:hidden}.rpage .seg img{position:absolute;left:0;top:0;width:100%}
 .par{width:100%;min-width:640px;height:auto}.pt{font:10px var(--mono);fill:var(--muted)}.lgt{min-width:1500px}.lgt td{font-size:12.5px;max-width:260px;vertical-align:top}.lgt select.stt{font-weight:600}
 <@@/style>
 <@@/head>
@@ -16949,10 +16985,11 @@ textarea{resize:vertical;min-height:70px}
     <@@/div>
     <div class="proj">
       <select id="projSel" aria-label="Pilih project"><@@/select>
-      <button class="btn pri" id="bNew">+ Project<@@/button>
+      <button class="btn pri" id="bNew">+ Pilih project<@@/button>
       <button class="btn" id="bEdit">Edit<@@/button>
       <button class="btn dng" id="bDel">Hapus<@@/button>
       <button class="btn" id="bLog">Log Temuan<@@/button>
+      <button class="btn" id="bPdf" title="Export semua report komponen unit ini jadi 1 PDF">📄 Export PDF<@@/button>
       <button class="btn" id="bData">Data<@@/button>
       <button class="btn" id="bTheme" aria-label="Ganti tema terang/gelap">◐<@@/button>
     <@@/div>
@@ -17203,7 +17240,7 @@ function histHtml(pt){
 function renderDetail(){
   var pr=proj(), el=$('#detail');
   if(!pr){
-    el.innerHTML='<div class="empty"><h3>Belum ada project<@@/h3><p>Buat project untuk mulai mengisi progress inspeksi.<@@/p><button class="btn pri" data-act="newproj">+ Project baru<@@/button><@@/div>';
+    el.innerHTML='<div class="empty"><h3>Belum ada project<@@/h3><p>Pilih project dari master untuk mulai mengisi progress inspeksi.<@@/p><button class="btn pri" data-act="newproj">+ Pilih project<@@/button><@@/div>';
     return;
   }
   if(!sel){
@@ -17408,7 +17445,7 @@ function closeModal(){$('#modal').innerHTML=''; if(cur){cur=null;renderAll();}}
 
 function renderDetail(){
   var pr=proj(), el=$('#detail');
-  if(!pr){el.innerHTML='<div class="empty"><h3>Belum ada project<@@/h3><p>Buat project untuk mulai mengisi form QC.<@@/p><button class="btn pri" data-act="newproj">+ Project baru<@@/button><@@/div>';return;}
+  if(!pr){el.innerHTML='<div class="empty"><h3>Belum ada project<@@/h3><p>Pilih project dari master untuk mulai mengisi form QC.<@@/p><button class="btn pri" data-act="newproj">+ Pilih project<@@/button><@@/div>';return;}
   if(!sel){el.innerHTML='<div class="empty"><h3>Pilih sub komponen<@@/h3><p>Klik penanda pada gambar atau dari daftar untuk melihat tahapan & form QC-nya.<@@/p><@@/div>';return;}
   var P=partDef(sel), pct=pctOf(ro(pr,sel)), st=stOf(pct);
   var h='<div class="pad st-'+st+'"><div class="dhead"><div><div class="eyebrow">Sub komponen<@@/div><h2>'+esc(P.n)+'<@@/h2><@@/div><span class="chip">'+(st==='done'?'Selesai':st==='prog'?'Proses':'Belum mulai')+'<@@/span><@@/div>'+
@@ -17598,7 +17635,7 @@ function stState(pr,k,S){
 }
 function renderDetail(){
   var pr=proj(), el=$('#detail');
-  if(!pr){el.innerHTML='<div class="empty"><h3>Belum ada project<@@/h3><p>Buat project untuk mulai mengisi form QC.<@@/p><button class="btn pri" data-act="newproj">+ Project baru<@@/button><@@/div>';return;}
+  if(!pr){el.innerHTML='<div class="empty"><h3>Belum ada project<@@/h3><p>Pilih project dari master untuk mulai mengisi form QC.<@@/p><button class="btn pri" data-act="newproj">+ Pilih project<@@/button><@@/div>';return;}
   if(!sel){el.innerHTML='<div class="empty"><h3>Pilih sub komponen<@@/h3><p>Klik penanda pada gambar atau dari daftar untuk membuka report dan tahapan QC-nya.<@@/p><@@/div>';return;}
   var P=partDef(sel), pct=pctOf(ro(pr,sel)), st=stOf(pct);
   var h='<div class="pad st-'+st+'"><div class="dhead"><div><div class="eyebrow">Sub komponen<@@/div><h2>'+esc(P.n)+'<@@/h2><@@/div><span class="chip">'+(st==='done'?'Selesai':st==='prog'?'Proses':'Belum mulai')+'<@@/span><@@/div>'+
@@ -17615,7 +17652,7 @@ function renderDetail(){
 }
 function reportHTML(k){
   var R=getRep(k), P=partDef(k), g=repGeo(specRows(proj()));
-  var h='<div class="rhead"><div><b>Coating Inspection Report · '+esc(P.n)+'<@@/b><div class="cnt">FRM-PQ-PC-03 Rev.00 · isian tersimpan otomatis<@@/div><@@/div><div class="ra"><button class="btn pri sm" data-act="rpdf">Unduh PDF<@@/button><button class="btn sm" data-act="rprint">Cetak<@@/button><button class="btn sm" data-act="close">Tutup<@@/button><@@/div><@@/div><div class="rscroll"><div class="rpage"><div class="rin" style="transform-origin:50% 0;transform:scale('+g.S+')">'+bgHTML(k,g);
+  var h='<div class="rhead"><div><b>Coating Inspection Report · '+esc(P.n)+'<@@/b><div class="cnt">FRM-PQ-PC-03 Rev.00 · isian tersimpan otomatis<@@/div><@@/div><div class="ra"><button class="btn pri sm" data-act="rpdf">📄 Export PDF<@@/button><button class="btn sm" data-act="rpdfall" title="Gabung semua komponen unit ini jadi 1 PDF">Export semua komponen<@@/button><button class="btn sm" data-act="rprint">Cetak<@@/button><button class="btn sm" data-act="close">Tutup<@@/button><@@/div><@@/div><div class="rscroll"><div class="rpage"><div class="rin" style="transform-origin:50% 0;transform:scale('+g.S+')">'+bgHTML(k,g);
   REP.F.forEach(function(f){
     var r=adjR(f,g); if(!r) return; var st='left:'+r[0]+'%;top:'+r[1]+'%;width:'+r[2]+'%;height:'+r[3]+'%', val=rvv(R,f.k), a=' aria-label="'+esc(f.l)+'" data-k="'+f.k+'"';
     if(DATEK[f.k]||TIMEK[f.k]) h+=dtHTML(f,st,a,val); else if(f.t==='avg') h+='<div class="rf rv" style="'+st+'" data-avg="'+f.k+'"'+a+'>'+esc(avgOf(R,f.k))+'<@@/div>';
@@ -17624,6 +17661,8 @@ function reportHTML(k){
     else if(f.t==='t') h+=wrapHTML(f,st,a,val);
     else h+='<input class="rf'+(f.k==='std3'?' opq':'')+'" style="'+st+'" data-t="rv"'+(f.t==='n'?' inputmode="decimal"':'')+a+' value="'+esc(val)+'">';
   });
+  var uf=REP.F.find(function(f){return f.k==='unit';}), ur=uf&&adjR(uf,g);
+  if(ur) h+='<div class="rlb" style="left:67.4%;top:'+ur[1]+'%;width:7.1%;height:'+ur[3]+'%">Type PBB<@@/div>';
   REP.CB.forEach(function(b,i){h+='<button class="rc" style="left:'+b[0]+'%;top:'+(b[1]>=g.y5-0.01?b[1]-g.rm:b[1])+'%;width:'+b[2]+'%;height:'+b[3]+'%" role="checkbox" aria-checked="'+(R.c[i]?'true':'false')+'" aria-label="Pilihan '+(i+1)+'" data-act="rcb" data-i="'+i+'"><i>'+(R.c[i]?'✓':'')+'<@@/i><@@/button>';});
   return h+'<@@/div><@@/div><@@/div>';
 }
@@ -17787,41 +17826,61 @@ function counts(pr){
 }
 
 var PGI={column_rotunda:0,corridor:1,rigid:2,roof_rotunda:3,tunnel_a:4,tunnel_b:5,tunnel_c:6,cabin:7,lower_column:8,upper_column:9,frame_wheel:10,carriage_wheel:11,other:12}, _src=null;
-async function savePdf(){
-  var k=curRep, R=getRep(k), P=partDef(k), dl=null;
-  try{dl=(window.claude&&window.claude.use)?await window.claude.use('downloads'):null;}catch(e){}
-  if(!dl||!window.PDFLib){try{window.print();}catch(e){toast('Cetak diblokir browser — buka file HTML lalu tekan Ctrl+P');} return;}
-  try{
-    var L=window.PDFLib; if(!_src) _src=Uint8Array.from(atob(window.__PDF),function(c){return c.charCodeAt(0);});
-    var out=await L.PDFDocument.create(), sdoc=await L.PDFDocument.load(_src), spg=sdoc.getPage(PGI[k]), WP=spg.getWidth(), HP=spg.getHeight(), g=repGeo(specRows(proj())), S=g.S;
-    var pg=out.addPage([WP,HP]);
-    if(g.k>=5){pg.drawPage(await out.embedPage(spg),{x:0,y:0});}
-    else{
-      var e1=await out.embedPage(spg,{left:0,right:WP,bottom:HP*(1-g.yk/100),top:HP}), e2=await out.embedPage(spg,{left:0,right:WP,bottom:0,top:HP*(1-g.y5/100)});
-      pg.drawPage(e1,{x:(WP-WP*S)/2,y:HP-HP*g.yk/100*S,xScale:S,yScale:S}); pg.drawPage(e2,{x:(WP-WP*S)/2,y:0,xScale:S,yScale:S});
-    }
-    var fn=(out.registerFontkit(window.fontkit),await out.embedFont(Uint8Array.from(atob(window.__FONT),function(c){return c.charCodeAt(0);}),{subset:true})), ink=L.rgb(0,0,0), dk=L.rgb(.13,.13,.13);
-    function cl(s){return String(s).replace(/[^\x20-\x7E\xA0-\xFF\n]/g,'?');}
-    function tick(cx,cy){pg.drawLine({start:{x:cx-3,y:HP-cy},end:{x:cx-.9,y:HP-cy-2.5},thickness:1.2,color:ink});pg.drawLine({start:{x:cx-.9,y:HP-cy-2.5},end:{x:cx+3.2,y:HP-cy+2.8},thickness:1.2,color:ink});}
-    function wrap(s,fs,w){var o=[];cl(s).split('\n').forEach(function(par){var cur='';par.split(' ').forEach(function(wd){
-      while(fn.widthOfTextAtSize(wd,fs)>w&&wd.length>1){var n=wd.length;while(n>1&&fn.widthOfTextAtSize(wd.slice(0,n),fs)>w)n--;if(cur){o.push(cur);cur='';}o.push(wd.slice(0,n));wd=wd.slice(n);}
-      var t=cur?cur+' '+wd:wd; if(cur&&fn.widthOfTextAtSize(t,fs)>w){o.push(cur);cur=wd;}else cur=t;}); o.push(cur);}); return o;}
-    REP.F.forEach(function(f){
-      var rr=adjR(f,g); if(!rr) return; var w=rr[2]/100*WP*S, h=rr[3]/100*HP*S, x=WP/2+(rr[0]/100*WP-WP/2)*S, y=rr[1]/100*HP*S;
-      if(f.k==='std3') pg.drawRectangle({x:x,y:HP-y-h,width:w,height:h,color:L.rgb(1,1,1)});
-      var v=fmtV(f.k,f.t==='avg'?avgOf(R,f.k):rvv(R,f.k)); if(!v) return;
-      if(f.t==='tick'){tick(x+w/2,y+h/2);return;}
-      var ctr=/^(sp|d\d|avg|cd|ct|std)/.test(f.k), fs=S*(f.t==='ta'?7:(f.t==='n'?6.0:6.6)), ln, lh;
-      for(;;){ln=wrap(v,fs,w-1.6);lh=fs*1.12;if(f.t==='ta'||ln.length*lh<=h-.6||fs<=4)break;fs-=.25;}
-      var y0=f.t==='ta'?y+2+fs*.5:y+h/2-(ln.length-1)*lh/2;
-      ln.forEach(function(t,i){var tw=fn.widthOfTextAtSize(t,fs);pg.drawText(t,{x:ctr?x+(w-tw)/2:x+.8,y:HP-(y0+i*lh)-fs*.33,size:fs,font:fn,color:ink});});
-    });
-    REP.CB.forEach(function(b,i){var by=(b[1]>=g.y5-0.01?b[1]-g.rm:b[1]), s=8.65*S, x=WP/2+(b[0]/100*WP-WP/2)*S, cy=(by+b[3]/2)/100*HP*S;
-      pg.drawRectangle({x:x,y:HP-cy-s/2,width:s,height:s,color:L.rgb(1,1,1),borderColor:dk,borderWidth:.7}); if(R.c[i]) tick(x+s/2,cy);});
-    var bytes=await out.save();
-    await dl.save({filename:'Coating_Inspection_Report_'+P.n.replace(/\s+/g,'_')+'.pdf',data:new Blob([bytes],{type:'application/pdf'})});
-  }catch(e){ if(!e||e.code!=='declined') toast('Gagal menyimpan PDF'+(e&&e.message?' ('+String(e.message).slice(0,40)+')':'')); }
+async function dlBlob(name,blob){
+  var dl=null; try{dl=(window.claude&&window.claude.use)?await window.claude.use('downloads'):null;}catch(e){}
+  if(dl){await dl.save({filename:name,data:blob});return;}
+  var u=URL.createObjectURL(blob),a=document.createElement('a'); a.href=u; a.download=name; document.body.appendChild(a); a.click();
+  setTimeout(function(){a.remove();URL.revokeObjectURL(u);},4000);
 }
+async function repInto(out,sdoc,fn,hv,k){
+  var L=window.PDFLib, R=getRep(k), spg=sdoc.getPage(PGI[k]), WP=spg.getWidth(), HP=spg.getHeight(), g=repGeo(specRows(proj())), S=g.S;
+  var pg=out.addPage([WP,HP]);
+  if(g.k>=5){pg.drawPage(await out.embedPage(spg),{x:0,y:0});}
+  else{
+    var e1=await out.embedPage(spg,{left:0,right:WP,bottom:HP*(1-g.yk/100),top:HP}), e2=await out.embedPage(spg,{left:0,right:WP,bottom:0,top:HP*(1-g.y5/100)});
+    pg.drawPage(e1,{x:(WP-WP*S)/2,y:HP-HP*g.yk/100*S,xScale:S,yScale:S}); pg.drawPage(e2,{x:(WP-WP*S)/2,y:0,xScale:S,yScale:S});
+  }
+  var ink=L.rgb(0,0,0), dk=L.rgb(.13,.13,.13);
+  function cl(s){return String(s).replace(/[^\x20-\x7E\xA0-\xFF\n]/g,'?');}
+  function tick(cx,cy){pg.drawLine({start:{x:cx-3,y:HP-cy},end:{x:cx-.9,y:HP-cy-2.5},thickness:1.2,color:ink});pg.drawLine({start:{x:cx-.9,y:HP-cy-2.5},end:{x:cx+3.2,y:HP-cy+2.8},thickness:1.2,color:ink});}
+  function wrap(s,fs,w){var o=[];cl(s).split('\n').forEach(function(par){var cur='';par.split(' ').forEach(function(wd){
+    while(fn.widthOfTextAtSize(wd,fs)>w&&wd.length>1){var n=wd.length;while(n>1&&fn.widthOfTextAtSize(wd.slice(0,n),fs)>w)n--;if(cur){o.push(cur);cur='';}o.push(wd.slice(0,n));wd=wd.slice(n);}
+    var t=cur?cur+' '+wd:wd; if(cur&&fn.widthOfTextAtSize(t,fs)>w){o.push(cur);cur=wd;}else cur=t;}); o.push(cur);}); return o;}
+  REP.F.forEach(function(f){
+    var rr=adjR(f,g); if(!rr) return; var w=rr[2]/100*WP*S, h=rr[3]/100*HP*S, x=WP/2+(rr[0]/100*WP-WP/2)*S, y=rr[1]/100*HP*S;
+    if(f.k==='std3') pg.drawRectangle({x:x,y:HP-y-h,width:w,height:h,color:L.rgb(1,1,1)});
+    if(f.k==='unit'){ var lx=WP/2+(.674*WP-WP/2)*S, lw=.071*WP*S, fs0=5.8*S; pg.drawRectangle({x:lx,y:HP-y-h,width:lw,height:h,color:L.rgb(1,1,1)}); pg.drawText('Type PBB',{x:lx+1.2,y:HP-y-h/2-fs0*.33,size:fs0,font:hv,color:ink}); }
+    var v=fmtV(f.k,f.t==='avg'?avgOf(R,f.k):rvv(R,f.k)); if(!v) return;
+    if(f.t==='tick'){tick(x+w/2,y+h/2);return;}
+    var ctr=/^(sp|d\d|avg|cd|ct|std)/.test(f.k), fs=S*(f.t==='ta'?7:(f.t==='n'?6.0:6.6)), ln, lh;
+    for(;;){ln=wrap(v,fs,w-1.6);lh=fs*1.12;if(f.t==='ta'||ln.length*lh<=h-.6||fs<=4)break;fs-=.25;}
+    var y0=f.t==='ta'?y+2+fs*.5:y+h/2-(ln.length-1)*lh/2;
+    ln.forEach(function(t,i){var tw=fn.widthOfTextAtSize(t,fs);pg.drawText(t,{x:ctr?x+(w-tw)/2:x+.8,y:HP-(y0+i*lh)-fs*.33,size:fs,font:fn,color:ink});});
+  });
+  REP.CB.forEach(function(b,i){var by=(b[1]>=g.y5-0.01?b[1]-g.rm:b[1]), s=8.65*S, x=WP/2+(b[0]/100*WP-WP/2)*S, cy=(by+b[3]/2)/100*HP*S;
+    pg.drawRectangle({x:x,y:HP-cy-s/2,width:s,height:s,color:L.rgb(1,1,1),borderColor:dk,borderWidth:.7}); if(R.c[i]) tick(x+s/2,cy);});
+}
+async function buildRepPdf(ks){
+  var L=window.PDFLib; if(!L||!window.fontkit) throw new Error('Pustaka PDF belum termuat (butuh internet)');
+  if(!_src) _src=Uint8Array.from(atob(window.__PDF),function(c){return c.charCodeAt(0);});
+  var out=await L.PDFDocument.create(), sdoc=await L.PDFDocument.load(_src); out.registerFontkit(window.fontkit);
+  var fn=await out.embedFont(Uint8Array.from(atob(window.__FONT),function(c){return c.charCodeAt(0);}),{subset:true}), hv=await out.embedFont(L.StandardFonts.HelveticaBold);
+  for(var i=0;i<ks.length;i++) await repInto(out,sdoc,fn,hv,ks[i]);
+  return new Blob([await out.save()],{type:'application/pdf'});
+}
+function pdfBase(){var a=proj()||{}; return String(a.no||a.name||'project').replace(/[^\w-]+/g,'_')+(a.unit?'_'+String(a.unit).replace(/[^\w-]+/g,'_'):'');}
+async function savePdf(){
+  var k=curRep, P=partDef(k);
+  try{ toast('Menyiapkan PDF…'); await dlBlob('Coating_Inspection_Report_'+pdfBase()+'_'+P.n.replace(/\s+/g,'_')+'.pdf',await buildRepPdf([k])); toast('PDF diekspor'); }
+  catch(e){ if(!e||e.code!=='declined') toast('Gagal export PDF'+(e&&e.message?' ('+String(e.message).slice(0,50)+')':'')); }
+}
+async function savePdfAll(){
+  var pr=proj(); if(!pr){toast('Pilih project dulu');return;}
+  var ks=PARTS.filter(function(P){return !P.x||(pr.rep&&pr.rep[P.k]);}).map(function(P){return P.k;});
+  try{ toast('Menyiapkan PDF '+ks.length+' halaman…'); await dlBlob('Coating_Inspection_Report_'+pdfBase()+'_semua.pdf',await buildRepPdf(ks)); toast('PDF diekspor'); }
+  catch(e){ if(!e||e.code!=='declined') toast('Gagal export PDF'+(e&&e.message?' ('+String(e.message).slice(0,50)+')':'')); }
+}
+document.addEventListener('click',function(e){var a=e.target.closest('[data-act="rpdfall"]'); if(a&&curRep) savePdfAll();});
 
 /* ===== BANYAK UNIT DALAM SATU PROJECT ===== */
 function grpOf(p){return p.grp||p.id;}
@@ -17830,21 +17889,24 @@ function renderProjSel(){
   var s=$('#projSel'), act=proj(), seen={}, opts=[];
   state.projects.forEach(function(p){var g=grpOf(p);if(seen[g])return;seen[g]=1;opts.push(p);});
   if(!opts.length){s.innerHTML='<option>— belum ada project —<@@/option>';s.disabled=true;}
-  else{s.disabled=false;s.innerHTML=opts.map(function(p){var n=units(p).length;return '<option value="'+esc(p.id)+'"'+(act&&grpOf(act)===grpOf(p)?' selected':'')+'>'+esc(p.no)+' — '+esc(p.name)+(n>1?' ('+n+' unit)':'')+'<@@/option>';}).join('');}
+  else{s.disabled=false;s.innerHTML=opts.map(function(p){var n=units(p).length;return '<option value="'+esc(p.id)+'"'+(act&&grpOf(act)===grpOf(p)?' selected':'')+'>'+(orph(p)?'⚠ ':'')+(p.no?esc(p.no)+' — ':'')+esc(p.name)+(n>1?' ('+n+' unit)':'')+'<@@/option>';}).join('');}
   $('#bEdit').disabled=$('#bDel').disabled=!state.projects.length;
   var ub=$('#unitBar'); if(!act){ub.innerHTML='';return;}
-  ub.innerHTML=units(act).map(function(u){return '<button class="utab'+(u.id===act.id?' on':'')+'" data-act="unitpick" data-id="'+esc(u.id)+'">'+esc(u.unit||'Unit')+'<small>'+overall(u)+'%<@@/small><@@/button>';}).join('')+'<button class="btn sm" data-act="unitadd">+ Unit<@@/button>';
+  ub.innerHTML=units(act).map(function(u,ui){return '<button class="utab'+(u.id===act.id?' on':'')+'" data-act="unitpick" data-id="'+esc(u.id)+'">'+esc(u.unit||('Unit '+(ui+1)))+'<small>'+overall(u)+'%<@@/small><@@/button>';}).join('')+'<button class="btn sm" data-act="unitadd">+ Unit<@@/button>';
 }
 function unitForm(){
   var a=proj(); if(!a) return;
-  openModal('<h3>Tambah unit<@@/h3><p class="note">Unit baru memakai data project yang sama ('+esc(a.no)+' — '+esc(a.name)+') beserta Coating Specification-nya. Progres, report, dan outstanding dicatat terpisah per unit.<@@/p>'+
-   '<div class="fgrid"><label class="fl2">Unit No.<input type="text" id="uUnit" maxlength="40" value="Unit '+('0'+(units(a).length+1)).slice(-2)+'"><@@/label>'+
-   '<label class="fl2">Stamp No<input type="text" id="uStamp" maxlength="80"><@@/label><label class="fl2">Serial Code<input type="text" id="uSerial" maxlength="80"><@@/label>'+
-   '<label class="fl2">Drawing Description<input type="text" id="uDdesc" maxlength="80" value="'+esc(a.ddesc||'')+'"><@@/label><label class="fl2">Drawing No<input type="text" id="uDno" maxlength="80"><@@/label><@@/div>'+
+  openModal('<h3>Tambah unit<@@/h3><p class="note">Unit baru otomatis menyalin data dari unit yang sedang dibuka (Client, Type PBB, Stamp No, Serial Code, Drawing, dan Coating Specification) dan semuanya masih bisa diubah. Progres, report, dan outstanding dicatat terpisah per unit.<@@/p>'+
+   '<div class="fgrid"><label class="fl2">Type PBB<input type="text" id="uUnit" maxlength="40" value="'+esc(a.unit||'')+'" placeholder="mis. Type A"><@@/label>'+
+   '<label class="fl2">Stamp No<input type="text" id="uStamp" maxlength="80" value="'+esc(a.stamp||'')+'"><@@/label><label class="fl2">Serial Code<input type="text" id="uSerial" maxlength="80" value="'+esc(a.serial||'')+'"><@@/label>'+
+   '<label class="fl2">Drawing Description<input type="text" id="uDdesc" maxlength="80" value="'+esc(a.ddesc||'')+'"><@@/label><label class="fl2">Drawing No<input type="text" id="uDno" maxlength="80" value="'+esc(a.dno||'')+'"><@@/label><@@/div>'+
    '<div class="act"><button class="btn" data-act="close">Batal<@@/button><button class="btn pri" id="uSave">Tambah unit<@@/button><@@/div>');
   $('#uSave').addEventListener('click',function(){
-    var un=$('#uUnit').value.trim(); if(!un){toast('Unit No. wajib diisi');return;}
-    var n={id:uid(),grp:grpOf(a),no:a.no,name:a.name,cli:a.cli||'',spec:JSON.parse(JSON.stringify(a.spec||[])),unit:un,stamp:$('#uStamp').value.trim(),serial:$('#uSerial').value.trim(),ddesc:$('#uDdesc').value.trim(),dno:$('#uDno').value.trim(),created:Date.now(),parts:{}};
+    var un=$('#uUnit').value.trim();
+    var k0=units(a).length+1,gid=grpOf(a);
+    if(a.mid&&parent.QCCoatUnits&&parent.QCCoatUnits(a.mid)<k0){ if(!(parent.QCCoatAddUnit&&parent.QCCoatAddUnit(a.mid))){toast('Gagal menambah unit di master (maks. 50)');return;} }
+    var nid=(a.mid&&!state.projects.some(function(q){return q.id===gid+'u'+k0;}))?gid+'u'+k0:uid();
+    var n={id:nid,grp:gid,no:a.no,name:a.name,mid:a.mid||'',cli:a.cli||'',spec:JSON.parse(JSON.stringify(a.spec||[])),unit:un,stamp:$('#uStamp').value.trim(),serial:$('#uSerial').value.trim(),ddesc:$('#uDdesc').value.trim(),dno:$('#uDno').value.trim(),created:Date.now(),parts:{}};
     state.projects.push(n); state.active=n.id; save(); closeModal(); renderAll(); toast('Unit ditambahkan');
   });
 }
@@ -17871,25 +17933,39 @@ function bgHTML(k,g){
 function spRowHTML(r,v){return '<tr><td><b>'+(r+1)+'<@@/b><@@/td>'+SPH.map(function(_,c){return '<td><input type="text" data-sp="'+r+'_'+c+'" maxlength="60" value="'+esc((v&&v[c])||'')+'" aria-label="'+SPH[c]+' '+(r+1)+'"><@@/td>';}).join('')+'<td><button class="x" data-act="sprm" data-r="'+r+'" aria-label="Hapus layer '+(r+1)+'">×<@@/button><@@/td><@@/tr>';}
 function spRead(){var o=[];document.querySelectorAll('#spBody tr').forEach(function(tr){o.push([].map.call(tr.querySelectorAll('input'),function(i){return i.value.trim();}));});return o;}
 function spDraw(rows){$('#spBody').innerHTML=rows.map(function(v,r){return spRowHTML(r,v);}).join(''); var b=$('[data-act="spadd"]'); if(b) b.disabled=rows.length>=5; var c=$('#spCnt'); if(c) c.textContent=rows.length+' layer';}
+function masters(){try{return (parent.QCCoatMaster&&parent.QCCoatMaster())||[];}catch(e){return [];}}
+function guessNo(n){var m=/(\d{2}-[A-Za-z]{1,4}\d+)/.exec(n||'');return m?m[1]:'';}
 function projForm(p){
   var edit=!!p; p=p||{no:'',name:'',unit:'',spec:[]};
   var rows=(p.spec&&p.spec.length)?p.spec:[[],[],[]];
-  openModal('<h3>'+(edit?'Edit project':'Project baru')+'<@@/h3><p class="note">Project baru dimulai dengan satu unit. Unit lain ditambah lewat tombol “+ Unit”.<@@/p>'+
-    '<div class="fgrid"><label class="fl2">No. Project<input type="text" id="pNo" maxlength="40" value="'+esc(p.no)+'" placeholder="mis. 26-TR10014"><@@/label>'+
-    '<label class="fl2">Nama project / customer<input type="text" id="pName" maxlength="80" value="'+esc(p.name)+'"><@@/label>'+
-    '<label class="fl2">Unit / No. bridge (opsional)<input type="text" id="pUnit" maxlength="40" value="'+esc(p.unit)+'" placeholder="mis. Bridge 01"><@@/label>'+pExtra(p)+'<@@/div>'+
+  var used={}; state.projects.forEach(function(q){ if(q.mid&&(!edit||grpOf(q)!==grpOf(p))) used[q.mid]=1; });
+  var all=masters(), ms=all.filter(function(n){return !used[n];});
+  if(edit&&p.mid&&ms.indexOf(p.mid)<0) ms.unshift(p.mid);
+  if(!edit&&!ms.length){
+    openModal('<h3>Pilih project dari master<@@/h3><p class="note">'+(all.length?'Semua project di master sudah ditambahkan ke Coating Inspection.':'Belum ada project di master.')+' Tambahkan project lewat tombol <b>Kelola Project<@@/b> di halaman utama, lalu tekan “Segarkan daftar”.<@@/p><div class="act"><button class="btn" data-act="close">Tutup<@@/button><button class="btn pri" id="pRef">Segarkan daftar<@@/button><@@/div>');
+    $('#pRef').addEventListener('click',function(){closeModal();projForm();});
+    return;
+  }
+  var locked=edit&&!!p.mid;
+  var opt='<option value="">— pilih project dari master —<@@/option>'+ms.map(function(n){return '<option value="'+esc(n)+'"'+(n===(p.mid||'')?' selected':'')+'>'+esc(n)+'<@@/option>';}).join('');
+  openModal('<h3>'+(edit?'Edit project':'Pilih project dari master')+'<@@/h3><p class="note">Project diambil dari <b>Kelola Project<@@/b> (master), jadi tidak dibuat manual. Pilih project lalu lengkapi data coating-nya. Unit lain ditambah lewat tombol “+ Unit”.<@@/p>'+
+    '<div class="fgrid"><label class="fl2">Project (master)<select id="pMaster"'+(locked?' disabled':'')+'>'+opt+'<@@/select><@@/label>'+
+    '<label class="fl2">Nama project / customer<input type="text" id="pName" readonly value="'+esc(p.name)+'" placeholder="terisi otomatis dari master"><@@/label>'+
+    '<label class="fl2">No. Project (opsional)<input type="text" id="pNo" maxlength="40" value="'+esc(p.no)+'" placeholder="mis. 26-TR10014"><@@/label>'+
+    '<label class="fl2">Type PBB<input type="text" id="pUnit" maxlength="40" value="'+esc(p.unit)+'" placeholder="mis. Type A"><@@/label>'+pExtra(p)+'<@@/div>'+
     '<div class="sech" style="margin-top:14px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>Coating Specification <span class="tag2" id="spCnt"><@@/span><@@/span><button class="btn sm" data-act="spadd">+ Tambah layer<@@/button><@@/div><p class="note">Satu baris = satu layer coating (maks. 5). Terisi otomatis ke semua report komponen, dan jumlah baris di report mengikuti jumlah layer di sini. Tiap report tetap bisa diubah sendiri.<@@/p>'+
     '<div class="scroll2"><table class="ft"><thead><tr><th>No<@@/th>'+SPH.map(function(c){return '<th>'+c+'<@@/th>';}).join('')+'<th><@@/th><@@/tr><@@/thead><tbody id="spBody"><@@/tbody><@@/table><@@/div>'+
     '<div class="act"><button class="btn" data-act="close">Batal<@@/button><button class="btn pri" id="pSave">Simpan<@@/button><@@/div>');
   $('#modal .md').classList.add('wide'); spDraw(rows);
+  $('#pMaster').addEventListener('change',function(){var v=this.value; $('#pName').value=v; if(!$('#pNo').value.trim()) $('#pNo').value=guessNo(v);});
   $('#pSave').addEventListener('click',function(){
-    var no=$('#pNo').value.trim(), nm=$('#pName').value.trim(), un=$('#pUnit').value.trim();
-    if(!no||!nm){ toast('No. project dan nama wajib diisi'); return; }
+    var mid=$('#pMaster').value||p.mid||'', nm=mid||p.name, no=$('#pNo').value.trim(), un=$('#pUnit').value.trim();
+    if(!nm){ toast('Pilih project dari master terlebih dahulu'); return; }
     var sp=spRead(); if(!sp.length){toast('Minimal satu layer coating');return;}
     var ex={cli:$('#pCli').value.trim(),stamp:$('#pStamp').value.trim(),serial:$('#pSerial').value.trim(),ddesc:$('#pDdesc').value.trim(),dno:$('#pDno').value.trim()};
-    if(edit){ p.no=no; p.name=nm; p.unit=un; p.spec=sp; Object.assign(p,ex); state.projects.forEach(function(q){if(grpOf(q)===grpOf(p)){q.no=no;q.name=nm;q.cli=ex.cli;q.spec=JSON.parse(JSON.stringify(sp));}}); }
-    else{ var n=Object.assign({id:uid(),no:no,name:nm,unit:un,spec:sp,created:Date.now(),parts:{}},ex); n.grp=n.id; state.projects.push(n); state.active=n.id; sel=null; }
-    save(); closeModal(); renderAll(); toast(edit?'Project diperbarui':'Project dibuat');
+    if(edit){ p.no=no; p.name=nm; p.mid=mid; p.unit=un; p.spec=sp; Object.assign(p,ex); state.projects.forEach(function(q){if(grpOf(q)===grpOf(p)){q.no=no;q.name=nm;q.mid=mid;q.cli=ex.cli;q.spec=JSON.parse(JSON.stringify(sp));}}); }
+    else{ var n=Object.assign({id:(mid&&!state.projects.some(function(q){return q.id===hashId(mid);}))?hashId(mid):uid(),no:no,name:nm,mid:mid,unit:un,spec:sp,created:Date.now(),parts:{}},ex); n.grp=n.id; state.projects.push(n); state.active=n.id; sel=null; }
+    save(); closeModal(); renderAll(); toast(edit?'Project diperbarui':'Project ditambahkan dari master');
   });
 }
 document.addEventListener('click',function(e){
@@ -18005,6 +18081,38 @@ async function exportLog(){
   }catch(e){ if(!e||e.code!=='declined') toast('Gagal menyimpan Excel'); }
 }
 
+(function(){var M=masters(),ch=false; state.projects.forEach(function(p){if(!p.mid){var f=M.filter(function(n){return n.toLowerCase()===String(p.name||'').trim().toLowerCase();})[0]; if(f){p.mid=f;ch=true;}}}); if(ch) save();})();
+$('#bPdf').addEventListener('click',savePdfAll);
+/* ===== HUBUNGAN DENGAN MASTER: nama, jumlah unit, project yang sudah dihapus ===== */
+function hashId(s){var h=5381;s=String(s);for(var i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return 'cm'+(h>>>0).toString(36);}
+function orph(p){var M=masters();return !!(p&&p.mid&&M.length&&M.indexOf(p.mid)<0);}
+window.__qcCoatRename=function(old,nw){var ch=false;state.projects.forEach(function(p){if(p.mid===old){p.mid=nw;p.name=nw;ch=true;}});if(ch){save();renderAll();}};
+var _sm=false,_warn={};
+function syncMaster(){
+  if(_sm) return;
+  var a=document.activeElement; if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
+  var md=$('#modal'); if(md&&md.innerHTML) return;
+  var M=masters(); if(!M.length) return;   /* master belum termuat: jangan ubah apa pun */
+  _sm=true; var ch=false;
+  try{
+    state.projects.forEach(function(p){ if(!p.mid){var f=M.filter(function(n){return n.toLowerCase()===String(p.name||'').trim().toLowerCase();})[0]; if(f){p.mid=f;ch=true;}} });
+    var seen={};
+    state.projects.slice().forEach(function(p){
+      var g=grpOf(p); if(!p.mid||seen[g]) return; seen[g]=1;
+      if(M.indexOf(p.mid)<0){ if(!_warn[p.mid]){_warn[p.mid]=1;toast('Project “'+p.mid+'” sudah tidak ada di master (ditandai ⚠)');} return; }
+      var us=units(p),N=parent.QCCoatUnits?parent.QCCoatUnits(p.mid):1,base=us[0];
+      for(var k=us.length+1;k<=N;k++){
+        var id=g+'u'+k; if(state.projects.some(function(q){return q.id===id;})) continue;
+        state.projects.push({id:id,grp:g,no:base.no,name:base.name,mid:base.mid,cli:base.cli||'',spec:JSON.parse(JSON.stringify(base.spec||[])),unit:'',stamp:'',serial:'',ddesc:base.ddesc||'',dno:'',created:Date.now(),parts:{}}); ch=true;
+      }
+      units(p).forEach(function(q){ if(q.name!==p.mid||q.mid!==p.mid){q.name=p.mid;q.mid=p.mid;ch=true;} });
+    });
+  }catch(e){console.warn('syncMaster',e);}
+  _sm=false;
+  if(ch){save();renderAll();}
+}
+window.__qcCoatSync=syncMaster;
+setTimeout(syncMaster,400); setInterval(syncMaster,2500);
 renderAll();
 // font web bisa mengubah lebar teks setelah dimuat → gambar ulang label
 if(document.fonts&&document.fonts.ready) document.fonts.ready.then(renderStage);
@@ -18012,6 +18120,33 @@ if(document.fonts&&document.fonts.ready) document.fonts.ready.then(renderStage);
 <@@/script>
 <@@/body>
 <@@/html>
+</script>
+<script id="coating-master-bridge">
+/* Daftar project master (Kelola Project) untuk modul Coating Inspection */
+window.QCCoatMaster=function(){
+  var out=[],seen={},re=/^(.*) - Unit (\d+)$/;
+  try{Object.keys(projectData||{}).forEach(function(n){var m=re.exec(n),b=m?m[1]:n;if(!b||seen[b])return;seen[b]=1;out.push(b);});}catch(e){}
+  return out;
+};
+window.QCCoatUnits=function(b){var n=1,re=/^(.*) - Unit (\d+)$/;try{Object.keys(projectData).forEach(function(k){var m=re.exec(k);if(m&&m[1]===b)n=Math.max(n,+m[2]);});}catch(e){}return n;};
+window.QCCoatAddUnit=function(b){try{var c=window.QCCoatUnits(b);if(window.QCUnits&&QCUnits.setUnits){QCUnits.setUnits(b,c+1);return window.QCCoatUnits(b)>c;}}catch(e){}return false;};
+window.QCCoatRename=function(old,nw){
+  try{
+    var f=document.querySelector('#ctHolder iframe'),w=f&&f.contentWindow;
+    if(w&&w.__qcCoatRename){w.__qcCoatRename(old,nw);return;}
+    var st=JSON.parse(localStorage.getItem('dcs_bb_state')||'null'),ch=false; if(!st||!st.projects)return;
+    st.projects.forEach(function(p){if(p.mid===old){p.mid=nw;p.name=nw;ch=true;}});
+    if(ch){localStorage.setItem('dcs_bb_state',JSON.stringify(st));if(window.QCCoat&&QCCoat.saved)QCCoat.saved(st);}
+  }catch(e){console.warn('QCCoatRename',e);}
+};
+(function(){ /* ganti nama project di master -> coating ikut */
+  var o=window.pmRen; if(typeof o!=='function')return;
+  window.pmRen=function(p){
+    var before=window.QCCoatMaster(),r=o.apply(this,arguments);
+    Promise.resolve(r).then(function(ok){if(!ok)return;var after=window.QCCoatMaster(),nw=after.filter(function(n){return before.indexOf(n)<0;});if(after.indexOf(p)<0&&nw.length===1)window.QCCoatRename(p,nw[0]);});
+    return r;
+  };
+})();
 </script>
 <script id="coating-module">
 /* ============================================================
@@ -22012,7 +22147,11 @@ window.BankIR={open:window.showBir};
 .nv-top{display:flex;gap:10px;align-items:center;background:#fff4f2;border:1px solid #f4b8b2;border-radius:12px;padding:10px 14px;margin-bottom:14px;color:#8a1c14;font-size:.82rem}
 .nv-top b{font-size:.95rem}
 /* resume harian */
-.nv-day{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:16px}
+.nv-day{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+.nv-day .nv-tbl{width:100%;table-layout:auto}
+.nv-day .nv-tbl th.n,.nv-day .nv-tbl td.n{width:14%}
+.nv-day .nv-tbl th:first-child,.nv-day .nv-tbl td:first-child{width:30%}
+.nv-day .nv-tbl th,.nv-day .nv-tbl td{padding:9px 14px}
 @media(max-width:900px){.nv-day{grid-template-columns:1fr}}
 .nv-dl{max-height:330px;overflow:auto;border:1px solid #e3e9f3;border-radius:12px}
 .nv-di{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 12px;border-bottom:1px solid #e3e9f3;cursor:pointer;font-size:.78rem}
@@ -22203,6 +22342,32 @@ function gatherInsp(){
   }catch(e){console.error(e);}
   return out;
 }
+/* Komponen ADDITIONAL: kunci inspeksi '<PROJECT>~add_<id>' (bukan baris Excel). Dikumpulkan terpisah supaya statistik progres/evaluasi yang sudah ada tidak bergeser. */
+function gatherAdd(){
+  var out=[],seen={};
+  function one(key,st,date,by,t){
+    var ai=key.indexOf('~add_');if(ai<0||!st||seen[key])return;
+    var proj=key.slice(0,ai),o=null;
+    try{o=JSON.parse(localStorage.getItem('qcadd_'+proj+'|'+key.slice(ai+5))||'null');}catch(e){}
+    if(!o)return;                       /* komponen sudah dihapus -> hasilnya tidak dihitung */
+    seen[key]=1;
+    out.push({key:key,proj:proj,st:st,date:date,t:t,by:by,name:String(o.part_name||o.no||'Additional'),dwg:o.drawing_no||'',add:true});
+  }
+  try{
+    for(var i=0;i<localStorage.length;i++){           /* 1) insp_ (lengkap: tanggal, jam, inspector) */
+      var k=localStorage.key(i);if(!k||k.indexOf('insp_')!==0||k==='insp_by_last')continue;
+      var raw=localStorage.getItem(k);if(!raw||raw.charAt(0)!=='{')continue;
+      var d;try{d=JSON.parse(raw);}catch(e){continue;}
+      var key=k.slice(5);if(key.indexOf('~add_')<0)continue;
+      var t=d.t||0;one(key,d.status||localStorage.getItem('inspst_'+key)||'',d.date||(t?iso(t):''),d.by||'',t);
+    }
+    for(var j=0;j<localStorage.length;j++){           /* 2) inspst_ saja (tanpa detail) */
+      var k2=localStorage.key(j);if(!k2||k2.indexOf('inspst_')!==0)continue;
+      var key2=k2.slice(7);one(key2,localStorage.getItem(k2)||'','','',0);
+    }
+  }catch(e){console.error(e);}
+  return out;
+}
 function gatherOut(){var a=[];try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf('qcout_')===0){try{var o=JSON.parse(localStorage.getItem(k));if(o&&o.id)a.push(o);}catch(e){}}}}catch(e){}return a;}
 function gatherWI(){try{return typeof window._wiRecords==='function'?window._wiRecords().slice():[];}catch(e){return[];}}
 function gatherInc(){try{return typeof incStoreAll==='function'?incStoreAll():[];}catch(e){return[];}}
@@ -22216,7 +22381,7 @@ function coatingInfo(){
   return {projects:ps.length,pct:n?sum/n:0,notDone:notDone};
 }
 function snapshot(){
-  return {insp:gatherInsp(),out:gatherOut(),wi:gatherWI(),inc:gatherInc(),coat:coatingInfo(),pd:PD()};
+  return {insp:gatherInsp(),add:gatherAdd(),out:gatherOut(),wi:gatherWI(),inc:gatherInc(),coat:coatingInfo(),pd:PD()};
 }
 function grouped(){
   var names=Object.keys(PD()),idx={},groups=[];
@@ -22292,11 +22457,13 @@ function dashHtml(D){
 /* --- resume inspeksi per hari --- */
 function dayRecords(D,day,carry){
   var rows=[];
-  D.insp.forEach(function(x){if(x.date!==day)return;rows.push({kind:x.main?'FAB':'FAT',t:x.t,by:x.by,name:x.name,sub:x.proj+(x.dwg?' · '+x.dwg:''),
+  D.insp.concat(D.add||[]).forEach(function(x){if(x.date!==day)return;rows.push({kind:(x.main||x.add)?'FAB':'FAT',t:x.t,by:x.by,name:x.name,sub:x.proj+(x.add?' · Additional':'')+(x.dwg?' · '+x.dwg:''),
     st:x.st==='special'?'accept':x.st,stLbl:(window.INSP_ST&&INSP_ST[x.st]&&INSP_ST[x.st].t)||x.st,stC:(window.INSP_ST&&INSP_ST[x.st]&&INSP_ST[x.st].c)||'#64748b',key:x.key});});
   D.inc.forEach(function(r){var s=incSplit(r),rd=String(r.date||'').slice(0,10),isOut=s.open>0;
     if(carry?(!isOut&&rd!==day):rd!==day)return;
-    rows.push({kind:'INC',out:isOut,t:r.t||0,by:r.inspector||r.by||'',name:r.partDesc||r.iiNo||'Incoming',sub:(r.project||'')+(r.supplier?' · '+r.supplier:'')+(carry&&isOut&&rd&&rd!==day?' · masuk '+rd:''),
+    /* inspector = Nama Inspektor pada record incoming; jam = waktu input record, hanya bila diinput pada tanggal inspeksi yang sama */
+    var _cT=+r.createdAt||0,_by=String(r.namaInspektor||r.inspector||r.by||'').replace(/\s+/g,' ').trim();
+    rows.push({kind:'INC',out:isOut,t:r.t||((_cT&&iso(_cT)===rd)?_cT:0),by:_by,name:r.partDesc||r.iiNo||'Incoming',sub:(r.project||'')+(r.supplier?' · '+r.supplier:'')+(carry&&isOut&&rd&&rd!==day?' · masuk '+rd:''),
       st:isOut?'hold':s.res==='ACCEPT'?'accept':s.res==='REJECT'?'reject':'hold',stLbl:isOut?'HOLD':(s.res||'HOLD'),stC:s.res==='ACCEPT'?'#16a34a':s.res==='REJECT'?'#dc2626':'#d97706'});});
   D.wi.forEach(function(r){if(String(r.t||'').slice(0,10)!==day)return;
     rows.push({kind:'WI',t:0,by:r.i||r.insp||'',name:(r.m||'Welding')+(r.w?' · '+r.w:''),sub:(r.p||'')+' · '+nf(num(r.l))+' mm',
@@ -22324,12 +22491,12 @@ function dayHtml(D){
     return '<tr class="nv-ar" '+(r.key?'data-key="'+esc(r.key)+'" title="Klik untuk membuka hasil inspeksi"':'')+'><td class="n">'+(i+1)+'</td><td>'+hhmm(r.t)+'</td><td><b>'+esc(r.name)+'</b></td><td>'+esc(r.kind==='FAB'?'Fabrikasi':r.kind)+'</td><td>'+esc(r.sub)+'</td><td>'+esc(r.by||'-')+'</td><td><span class="nv-st" style="color:'+r.stC+'">'+esc(r.stLbl)+'</span></td></tr>';}).join('');
   var list=rowsH?'<div class="nv-scroll nv-dl"><table class="nv-tbl nv-atbl"><thead><tr><th class="n">No</th><th>Jam</th><th>Kegiatan</th><th>Jenis</th><th>Project / Detail</th><th>Inspector</th><th>Status</th></tr></thead><tbody>'+rowsH+'</tbody></table></div>'+(fk.length>200?'<p class="nv-def">Menampilkan 200 dari '+fk.length+' kegiatan.</p>':''):empty;
   var actHtml=NV.kind?'<h3>Aktivitas · '+esc(kLbl)+'</h3><p class="nv-def">Klik baris hasil inspeksi untuk membukanya. <a href="#" data-nv-kind="">Tutup</a></p>'+list
-    :'<h3>Aktivitas</h3><p class="nv-def">Klik salah satu jenis inspeksi pada tabel untuk menampilkan aktivitasnya.</p><div class="nv-hint">👈 Pilih FAT, Fabrikasi, Incoming, WI &amp; NDT, atau Total</div>';
+    :'<h3>Aktivitas</h3><p class="nv-def">Klik salah satu jenis inspeksi pada tabel untuk menampilkan aktivitasnya.</p><div class="nv-hint">👆 Pilih FAT, Fabrikasi, Incoming, WI &amp; NDT, atau Total</div>';
   return '<div class="nv-tools" id="nvDayTools" style="margin-bottom:12px"><input type="date" data-nv="day" class="nv-date" value="'+NV.day+'"><select data-nv="by"><option value="all">Semua inspector</option>'+inspectors.map(function(b){return '<option value="'+esc(b)+'"'+(NV.by===b?' selected':'')+'>'+esc(b)+'</option>';}).join('')+'</select><button type="button" data-nv-act="today">Hari ini</button></div>'+
-    '<div class="nv-panel"><div class="nv-day"><div><h3>Ringkasan per Jenis Inspeksi</h3><p class="nv-def">Jumlah kegiatan inspeksi pada '+NV.day+(NV.by!=='all'?' · '+esc(NV.by):'')+'. Accept termasuk Spesial Accepted.</p>'+
+    '<div class="nv-panel"><div class="nv-day"><div style="grid-column:1/-1"><h3>Ringkasan per Jenis Inspeksi</h3><p class="nv-def">Jumlah kegiatan inspeksi pada '+NV.day+(NV.by!=='all'?' · '+esc(NV.by):'')+'. Accept termasuk Spesial Accepted.</p>'+
     '<div class="nv-scroll"><table class="nv-tbl"><thead><tr><th>Jenis inspeksi</th><th class="n">Total</th><th class="n">✔ Accept</th><th class="n">⏸ Hold</th><th class="n">✖ Reject/Repair</th></tr></thead><tbody>'+tb+'</tbody></table></div>'+
     '<h4>7 hari terakhir (kegiatan / hari)</h4><div class="nv-spark">'+spark+'</div></div>'+
-    '<div'+(NV.kind?' style="grid-column:1/-1"':'')+'>'+actHtml+'</div></div></div>';
+    '<div style="grid-column:1/-1">'+actHtml+'</div></div></div>';
 }
 
 /* --- filter periode (dipakai Poin Repair & Evaluasi) --- */
@@ -22571,6 +22738,14 @@ function toggleAcc(id){
   if(nw&&NV.open[id]&&nw.getBoundingClientRect().top<0)nw.scrollIntoView({block:'start'});
 }
 function openItem(key){
+  var ai=key.indexOf('~add_');
+  if(ai>=0){                                   /* komponen Additional: ada di tabel Complete (grup ADDITIONAL COMPONENTS) */
+    var ap=key.slice(0,ai),ao=null;try{ao=JSON.parse(localStorage.getItem('qcadd_'+ap+'|'+key.slice(ai+5))||'null');}catch(e){}
+    if(!ao)return;
+    setP(ap);window.openView('complete');
+    setTimeout(function(){try{openInspected(key,String(ao.part_name||ao.no||'Additional'));}catch(e){}},60);
+    return;
+  }
   var u=key.lastIndexOf('_'),p=key.slice(0,u),idx=+key.slice(u+1),r=((PD())[p]||[])[idx];if(!r)return;
   setP(p);
   window.openView(isMain(r)?'main':'complete');
@@ -22615,7 +22790,7 @@ setInterval(function(){try{
   if(!document.body.classList.contains('is-home')||NV.tab==='bir')return;
   var a=document.activeElement;if(a&&root0&&root0.contains(a)&&/^(SELECT|INPUT)$/.test(a.tagName))return;
   if(document.querySelector('.nv-ov'))return;
-  var D=snapshot(),s=D.insp.length+'|'+D.out.length+'|'+D.wi.length+'|'+D.inc.length+'|'+D.coat.pct;
+  var D=snapshot(),s=D.insp.length+'|'+D.add.length+'|'+D.out.length+'|'+D.wi.length+'|'+D.inc.length+'|'+D.coat.pct;
   if(s!==sig){var first=sig==='';sig=s;if(!first)build(false);}
 }catch(e){}},15000);
 window.NVMenu={goTab:goTab,build:build};
