@@ -22251,6 +22251,15 @@ html body.is-home .subtitle,html body.is-home div.subtitle[style]{color:#5a6b85!
 .nv-tbl tr.tot td{background:#f3f7fc!important}
 .nv-tbl tr.dim td{color:#9aaac2!important}
 .nv-tbl tr.nvr:hover td{background:#f3f7fc!important}
+/* Tabel aktivitas: rata kiri, tiap baris satu baris penuh, lebar mengikuti isi */
+.nv-day .nv-atbl{width:100%;table-layout:auto}
+.nv-day .nv-atbl th,.nv-day .nv-atbl td,.nv-day .nv-atbl th.n,.nv-day .nv-atbl td.n{text-align:left!important;white-space:nowrap!important;width:1%!important;padding:9px 14px!important;max-width:none!important;overflow:visible!important;text-overflow:clip!important}
+.nv-day .nv-atbl th:nth-child(3),.nv-day .nv-atbl td:nth-child(3){width:55%!important}
+.nv-day .nv-atbl th:nth-child(5),.nv-day .nv-atbl td:nth-child(5){width:45%!important}
+/* Warna status: Accept/Pass hijau, Hold kuning, Reject merah */
+.nv-st.nv-st-ok{color:#15803d!important;background:#dcfce7;border-color:#16a34a}
+.nv-st.nv-st-hold{color:#854d0e!important;background:#fef08a;border-color:#eab308}
+.nv-st.nv-st-rej{color:#b91c1c!important;background:#fee2e2;border-color:#dc2626}
 .nv-dl{border-color:#e3ecf8}.nv-di{border-bottom-color:#e3ecf8}.nv-di:hover{background:#f3f7fc}
 .nv-spark i{background:linear-gradient(180deg,#1688f8,#7cc0ff)}.nv-spark div.on i{background:#002060}
 .nv-bar{background:#e3ecf8}.nv-bar i{background:#002060}
@@ -22488,7 +22497,7 @@ function dayHtml(D){
   var kLbl='';kinds.forEach(function(k){if(k[0]===NV.kind)kLbl=k[1];});if(NV.kind==='ALL')kLbl='Semua jenis';
   var empty='<div class="nv-empty">'+(NV.day===today?'Belum ada kegiatan inspeksi hari ini.':'Tidak ada kegiatan inspeksi pada tanggal ini.')+'</div>';
   var rowsH=fk.slice().sort(function(a,b){return (b.t||0)-(a.t||0);}).slice(0,200).map(function(r,i){
-    return '<tr class="nv-ar" '+(r.key?'data-key="'+esc(r.key)+'" title="Klik untuk membuka hasil inspeksi"':'')+'><td class="n">'+(i+1)+'</td><td>'+hhmm(r.t)+'</td><td><b>'+esc(r.name)+'</b></td><td>'+esc(r.kind==='FAB'?'Fabrikasi':r.kind)+'</td><td>'+esc(r.sub)+'</td><td>'+esc(r.by||'-')+'</td><td><span class="nv-st" style="color:'+r.stC+'">'+esc(r.stLbl)+'</span></td></tr>';}).join('');
+    return '<tr class="nv-ar" '+(r.key?'data-key="'+esc(r.key)+'" title="Klik untuk membuka hasil inspeksi"':'')+'><td class="n">'+(i+1)+'</td><td>'+hhmm(r.t)+'</td><td><b>'+esc(r.name)+'</b></td><td>'+esc(r.kind==='FAB'?'Fabrikasi':r.kind)+'</td><td>'+esc(r.sub)+'</td><td>'+esc(r.by||'-')+'</td><td><span class="nv-st nv-st-'+(r.st==='hold'?'hold':(r.st==='reject'?'rej':'ok'))+'">'+esc(r.stLbl)+'</span></td></tr>';}).join('');
   var list=rowsH?'<div class="nv-scroll nv-dl"><table class="nv-tbl nv-atbl"><thead><tr><th class="n">No</th><th>Jam</th><th>Kegiatan</th><th>Jenis</th><th>Project / Detail</th><th>Inspector</th><th>Status</th></tr></thead><tbody>'+rowsH+'</tbody></table></div>'+(fk.length>200?'<p class="nv-def">Menampilkan 200 dari '+fk.length+' kegiatan.</p>':''):empty;
   var actHtml=NV.kind?'<h3>Aktivitas · '+esc(kLbl)+'</h3><p class="nv-def">Klik baris hasil inspeksi untuk membukanya. <a href="#" data-nv-kind="">Tutup</a></p>'+list
     :'<h3>Aktivitas</h3><p class="nv-def">Klik salah satu jenis inspeksi pada tabel untuk menampilkan aktivitasnya.</p><div class="nv-hint">👆 Pilih FAT, Fabrikasi, Incoming, WI &amp; NDT, atau Total</div>';
