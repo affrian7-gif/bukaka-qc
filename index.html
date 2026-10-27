@@ -14812,7 +14812,7 @@ input::placeholder, textarea::placeholder {
   }
   function cellV(t, span, strong){
     return '<td'+(span?' colspan="'+span+'"':'')+' style="width:'+(span?'81%':'31%')+';padding:8px 10px;border:1px solid '+LINE+';font-size:'+(strong?'11':'10')+'px;'+
-           'font-weight:'+(strong?'800':'500')+';color:'+(strong?NAVY:'#1a202c')+';vertical-align:middle;word-break:break-word;">'+t+'</td>';
+           'font-weight:'+(strong?'800':'500')+';color:'+(strong?NAVY:'#1a202c')+';vertical-align:middle;white-space:normal;overflow-wrap:anywhere;word-break:break-word;min-width:0;">'+t+'</td>';
   }
 
   function pfTxt(v, def){
@@ -14830,6 +14830,7 @@ input::placeholder, textarea::placeholder {
     return v;
   }
   function overallTxt(r){ return r==='ACCEPT'?'PASS':r==='REJECT'?'REJECT':r==='HOLD'?'HOLD':'PENDING'; }
+  function wrapTxt(v){ return String(v==null?'':v).replace(/[\u00a0\u2007\u202f\u2060\u200b]/g,' ').replace(/[\r\n\t]+/g,' ').replace(/ {2,}/g,' ').trim(); }
   function itemRows(rec){
     var u = String(rec.qtyUnit||'').toUpperCase();
     if(Array.isArray(rec.items) && rec.items.length>1)
@@ -14841,7 +14842,7 @@ input::placeholder, textarea::placeholder {
            '<span style="font-weight:500;">'+E(val||'—')+'</span></div>';
   }
   function dtd(txt, extra){
-    return '<td style="padding:6px 5px;border:1px solid '+LINE+';font-size:9px;vertical-align:middle;word-break:break-word;'+(extra||'')+'">'+txt+'</td>';
+    return '<td style="padding:6px 5px;border:1px solid '+LINE+';font-size:9px;vertical-align:middle;white-space:normal;overflow-wrap:anywhere;word-break:break-word;min-width:0;'+(extra||'')+'">'+txt+'</td>';
   }
   function dth(txt){
     return '<td style="padding:6px 4px;background:'+LABEL_BG+';border:1px solid '+LINE+';font-size:8.5px;font-weight:800;color:'+NAVY+';text-align:center;vertical-align:middle;">'+txt+'</td>';
@@ -14868,8 +14869,8 @@ input::placeholder, textarea::placeholder {
     var body = its.map(function(it, k){
       return '<tr>'+
         dtd(String(k+1), 'text-align:center;')+
-        dtd(E(it.t||'—'))+
-        dtd(E(it.d||'—'), 'font-weight:600;')+
+        dtd(E(wrapTxt(it.t)||'—'))+
+        dtd(E(wrapTxt(it.d)||'—'), 'font-weight:600;line-height:1.35;')+
         dtd(E(((it.q||'—')+' '+it.u).trim()), 'text-align:center;')+
         dtd(E(it.s||'—'), 'text-align:center;')+
         dtd(vis, 'text-align:center;')+
@@ -14877,7 +14878,7 @@ input::placeholder, textarea::placeholder {
         dtd(fn,  'text-align:center;')+
         dtd(E(mtc), 'text-align:center;')+
         dtd(ov,  'text-align:center;font-weight:900;color:'+ovColor+';')+
-        (k===0 ? '<td style="padding:6px 5px;border:1px solid '+LINE+';font-size:9px;vertical-align:top;word-break:break-word;" rowspan="'+n+'">'+E(rec.keterangan||'')+'</td>' : '')+
+        (k===0 ? '<td style="padding:6px 5px;border:1px solid '+LINE+';font-size:9px;vertical-align:top;white-space:normal;overflow-wrap:anywhere;word-break:break-word;min-width:0;" rowspan="'+n+'">'+E(rec.keterangan||'')+'</td>' : '')+
       '</tr>';
     }).join('');
     var widths = [4,11,22,8,7,7,8,7,9,7,10];
