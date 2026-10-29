@@ -16520,13 +16520,20 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
     var pages = Math.max(1, Math.ceil(sorted.length/UI.pageSize));
     if(UI.page>pages) UI.page = pages;
     var slice = sorted.slice((UI.page-1)*UI.pageSize, UI.page*UI.pageSize);
+    var dMap = null;
+    function descOf(r){
+      if(r.dw && r.dw.name) return normTxt(r.dw.name);
+      if(dMap===null){ dMap={}; try{ dwgIndex().forEach(function(d){ var k=normTxt(d.code).toLowerCase(); if(k && d.name && !dMap[k]) dMap[k]=normTxt(d.name); }); }catch(e){} }
+      return dMap[normTxt(r.m).toLowerCase()]||'';
+    }
     var body = slice.map(function(r){
       var rate = r.l? r.r/r.l : 0;
+      var ds = descOf(r);
       return '<tr data-id="'+esc(r.id)+'">'+
         '<td data-l="Tanggal">'+fmtD(r.t)+'<br><span style="color:#7f9bbd">'+r.t.slice(11,16)+'</span></td>'+
         '<td data-l="Inspektor">'+esc(r.i)+'</td>'+
         '<td data-l="Project">'+esc(r.p)+'</td>'+
-        '<td data-l="Marking ID"><b>'+esc(r.m)+'</b></td>'+
+        '<td data-l="Marking ID"><b>'+esc(r.m)+'</b>'+(ds?'<br><span style="color:#fbbf24;font-weight:600;font-size:.92em">'+esc(ds)+'</span>':'')+'</td>'+
         '<td data-l="Qty" class="num">'+nf(r.q)+'</td>'+
         '<td data-l="Subkon + Line">'+esc(r.u)+'</td>'+
         '<td data-l="Welder">'+esc(r.w)+'</td>'+
@@ -16539,7 +16546,7 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
       '</tr>';
     }).join('');
     body = body.replace(/(<td [^>]*>)([\s\S]*?)(<\/td>)/g, '$1<span class="cv">$2</span>$3');
-    var widths = [6,8,14,9,3,7,6,8,7,7,7,4,14];
+    var widths = [6,7,12,15,3,6,6,7,7,7,7,4,13];
     var heads = ['Tanggal','Inspektor','Project','Marking ID','Qty','Subkon + Line','Welder','Kegiatan','Insp. (mm)','Repair (mm)','Status','Foto','Keterangan'];
     return '<div class="wi-panel c12">'+
       '<div class="wi-bar" style="margin-bottom:8px"><h3 style="margin:0">Data Inspeksi · '+nf(rows.length)+' record</h3>'+
@@ -20137,14 +20144,7 @@ body.is-wi #qoBtn{display:none}
     }catch(e){}
   }
   if(wiRoot){
-    var acts=wiRoot.querySelector('.wi-actions');
-    if(acts&&!document.getElementById('wiOutBtn')){
-      var wb=document.createElement('button');
-      wb.className='wi-btn'; wb.type='button'; wb.id='wiOutBtn'; wb.style.cssText='background:linear-gradient(135deg,#f59e0b,#ea580c);border-color:transparent';
-      wb.innerHTML='📌 Outstanding <span></span>';
-      var addBtn=document.getElementById('wiAdd'); acts.insertBefore(wb,addBtn||null);
-      wb.addEventListener('click',function(){open({mod:'wi',proj:null});});
-    }
+    /* Tombol 📌 Outstanding di header dihapus: sudah ada tab ⚠️ Outstanding (+ tombol "Buka tampilan lengkap" di dalamnya) */
     if(wiBody){
       wiBody.addEventListener('click',function(e){
         var b=e.target.closest('.qo-mini'); if(!b)return;
