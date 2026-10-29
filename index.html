@@ -4699,7 +4699,7 @@ body.guest-mode .out-photo-box .rm-photo { display:none !important; }
       </div>
     <div class="hm-stbar" title="Status hasil inspeksi (main assy + komponen)"><span style="color:#16a34a">✔ 0</span><span style="color:#2563eb">★ 0</span><span style="color:#dc2626">✖ 0</span><span style="color:#d97706">⏸ 0</span><span style="color:#94a3b8">☐ 5.745 belum</span></div></div>
   </div>
-  <div class="hm-hint">Main Assy yang sudah dicentang di Fabrikasi otomatis tercentang juga di FAT dan Non Tunnel. Komponen di bawahnya tetap dicek satu per satu. Tersimpan otomatis di browser ini.</div></div>
+  <div class="hm-hint">Komponen dicek satu per satu. Tersimpan otomatis di browser ini.</div></div>
 
     <div class="controls">
         <button id="btnHome" onclick="showHome()">🏠 Dashboard</button>
@@ -4738,6 +4738,8 @@ body.guest-mode .out-photo-box .rm-photo { display:none !important; }
                             <th>Qty</th>
                             <th>Material</th>
                             <th style="text-align: center;">Drawing Link</th>
+                            <th class="stg-h" title="Centang tahap Fabrication &amp; Preparation"><span class="stg-pill f">Fab &amp; Prep</span></th>
+                            <th class="stg-h" title="Centang tahap FAT"><span class="stg-pill t">FAT</span></th>
                             <th style="text-align: center;">Hasil Inspect</th>
                         </tr>
                     </thead>
@@ -7665,7 +7667,7 @@ function close(force){
 
 /* ---------- API global ---------- */
 window.iq={print:printResult,xPick,xDel,xView,extra:xPanel,delResult,tool:setTool,undo,redo,clear:clearAll,zoom:zoomBtn,fit,rotate,close,save,saveDo,setSt,hideDlg:hideMsg,page:gotoPage,pop,saveSrc,pickFile,reload:()=>{$('iqSrcPanel').style.display='none';reloadPdf(true);}};
-window.closeInspModal=close;
+window.closeInspModal=close;window.iq.getPdf=getBytes;window.iq.pdfjs=ensurePdfJs;
 window.loadInspectionDrawing=function(linksStr,title,key){
   if(!linksStr)return;
   const urls=String(linksStr).split(/[,\s]+/).map(x=>x.trim()).filter(x=>x.startsWith('http'));
@@ -7781,19 +7783,17 @@ function renderHome(animate){
       <span class="hm-eyebrow"><span class="hm-dot"></span>Live QC Overview</span>
       <h2 class="hm-h">Dashboard<br>Quality Control</h2>
       <p class="hm-sub">Pantau progres fabrikasi dan kelengkapan komponen seluruh project dalam satu layar.</p>
-      <div class="hm-chips"><span>📁 ${names.length} Project</span><span>⚙️ ${fmt(T.main)} Main Assy</span><span>🔩 ${fmt(T.comp)} Komponen</span><span>🗓️ ${today}</span></div>
+      <div class="hm-chips"><span>📁 ${names.length} Project</span><span>🔩 ${fmt(T.comp)} Komponen</span><span>🗓️ ${today}</span></div>
     </div>
     <div class="hm-hero-r">
       ${ring(overall,196,9,'#22d3ee','#a78bfa',num(overall,1)+'%','Progress Total','gHero','2.1rem')}
       <div class="hm-legend">
-        <div style="--c:#22d3ee"><span><em></em>Main Assy</span><b>${fmt(T.mainC)}<span style="font-size:.9rem;color:#7f9fc2;font-weight:600"> / ${fmt(T.main)}</span></b></div>
         <div style="--c:#a78bfa"><span><em></em>Komponen</span><b>${fmt(T.compC)}<span style="font-size:.9rem;color:#7f9fc2;font-weight:600"> / ${fmt(T.comp)}</span></b></div>
       </div>
     </div>
   </section>
 
   <div class="hm-kpis">
-    ${kpi(1,'⚙️','Main Assy',num(T.main),fmt(T.mainC)+' sudah difabrikasi','#22d3ee')}
     ${kpi(2,'🔩','Total Components',num(T.comp),fmt(T.compC)+' sudah dicek','#a78bfa')}
     ${kpi(3,'📐','Drawing Terhubung',num(T.link),pct(T.link,all).toLocaleString('id-ID')+'% dari seluruh item','#34d399')}
     ${kpi(4,'✅','Hasil Inspeksi',num(T.insp),'Markup tersimpan di browser','#fbbf24')}
@@ -7803,9 +7803,8 @@ function renderHome(animate){
     <div class="hm-seg" title="Project aktif">${names.map(p=>`<button class="${p===sel?'on':''}" onclick="selectHomeProject('${e(p)}')">${e(p)}</button>`).join('')}</div>
   </div>
   <div class="hm-menu">
-    ${menu(6,'main','⚙️','Fabrikasi Main Assy','Menampilkan list modul utama (main assy) untuk proses fabrikasi.',S.mainChecked,S.mainTotal,'#22d3ee','#3b82f6','gM')}
     ${menu(7,'complete','📊','FAT','Menampilkan seluruh list lengkap: main assy beserta semua komponennya.',S.compChecked,S.compTotal,'#a78bfa','#ec4899','gC')}
-    ${menu(8,'nontunnel','🚧','Non Tunnel','Menampilkan seluruh list lengkap: main assy beserta semua komponennya.',S.compChecked,S.compTotal,'#fb923c','#f43f5e','gN')}
+    ${menu(8,'nontunnel','🚧','Fabrication & Preparation - Dimensional & General Visual Check','Menampilkan list dimensional &amp; general visual check fabrication &amp; preparation.',S.compChecked,S.compTotal,'#fb923c','#f43f5e','gN')}
     ${menu(9,'incoming','📦','Incoming Inspection','Pemeriksaan material datang (Incoming Inspection) & Material Receiving Status.', (window._incomingRecordsCount ? window._incomingRecordsCount() : 0), Math.max(10, window._incomingRecordsCount ? window._incomingRecordsCount() : 10),'#0284c7','#38bdf8','gInc')}
   </div>
 
@@ -7815,17 +7814,15 @@ function renderHome(animate){
     <div class="hm-proj hm-in ${p===sel?'sel':''}" style="--i:${9+k}" onclick="selectHomeProject('${e(p)}')">
       <div class="hm-proj-head"><span class="hm-proj-name">${e(p)}</span>${p===sel?'<span class="hm-pill">● AKTIF</span>':''}</div>
       <div class="hm-proj-rings">
-        <div class="hm-pr">${ring(a,66,10,'#22d3ee','#3b82f6',Math.round(a)+'%','','gP'+k+'a','.95rem')}<div><small>Fabrikasi</small><strong>${fmt(m.mainChecked)} / ${fmt(m.mainTotal)}</strong><span>main assy</span></div></div>
         <div class="hm-pr">${ring(b,66,10,'#a78bfa','#ec4899',Math.round(b)+'%','','gP'+k+'b','.95rem')}<div><small>FAT</small><strong>${fmt(m.compChecked)} / ${fmt(m.compTotal)}</strong><span>komponen</span></div></div>
       </div>
       <div class="hm-mini">
-        <div><small>Drawing Main</small><strong>${fmt(m.mainLink)}/${fmt(m.mainTotal)}</strong></div>
         <div><small>Drawing Comp</small><strong>${fmt(m.compLink)}/${fmt(m.compTotal)}</strong></div>
         <div><small>Hasil Inspeksi</small><strong>${fmt(m.inspected)}</strong></div>
       </div>
     </div>`;}).join('')}
   </div>
-  <div class="hm-hint">Main Assy yang sudah dicentang di Fabrikasi otomatis tercentang juga di FAT dan Non Tunnel. Komponen di bawahnya tetap dicek satu per satu. Tersimpan otomatis di browser ini.</div>`;
+  <div class="hm-hint">Komponen dicek satu per satu. Tersimpan otomatis di browser ini.</div>`;
   if(animate) countUp(root);
 }
 
@@ -7842,7 +7839,7 @@ function openView(view){
   showOnlyCompleteness = false;           // completeness = seluruh list lengkap
   document.body.classList.remove('is-home');
   const sel=document.getElementById('projectSelect'); if(sel) sel.value=currentProject;
-  document.getElementById('listTitle').textContent = view==='main' ? 'Fabrikasi Main Assy — List Modul Utama' : (view==='nontunnel' ? 'Non Tunnel — Seluruh List' : 'FAT — Seluruh List');
+  document.getElementById('listTitle').textContent = view==='main' ? 'Fabrikasi Main Assy — List Modul Utama' : (view==='nontunnel' ? 'Fabrication & Preparation - Dimensional & General Visual Check' : 'FAT — Seluruh List');
   renderTable();
   window.scrollTo(0,0);
 }
@@ -8073,7 +8070,7 @@ async function renameProject(old,nw){
   if(nw.length>60||/ - Unit \d+$/i.test(nw)||nw.charAt(0)==='▶'){toast('Nama tidak valid (maks. 60 karakter, tidak boleh berakhiran " - Unit N")',1);return false}
   if(nw in projectData){toast('Nama "'+nw+'" sudah dipakai project lain',1);return false}
   const rows=projectData[old];if(!rows||!(old in projectData))return false;
-  const bi=BUILTIN.includes(old),re=new RegExp('^'+old.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'((?: - Unit \\d+)?_\\d+)$');
+  const bi=BUILTIN.includes(old),re=new RegExp('^'+old.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'((?: - Unit \\d+)?_\\d+(?:~F)?)$');
   store.projects[nw]=rows;delete store.projects[old];
   if(store.drive[old]){store.drive[nw]=store.drive[old];delete store.drive[old]}
   delete store.hidden[nw];if(bi)store.hidden[old]=1;
@@ -8295,6 +8292,7 @@ function coatPieces(st){
     if (p.na && Object.keys(p.na).length) m[p.id + '|n'] = JSON.stringify(p.na);
     if (p.rep && Object.keys(p.rep).length) m[p.id + '|r'] = JSON.stringify(p.rep);
   });
+  ((st && st.env) || []).forEach(x => { if (x && x.id) m['~env|e|' + x.id] = JSON.stringify(x); });   // Environmental Log: tidak terikat project
   return m;
 }
 let coatSnap = coatPieces(coatLoad());
@@ -8324,6 +8322,7 @@ function coatMerge(st, recs){
       const key = r.k.slice(2);
       if (key === '~layout') { st.__layout = r.v; return; }
       const sg = key.split('|'), pid = sg[0], arr = st.projects;
+      if (pid === '~env') { const L = st.env = st.env || [], ix = L.findIndex(x => x && x.id === sg[2]); if (r.v === null) { if (ix >= 0) L.splice(ix, 1); } else if (ix >= 0) L[ix] = JSON.parse(r.v); else L.push(JSON.parse(r.v)); return; }
       let p = arr.find(x => x.id === pid);
       if (sg.length === 1) {
         if (r.v === null) { if (p) arr.splice(arr.indexOf(p), 1); return; }
@@ -16156,6 +16155,56 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
   '.wi-pvbox iframe{flex:1;border:0;background:#525659;width:100%}'+
   '.wi-pvh{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;background:linear-gradient(135deg,#14314f,#1a5490);color:#fff;font:700 12px Arial,sans-serif;flex-wrap:wrap}'+
 
+  '.wi-form .wi-fld{display:flex;flex-direction:column;gap:4px;font-size:.66rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#9db8d8;position:relative}'+
+  '.wi-mkrow{display:flex;gap:6px;flex-wrap:wrap}'+
+  '.wi-mkrow input{flex:1 1 100%;min-width:0}'+
+  '.wi-mkrow select{flex:1 1 40%;width:auto!important;min-width:0;font-size:12px!important}'+
+  '.wi-sg{display:none;position:absolute;left:0;right:0;top:100%;z-index:30;margin-top:3px;max-height:260px;overflow:auto;background:#0a1830;border:1px solid rgba(110,170,235,.5);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.6);text-transform:none;letter-spacing:0;font-weight:600}'+
+  '.wi-sgi{padding:8px 10px;border-bottom:1px solid rgba(110,170,235,.15);cursor:pointer;font-size:.8rem;color:#e6f0ff}'+
+  '.wi-sgi:hover,.wi-sgi.on{background:rgba(245,158,11,.22)}'+
+  '.wi-sgi b{color:#fbbf24}.wi-sgi small{display:block;color:#8fb0d3;font-size:.68rem;margin-top:2px;font-weight:600}'+
+  '.wi-sgi .tg{display:inline-block;font-size:.6rem;padding:1px 6px;border-radius:99px;margin-left:6px;background:rgba(110,170,235,.2);color:#bcd4f0;font-weight:800}'+
+  '.wi-sgi .tg.ok{background:rgba(34,197,94,.25);color:#86efac}.wi-sgi .tg.no{background:rgba(239,68,68,.2);color:#fca5a5}'+
+  '.wi-sgn{padding:10px;font-size:.76rem;color:#9db8d8;text-transform:none;letter-spacing:0;font-weight:600}'+
+  '.wi-dwg{margin-top:2px;text-transform:none;letter-spacing:0;font-weight:600}'+
+  '.wi-dwc{border:1px solid rgba(110,170,235,.35);background:rgba(255,255,255,.04);border-radius:10px;padding:9px 11px;font-size:.78rem;color:#e6f0ff;display:flex;flex-direction:column;gap:7px}'+
+  '.wi-dwc .t{font-weight:800}.wi-dwc .s{color:#8fb0d3;font-size:.7rem}'+
+  '.wi-dwc .b{display:flex;gap:6px;flex-wrap:wrap}'+
+  '.wi-dwc .b a,.wi-dwc .b button{padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);color:#fff;font:700 12px inherit;cursor:pointer;text-decoration:none}'+
+  '.wi-dwc .b .pri{background:linear-gradient(135deg,#f59e0b,#ef4444);border-color:transparent}'+
+  '.wi-lnote{font-size:.68rem;color:#fbbf24;text-transform:none;letter-spacing:0;font-weight:600}'+
+  '.wd-ov{position:fixed;inset:0;z-index:9997;background:rgba(6,14,28,.94);display:flex;flex-direction:column;color:#e6f0ff;font-family:Inter,ui-sans-serif,system-ui,Arial,sans-serif}'+
+  '.wd-h{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 14px;background:linear-gradient(135deg,#14314f,#1a5490);font-size:.9rem;font-weight:800}'+
+  '.wd-h span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'+
+  '.wd-tb{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:7px 10px;background:#0d2240;border-bottom:1px solid rgba(110,170,235,.25)}'+
+  '.wd-tb button,.wd-btn{padding:7px 11px;border-radius:8px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);color:#fff;font:700 12px inherit;cursor:pointer}'+
+  '.wd-tb button.on{background:linear-gradient(135deg,#f59e0b,#ef4444);border-color:transparent}'+
+  '.wd-tb .sp{flex:1}.wd-tb .pg{font-size:.76rem;color:#bcd4f0;font-weight:700}'+
+  '.wd-main{flex:1;min-height:0;display:flex}'+
+  '.wd-vwrap{position:relative;flex:1;min-width:0;display:flex}.wd-view{flex:1;min-width:0;overflow:auto;background:#3a3f47;padding:8px;touch-action:pan-x pan-y pinch-zoom}'+
+  '.wd-stage{position:relative;margin:0 auto;background:#fff;box-shadow:0 4px 24px rgba(0,0,0,.5)}'+
+  '.wd-stage canvas{display:block}'+
+  '.wd-stage svg{position:absolute;left:0;top:0;width:100%;height:100%}'+
+  '.wd-side{width:340px;max-width:42vw;overflow:auto;background:#0d2240;border-left:1px solid rgba(110,170,235,.25);padding:10px;display:flex;flex-direction:column;gap:10px}'+
+  '.wd-card{border:1px solid rgba(110,170,235,.25);border-radius:10px;padding:9px 10px;background:rgba(255,255,255,.03);font-size:.76rem}'+
+  '.wd-card h5{margin:0 0 6px;font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;color:#9db8d8}'+
+  '.wd-card input,.wd-card select{padding:6px 8px;border-radius:7px;font-size:12px;width:100%;box-sizing:border-box}'+
+  '.wd-row{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}'+
+  '.wd-row>*{min-width:0}'+
+  '.wd-w{display:grid;grid-template-columns:auto 1fr auto auto;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid rgba(110,170,235,.15)}'+
+  '.wd-w{padding-left:4px!important}.wd-w.sel{background:rgba(245,158,11,.15)}'+
+  '.wd-w b{color:#fbbf24;cursor:pointer}'+
+  '.wd-w select{width:62px!important}'+
+  '.wd-w button{padding:3px 7px;border-radius:6px;border:0;background:#b91c1c;color:#fff;cursor:pointer}'+
+  '.wd-w .m{grid-column:1/-1;font-size:.64rem;color:#8fb0d3}'+
+  '.wd-tot{font-size:1rem;font-weight:800;color:#fbbf24}'+
+  '.wd-f{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:9px 14px;background:#0d2240;border-top:1px solid rgba(110,170,235,.25)}'+
+  '.wd-warn{color:#fca5a5;font-weight:700}.wd-ok{color:#86efac;font-weight:700}'+
+  '.wd-msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(6,14,28,.85);z-index:5}'+
+  '.wd-msg>div{max-width:440px;background:#0d2240;border:1px solid rgba(110,170,235,.4);border-radius:14px;padding:16px;font-size:.82rem;line-height:1.5}'+
+  '.wd-ai{border:1px dashed rgba(167,139,250,.6);border-radius:8px;padding:6px 8px;margin-top:6px;font-size:.72rem}'+
+  '.wd-ai label{display:flex;gap:6px;align-items:flex-start;text-transform:none;letter-spacing:0;font-weight:600;color:#e6f0ff}'+
+  '@media (max-width:820px){.wd-main{flex-direction:column}.wd-vwrap{flex:none;height:52vh}.wd-side{width:auto;max-width:none;flex:1;border-left:0;border-top:1px solid rgba(110,170,235,.25)}}'+
   /* responsif */
   '@media (max-width:1100px){#wiNdtView .c8,#wiNdtView .c6,#wiNdtView .c4{grid-column:span 12}}'+
   '@media (max-width:700px){'+
@@ -16435,6 +16484,7 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
       '<dt>Kode Project</dt><dd>'+esc(r.p)+'</dd>'+
       '<dt>Shop Area</dt><dd>'+esc(r.s)+'</dd>'+
       '<dt>Marking ID</dt><dd><b>'+esc(r.m)+'</b> &nbsp;·&nbsp; Qty '+nf(r.q)+'</dd>'+
+      (r.dw?'<dt>Drawing</dt><dd>'+(hasLink(r.dw.link)?'<a href="'+esc(r.dw.link)+'" target="_blank" rel="noopener" style="color:#93c5fd">'+esc(r.dw.code)+' ↗</a>':esc(r.dw.code))+(r.dw.name&&r.dw.name!==r.dw.code?' — '+esc(r.dw.name):'')+(wdSummary(r.dw.wm).n?' · '+wdSummary(r.dw.wm).n+' las terukur = '+nf(wdSummary(r.dw.wm).tot)+' mm/unit':'')+'</dd>':'')+
       '<dt>Subkon + Line</dt><dd>'+esc(r.u)+'</dd>'+
       '<dt>Welder ID</dt><dd>'+esc(r.w)+'</dd>'+
       '<dt>Kegiatan</dt><dd>'+r.a.map(function(a){return '<span class="act '+esc(a)+'">'+esc(a)+'</span>';}).join('')+'</dd>'+
@@ -16506,12 +16556,15 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
         '<label>Nama Inspektor<input list="wl_i" id="wf_i" value="'+val('i')+'" placeholder="Nama inspektor"></label>'+
         '<label class="full">Kode Project<input list="wl_p" id="wf_p" value="'+val('p')+'" placeholder="mis. 25-EM10014 - Salak 7"></label>'+
         '<label>Shop Area<input id="wf_s" value="'+(r?esc(r.s):'Shop A')+'"></label>'+
-        '<label>Marking ID<input id="wf_m" value="'+val('m')+'"></label>'+
         '<label>Qty<input type="number" min="0" id="wf_q" value="'+(r?r.q:1)+'"></label>'+
+        '<div class="wi-fld full">Marking ID'+
+          '<div class="wi-mkrow"><input id="wf_m" autocomplete="off" value="'+val('m')+'" placeholder="'+(hasPD()?'Cari kode drawing / nama part dari FAT &amp; Fab…':'Marking ID')+'">'+
+          (hasPD()?'<select id="wf_ms" title="Sumber data"><option value="fat">Sumber: FAT (semua part)</option><option value="fab">Sumber: Fab (main assy)</option></select><select id="wf_mp" title="Project"><option value="">Semua project</option>'+Object.keys(projectData).map(function(k){return '<option>'+esc(k)+'</option>';}).join('')+'</select>':'')+'</div>'+
+          '<div class="wi-sg" id="wfSg"></div><div class="wi-dwg" id="wfDwg"></div></div>'+
         '<label>Subkon + Line Produksi<input list="wl_u" id="wf_u" value="'+val('u')+'" placeholder="mis. SLN W, B"></label>'+
         '<label>Welder ID<input list="wl_w" id="wf_w" value="'+val('w')+'" placeholder="mis. W-A017"></label>'+
         '<label class="full">Kegiatan Inspeksi<div class="chk">'+ACTS.map(function(a){ return '<label><input type="checkbox" name="wf_a" value="'+a+'"'+((r&&r.a.indexOf(a)>=0)?' checked':'')+'> '+(a==='Visual'?'Visual (WI)':a+' (NDT)')+'</label>'; }).join('')+'</div></label>'+
-        '<label>Panjang Pengelasan Diinspeksi (mm)<input type="number" min="0" id="wf_l" value="'+(r?r.l:'')+'"></label>'+
+        '<label>Panjang Pengelasan Diinspeksi (mm)<input type="number" min="0" id="wf_l" value="'+(r?r.l:'')+'"><span class="wi-lnote" id="wfLnote"></span></label>'+
         '<label>Panjang Total Repair (mm)<input type="number" min="0" id="wf_r" value="'+(r?r.r:0)+'"></label>'+
         '<label>Status Inspeksi<select id="wf_x">'+STATUSES.map(function(s){ return '<option'+((r?r.x:'ACC')===s?' selected':'')+'>'+s+'</option>'; }).join('')+'</select></label>'+
         '<div class="wi-phbox"><div style="font-size:.66rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#9db8d8;margin-bottom:8px">Foto Dokumentasi <span id="wfPhCount" style="color:#fbbf24"></span></div>'+
@@ -16587,6 +16640,76 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
       if(t){ fs.links.splice(+t.dataset.rml,1); drawPhotos(); }
     });
     drawPhotos();
+    /* --- Marking ID: cari dari FAT/Fab, lampirkan drawing, hitung panjang las --- */
+    var dw = r && r.dw ? JSON.parse(JSON.stringify(r.dw)) : null;
+    var dIdx = dwgIndex(), sgRes = [], sgOn = -1;
+    var mIn = $('wf_m'), sgEl = $('wfSg'), dwEl = $('wfDwg');
+    function qtyNow(){ return parseInt($('wf_q').value,10)||1; }
+    function sgHide(){ sgEl.style.display='none'; sgOn=-1; }
+    function drawSg(){
+      var qv = mIn.value.trim();
+      if(!qv || !dIdx.length){ sgHide(); return; }
+      var ms = $('wf_ms'), mp = $('wf_mp');
+      sgRes = dwgSearch(dIdx, qv, ms?ms.value:'fat', mp?mp.value:'');
+      if(!sgRes.length){ sgEl.innerHTML = '<div class="wi-sgn">Tidak ditemukan di '+(ms&&ms.value==='fab'?'Fab (main assy)':'FAT')+(mp&&mp.value?' · '+esc(mp.value):'')+'. Teks ini tetap bisa dipakai sebagai Marking ID manual.</div>'; sgEl.style.display='block'; return; }
+      sgEl.innerHTML = sgRes.map(function(d,i){
+        return '<div class="wi-sgi" data-i="'+i+'"><b>'+esc(d.code)+'</b>'+(d.name&&d.name!==d.code?' — '+esc(d.name):'')+
+          '<span class="tg">'+(d.main?'MAIN ASSY':'KOMPONEN')+'</span><span class="tg '+(hasLink(d.link)?'ok':'no')+'">'+(hasLink(d.link)?'ada drawing':'tanpa link')+'</span>'+
+          '<small>'+esc(d.pj)+(d.parent?' · induk: '+esc(d.parent):'')+(d.qty?' · qty '+esc(d.qty):'')+(d.mat?' · '+esc(d.mat):'')+'</small></div>';
+      }).join('');
+      sgEl.style.display='block';
+    }
+    function choose(i){
+      var d = sgRes[i]; if(!d) return;
+      if(dw && dw.wm && dw.wm.welds && dw.wm.welds.length && dw.code!==d.code && !confirm('Hasil ukur las untuk '+dw.code+' akan dibuang. Ganti drawing?')) return;
+      mIn.value = d.code;
+      dw = {pj:d.pj, code:d.code, name:d.name, parent:d.parent, link:d.link, main:d.main, mat:d.mat, wm:null};
+      var qn = parseInt(d.qty,10), qf = $('wf_q');
+      if(qn>0 && (!qf.value || qf.value==='1')) qf.value = qn;
+      $('wfLnote').textContent = '';
+      sgHide(); drawDwg();
+    }
+    function drawDwg(){
+      if(!dw){
+        dwEl.innerHTML = '<div class="wi-dwc"><div class="s">'+(dIdx.length?'Pilih dari hasil pencarian untuk melampirkan drawing FAT/Fab, atau ketik manual.':'Daftar FAT/Fab belum dimuat — Marking ID diisi manual.')+'</div><div class="b"><button type="button" data-d="weld">📏 Hitung panjang las dari file drawing…</button></div></div>';
+        return;
+      }
+      var sm = wdSummary(dw.wm);
+      dwEl.innerHTML = '<div class="wi-dwc"><div><div class="t">📐 '+esc(dw.code)+(dw.name&&dw.name!==dw.code?' — '+esc(dw.name):'')+'</div>'+
+        '<div class="s">'+esc(dw.pj||'')+(dw.parent?' · induk: '+esc(dw.parent):'')+(sm.n?' · <b style="color:#fbbf24">'+sm.n+' las terukur = '+nf(sm.tot)+' mm/unit</b>':'')+'</div></div>'+
+        '<div class="b">'+(hasLink(dw.link)?'<a href="'+esc(dw.link)+'" target="_blank" rel="noopener">📄 Buka Drawing ↗</a>':'<span class="s">tanpa link drawing</span>')+
+        '<button type="button" class="pri" data-d="weld">📏 Hitung Panjang Las</button><button type="button" data-d="clear">✕ Lepas</button></div></div>';
+    }
+    function openWeld(file){
+      weldModal({dw: dw || {code:mIn.value.trim(), name:'', link:''}, wm: dw&&dw.wm, file:file||null, qty:qtyNow, onApply:function(res){
+        if(!dw) dw = {pj:'', code:mIn.value.trim(), name:'', parent:'', link:''};
+        dw.wm = res.wm;
+        var n = Math.round(res.total*(res.mul?res.qty:1));
+        $('wf_l').value = n;
+        $('wfLnote').textContent = '📏 Dari drawing: '+nf(Math.round(res.total))+' mm/unit'+(res.mul&&res.qty>1?' × Qty '+res.qty:'')+' — boleh diubah manual.';
+        drawDwg();
+      }});
+    }
+    mIn.addEventListener('input', drawSg);
+    mIn.addEventListener('focus', drawSg);
+    mIn.addEventListener('keydown', function(e){
+      var items = sgEl.querySelectorAll('.wi-sgi'); if(sgEl.style.display!=='block' || !items.length) return;
+      if(e.key==='ArrowDown'||e.key==='ArrowUp'){ e.preventDefault(); sgOn = (sgOn+(e.key==='ArrowDown'?1:-1)+items.length)%items.length; items.forEach(function(n,i){ n.classList.toggle('on',i===sgOn); }); items[sgOn].scrollIntoView({block:'nearest'}); }
+      else if(e.key==='Enter' && sgOn>=0){ e.preventDefault(); choose(sgOn); }
+      else if(e.key==='Escape'){ e.stopPropagation(); sgHide(); }
+    });
+    ['wf_ms','wf_mp'].forEach(function(id){ var s=$(id); if(s) s.addEventListener('change', function(){ drawSg(); mIn.focus(); }); });
+    sgEl.addEventListener('mousedown', function(e){ e.preventDefault(); });
+    sgEl.addEventListener('click', function(e){ var n = e.target.closest('.wi-sgi'); if(n) choose(+n.dataset.i); });
+    document.addEventListener('mousedown', function cl(e){ if(!document.body.contains(ov)){ document.removeEventListener('mousedown',cl); return; } if(!e.target.closest('.wi-fld')) sgHide(); });
+    dwEl.addEventListener('click', function(e){
+      var b = e.target.closest('[data-d]'); if(!b) return;
+      if(b.dataset.d==='weld') openWeld();
+      else if(b.dataset.d==='clear'){ if(dw && dw.wm && dw.wm.welds && dw.wm.welds.length && !confirm('Lepas drawing dan buang hasil ukur las?')) return; dw=null; $('wfLnote').textContent=''; drawDwg(); }
+    });
+    $('wf_q').addEventListener('input', function(){ /* qty berubah: pengguna menghitung ulang lewat tombol Hitung Panjang Las */ });
+    if(dw && dw.wm){ var sm0 = wdSummary(dw.wm); if(sm0.n) $('wfLnote').textContent = '📏 Hasil ukur drawing tersimpan: '+sm0.n+' las.'; }
+    drawDwg();
     /* bila form ditutup tanpa simpan: buang foto baru yang belum dipakai */
     var mo = new MutationObserver(function(){
       if(!document.body.contains(ov)){ mo.disconnect(); if(!fs.saved) fs.added.forEach(delPhoto); }
@@ -16606,6 +16729,7 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
         a: acts, l: parseInt($('wf_l').value,10), r: parseInt($('wf_r').value,10)||0, x: $('wf_x').value,
         f1: fs.links.slice(), f2: [], ph: fs.ph.slice(), n: normTxt($('wf_n').value)
       };
+      if(dw) o.dw = dw;
       if(!o.i) return fail('Nama inspektor wajib diisi.');
       if(!o.p) return fail('Kode project wajib diisi.');
       if(!o.m) return fail('Marking ID wajib diisi.');
@@ -16618,6 +16742,360 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
       ov.remove(); try{render();}catch(er){console.error(er);} toast(r?'✅ Record diperbarui.':'✅ Record ditambahkan.');
     });
   }
+  /* =====================================================================
+     Marking ID dari FAT / Fab  +  hitung panjang las dari drawing
+     ===================================================================== */
+  var AI_KEY = 'wi_ai_cfg';
+  function aiCfg(){ try{ var o = JSON.parse(localStorage.getItem(AI_KEY)||'{}'); if(!o.model || /^gemini-(1\.|2\.)/.test(o.model)) o.model = 'gemini-3.8-flash'; return o; }catch(e){ return {}; } }
+  function aiSet(o){ try{ localStorage.setItem(AI_KEY, JSON.stringify(Object.assign(aiCfg(),o))); }catch(e){} }
+  function hasPD(){ return typeof projectData!=='undefined' && projectData && typeof projectData==='object'; }
+
+  /* indeks seluruh baris FAT/Fab (main assy = baris ▶, komponen = baris lain) */
+  function dwgIndex(){
+    var out = []; if(!hasPD()) return out;
+    Object.keys(projectData).forEach(function(pn){
+      var parent = '';
+      (projectData[pn]||[]).forEach(function(row){
+        var lv = String(row.level||'');
+        if(lv.charAt(0)==='▶'){
+          var m = /[—–]\s*([^—–]+)$/.exec(lv);
+          var nm = lv.replace(/^▶\s*/,'').trim();
+          parent = nm;
+          var code = m ? m[1].trim() : nm;
+          out.push({pj:pn, main:true, code:code, pnum:'', name:nm.replace(/\s*[—–]\s*[^—–]+$/,''), parent:'', qty:'', mat:'', link:row.link||''});
+          return;
+        }
+        var c = (row.drawing_no && row.drawing_no!=='-') ? row.drawing_no : (row.part_num||'');
+        if(!c && !row.part_name) return;
+        out.push({pj:pn, main:false, code:c||row.part_name, pnum:row.part_num||'', name:row.part_name||'', parent:parent, qty:row.qty||'', mat:row.material||'', link:row.link||''});
+      });
+    });
+    return out;
+  }
+  function dwgSearch(idx, q, src, pj){
+    var qq = q.toLowerCase(), toks = qq.split(/\s+/).filter(Boolean), res = [];
+    for(var i=0;i<idx.length;i++){
+      var d = idx[i];
+      if(src==='fab' && !d.main) continue;
+      if(pj && d.pj!==pj) continue;
+      var hay = (d.code+' '+d.pnum+' '+d.name+' '+d.parent+' '+d.mat).toLowerCase(), ok = true;
+      for(var t=0;t<toks.length;t++){ if(hay.indexOf(toks[t])<0){ ok=false; break; } }
+      if(!ok) continue;
+      var c = d.code.toLowerCase();
+      res.push({d:d, sc: c===qq?0 : c.indexOf(toks[0])===0?1 : c.indexOf(toks[0])>=0?2 : 3});
+    }
+    res.sort(function(a,b){ return a.sc-b.sc; });
+    return res.slice(0,60).map(function(x){ return x.d; });
+  }
+  function hasLink(l){ return /^https?:\/\//i.test(String(l||'')); }
+  function fileId(l){ var m = String(l||'').match(/\/d\/([\w-]{10,})/) || String(l||'').match(/[?&]id=([\w-]{10,})/); return m?m[1]:''; }
+
+  function polyLen(p){ var s=0; for(var i=1;i<p.length;i++) s += Math.hypot(p[i][0]-p[i-1][0], p[i][1]-p[i-1][1]); return s; }
+  function wdSummary(wm){
+    var n=0, tot=0; ((wm&&wm.welds)||[]).forEach(function(w){ var k=(wm.kp||{})[w.pg||1]; var mm = w.mm!=null ? w.mm : (w.pts&&k ? polyLen(w.pts)*k : null); if(mm!=null){ n++; tot += mm*(w.sd||1); } });
+    return {n:n, tot:Math.round(tot)};
+  }
+
+  /* ---------- penghitung panjang las ---------- */
+  function weldModal(opt){
+    closeOv('wiWeld');
+    var dw = opt.dw || {};
+    var W = {kind:'', pdf:null, page:null, img:null, pg:1, np:1, w:0, h:0, zoom:1, tool:'pan', cal:[], cur:[], sel:-1, tok:0, task:null,
+             kp:Object.assign({}, (opt.wm&&opt.wm.kp)||{}), welds:JSON.parse(JSON.stringify((opt.wm&&opt.wm.welds)||[])), mul:true, ai:[]};
+    var el = document.createElement('div'); el.className='wd-ov'; el.id='wiWeld';
+    el.innerHTML =
+      '<div class="wd-h"><span>📏 Hitung Panjang Las — '+esc(dw.code||'Drawing')+(dw.name?' · '+esc(dw.name):'')+'</span><button class="wi-x" type="button" data-w="close">✕</button></div>'+
+      '<div class="wd-tb">'+
+        '<button type="button" data-tool="pan" class="on">✋ Geser</button>'+
+        '<button type="button" data-tool="cal">📐 Kalibrasi</button>'+
+        '<button type="button" data-tool="weld">〰️ Ukur Las</button>'+
+        '<button type="button" data-w="done" style="display:none">✔ Selesai</button>'+
+        '<button type="button" data-w="undo" style="display:none">↶ Titik</button>'+
+        '<span class="sp"></span>'+
+        '<button type="button" data-w="zout">−</button><button type="button" data-w="zin">＋</button><button type="button" data-w="fit">Fit</button>'+
+        '<button type="button" data-w="prev">‹</button><span class="pg" id="wdPg">–</span><button type="button" data-w="next">›</button>'+
+        '<button type="button" data-w="file">📂 Ganti file</button>'+
+      '</div>'+
+      '<div class="wd-main">'+
+        '<div class="wd-vwrap"><div class="wd-view" id="wdView"><div class="wd-stage" id="wdStage"><canvas id="wdCv"></canvas><svg id="wdSvg" preserveAspectRatio="none"></svg></div></div><div class="wd-msg" id="wdMsg"><div>Memuat drawing…</div></div></div>'+
+        '<div class="wd-side">'+
+          '<div class="wd-card"><h5>1 · Skala halaman</h5><div id="wdKinfo"></div><div id="wdKin" style="display:none"></div>'+
+            '<div class="wd-row" id="wdScaleRow"><span style="white-space:nowrap">atau skala 1 :</span><input type="number" id="wdSc" min="1" placeholder="mis. 10" style="flex:1"><button class="wd-btn" type="button" data-w="scale">Pakai</button></div>'+
+            '<div style="margin-top:5px;color:#8fb0d3;font-size:.68rem">Cara terakurat: pilih <b>Kalibrasi</b>, klik 2 ujung sebuah dimensi di gambar yang angkanya diketahui, lalu isi panjang aslinya.</div></div>'+
+          '<div class="wd-card"><h5>2 · Daftar las</h5><div id="wdList"></div>'+
+            '<div class="wd-row"><button class="wd-btn" type="button" data-w="manual">＋ Tambah manual (mm)</button></div></div>'+
+          '<div class="wd-card"><h5>3 · AI (opsional)</h5>'+
+            '<div style="color:#bcd4f0">Gemini membaca simbol las &amp; dimensi di halaman ini lalu memberi <b>saran</b>. Selalu cek tiap angka sebelum dipakai.</div>'+
+            '<div class="wd-row"><button class="wd-btn" type="button" data-w="ai" style="flex:1">🤖 Baca halaman ini dengan AI</button><button class="wd-btn" type="button" data-w="aicfg">⚙️</button></div>'+
+            '<div id="wdAiCfg" style="display:none;margin-top:6px"><input type="password" id="wdKey" placeholder="Gemini API key (AIza…)" autocomplete="off"><input type="text" id="wdModel" placeholder="model (default gemini-3.8-flash)" style="margin-top:5px"><div style="margin-top:4px;color:#8fb0d3;font-size:.66rem">Gratis: buat key di aistudio.google.com/apikey. Key hanya disimpan di browser ini. Gambar halaman dikirim ke Google Gemini saat tombol AI ditekan.</div><div class="wd-row"><button class="wd-btn" type="button" data-w="aisave">Simpan</button></div></div>'+
+            '<div id="wdAiOut"></div></div>'+
+        '</div>'+
+      '</div>'+
+      '<div class="wd-f"><div><div class="wd-tot" id="wdTot">0 mm</div><div id="wdTot2" style="font-size:.72rem;color:#bcd4f0"></div></div>'+
+        '<label style="display:flex;gap:6px;align-items:center;font-size:.76rem;text-transform:none;letter-spacing:0"><input type="checkbox" id="wdMul" checked> kalikan Qty (<span id="wdQ">1</span>)</label>'+
+        '<div style="display:flex;gap:8px"><button class="wi-bt" type="button" data-w="close">Batal</button><button class="wi-bt pri" type="button" data-w="apply">✔ Terapkan ke form</button></div></div>';
+    document.body.appendChild(el);
+    var q = function(s){ return el.querySelector(s); };
+    var view = q('#wdView'), stage = q('#wdStage'), cv = q('#wdCv'), svg = q('#wdSvg'), msg = q('#wdMsg');
+    q('#wdQ').textContent = opt.qty();
+    function say(h){ msg.style.display='flex'; msg.firstChild.innerHTML = h; }
+    function hide(){ msg.style.display='none'; }
+    function curK(){ return W.kind==='img' && !W.kp[W.pg] ? null : (W.kp[W.pg]||null); }
+    function wMm(w){ if(w.mm!=null) return w.mm; var k = W.kp[w.pg||1]; return (w.pts && k) ? polyLen(w.pts)*k : null; }
+    function total(){ var t=0; W.welds.forEach(function(w){ var m=wMm(w); if(m!=null) t += m*(w.sd||1); }); return t; }
+
+    /* ----- muat sumber ----- */
+    function pickPrompt(err){
+      var e = err && err.errs && err.errs.length ? err.errs.map(esc).join('<br>') : esc(err&&err.message||err||'');
+      say('<b>Drawing belum bisa diambil otomatis.</b><div style="color:#fca5a5;margin:6px 0;font-size:.74rem">'+e+'</div>Pilih file PDF / foto drawing dari perangkat (unduh dulu dari Drive), atau atur sumber otomatis (Apps Script / API key) lewat tombol <b>🔗 Sumber</b> di viewer drawing.<div class="wd-row"><button class="wd-btn" type="button" data-w="file">📂 Pilih file PDF / gambar</button>'+(hasLink(dw.link)?'<a class="wd-btn" style="text-decoration:none" target="_blank" rel="noopener" href="'+esc(dw.link)+'">Buka di Drive ↗</a>':'')+'</div>');
+    }
+    async function loadAuto(){
+      if(!hasLink(dw.link)){ pickPrompt(new Error('Part ini belum punya link drawing di daftar FAT/Fab.')); return; }
+      if(!(window.iq && window.iq.getPdf)){ pickPrompt(new Error('Pembaca PDF belum siap — muat ulang halaman.')); return; }
+      try{
+        var buf = await window.iq.getPdf('wi_'+(fileId(dw.link)||dw.code), dw.link, function(m){ say(esc(m)); });
+        await openBuf(buf);
+      }catch(e){ pickPrompt(e); }
+    }
+    async function openBuf(buf){
+      say('Membuka PDF…');
+      var L = await window.iq.pdfjs();
+      if(W.pdf){ try{ W.pdf.destroy(); }catch(e){} }
+      W.pdf = await L.getDocument({data:new Uint8Array(buf.slice(0))}).promise;
+      W.kind='pdf'; W.np=W.pdf.numPages; W.img=null; await gotoPage(1, true);
+    }
+    function openImg(file){
+      return new Promise(function(ok,no){
+        var im = new Image(); im.onload=function(){ W.kind='img'; W.img=im; W.pdf=null; W.np=1; W.w=im.naturalWidth; W.h=im.naturalHeight; W.pg=1; fit(); render(); ok(); };
+        im.onerror=function(){ no(new Error('Gambar tidak bisa dibuka')); };
+        im.src = URL.createObjectURL(file);
+      });
+    }
+    async function gotoPage(n, first){
+      n = Math.max(1, Math.min(W.np, n)); W.pg = n; W.cur=[]; W.cal=[]; W.sel=-1;
+      if(W.kind==='pdf'){ W.page = await W.pdf.getPage(n); var vp = W.page.getViewport({scale:1}); W.w=vp.width; W.h=vp.height; }
+      if(first) fit();
+      await render();
+    }
+    function fit(){ var avail = Math.max(200, view.clientWidth-18); W.zoom = Math.max(.05, Math.min(8, avail/(W.w||1))); }
+    async function render(){
+      if(!W.w) return;
+      var my = ++W.tok, dpr = Math.min(2, window.devicePixelRatio||1);
+      var cssW = W.w*W.zoom, cssH = W.h*W.zoom;
+      var sc = Math.min(W.zoom*dpr, Math.sqrt(16e6/(W.w*W.h)));
+      stage.style.width = cssW+'px'; stage.style.height = cssH+'px';
+      svg.setAttribute('viewBox','0 0 '+W.w+' '+W.h);
+      cv.style.width = cssW+'px'; cv.style.height = cssH+'px';
+      cv.width = Math.max(1,Math.round(W.w*sc)); cv.height = Math.max(1,Math.round(W.h*sc));
+      var ctx = cv.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,cv.width,cv.height);
+      try{
+        if(W.kind==='pdf'){
+          if(W.task){ try{ W.task.cancel(); }catch(e){} }
+          W.task = W.page.render({canvasContext:ctx, viewport:W.page.getViewport({scale:sc})});
+          await W.task.promise;
+        } else if(W.kind==='img'){ ctx.drawImage(W.img,0,0,cv.width,cv.height); }
+      }catch(e){ if(!(e&&e.name==='RenderingCancelledException')) console.error(e); }
+      if(my!==W.tok) return;
+      hide(); q('#wdPg').textContent = W.pg+' / '+W.np; drawOv(); drawInfo();
+    }
+    function setZoom(z){
+      z = Math.max(.05, Math.min(10, z));
+      var fx = (view.scrollLeft+view.clientWidth/2)/Math.max(1,view.scrollWidth), fy = (view.scrollTop+view.clientHeight/2)/Math.max(1,view.scrollHeight);
+      W.zoom = z; render().then(function(){ view.scrollLeft = fx*view.scrollWidth - view.clientWidth/2; view.scrollTop = fy*view.scrollHeight - view.clientHeight/2; });
+    }
+
+    /* ----- overlay ----- */
+    var COL = ['#ef4444','#22c55e','#3b82f6','#f59e0b','#a855f7','#06b6d4','#ec4899','#84cc16'];
+    function pt(p,c,r){ return '<circle cx="'+p[0]+'" cy="'+p[1]+'" r="'+r+'" fill="'+c+'" stroke="#fff" stroke-width="'+(r/4)+'"/>'; }
+    function pl(pts){ return pts.map(function(p){return p[0].toFixed(1)+','+p[1].toFixed(1);}).join(' '); }
+    function drawOv(){
+      var r = 5/W.zoom, sw = 2.4/W.zoom, fs = 13/W.zoom, h = '';
+      W.welds.forEach(function(w,i){
+        if(!w.pts || (w.pg||1)!==W.pg) return;
+        var c = COL[i%COL.length], sel = (i===W.sel);
+        h += '<polyline points="'+pl(w.pts)+'" fill="none" stroke="'+c+'" stroke-width="'+(sel?sw*2:sw)+'" stroke-linejoin="round" stroke-linecap="round" opacity=".9"/>';
+        h += pt(w.pts[0],c,r*.8)+pt(w.pts[w.pts.length-1],c,r*.8);
+        h += '<text x="'+(w.pts[0][0]+r)+'" y="'+(w.pts[0][1]-r)+'" font-size="'+fs+'" font-weight="800" fill="'+c+'" stroke="#fff" stroke-width="'+(fs/6)+'" paint-order="stroke">'+(i+1)+'</text>';
+      });
+      if(W.cur.length){ h += '<polyline points="'+pl(W.cur)+'" fill="none" stroke="#fde047" stroke-width="'+sw+'" stroke-dasharray="'+(6/W.zoom)+' '+(4/W.zoom)+'"/>'; W.cur.forEach(function(p){ h += pt(p,'#fde047',r); }); }
+      if(W.cal.length){ h += '<polyline points="'+pl(W.cal)+'" fill="none" stroke="#e879f9" stroke-width="'+sw+'"/>'; W.cal.forEach(function(p){ h += pt(p,'#e879f9',r); }); }
+      svg.innerHTML = h;
+    }
+    function drawInfo(){
+      var k = W.kp[W.pg], box = q('#wdKinfo');
+      box.innerHTML = k ? '<span class="wd-ok">✔ Terkalibrasi:</span> 1 satuan gambar = '+k.toFixed(4)+' mm' : '<span class="wd-warn">⚠ Halaman ini belum dikalibrasi</span> — panjang ukuran belum bisa dihitung.';
+      q('#wdScaleRow').style.display = W.kind==='pdf' ? 'flex' : 'none';
+      q('[data-w="done"]').style.display = q('[data-w="undo"]').style.display = W.tool==='weld' ? '' : 'none';
+    }
+
+    /* ----- daftar & total ----- */
+    function drawList(){
+      var h = '';
+      W.welds.forEach(function(w,i){
+        var m = wMm(w), c = COL[i%COL.length];
+        h += '<div class="wd-w'+(i===W.sel?' sel':'')+'" data-i="'+i+'">'+
+          '<b data-w="sel" style="color:'+(w.pts?c:'#a78bfa')+'">'+(i+1)+'</b>'+
+          '<input type="number" min="0" step="0.1" data-w="mm" value="'+(m!=null?(Math.round(m*10)/10):'')+'" placeholder="mm">'+
+          '<select data-w="sd"><option value="1"'+((w.sd||1)===1?' selected':'')+'>×1</option><option value="2"'+(w.sd===2?' selected':'')+'>×2</option></select>'+
+          '<button type="button" data-w="del" title="Hapus">✕</button>'+
+          '<div class="m">'+(w.pts?'✍️ diukur di gambar':(w.src==='ai'?'🤖 saran AI':'⌨️ manual'))+(w.n?' · '+esc(w.n):'')+((w.mm!=null&&w.pts)?' · <a href="#" data-w="reset" style="color:#fbbf24">↺ pakai hasil ukur</a>':'')+((w.sd||1)===2?' · dihitung 2 sisi':'')+'</div></div>';
+      });
+      q('#wdList').innerHTML = h || '<div style="color:#8fb0d3">Belum ada las. Pakai <b>Ukur Las</b> (klik titik-titik sepanjang las), lalu <b>Selesai</b>.</div>';
+      var t = total(), qn = opt.qty(), mul = q('#wdMul').checked;
+      q('#wdTot').textContent = nf(Math.round(t))+' mm / unit';
+      q('#wdTot2').textContent = mul && qn>1 ? '× Qty '+qn+' = '+nf(Math.round(t*qn))+' mm' : (W.welds.length+' las');
+    }
+    function commit(){
+      if(W.cur.length<2){ return; }
+      W.welds.push({n:'', pts:W.cur.slice(), pg:W.pg, mm:null, sd:1, src:'draw'});
+      W.cur=[]; W.sel=W.welds.length-1; drawOv(); drawList();
+      if(!W.kp[W.pg]) flash('Belum dikalibrasi: panjang baru terhitung setelah skala diisi.');
+    }
+    function flash(m){ var b=q('#wdTot2'); b.innerHTML='<span class="wd-warn">'+esc(m)+'</span>'; setTimeout(drawList,3500); }
+    function setTool(t){
+      W.tool=t; W.cur=[]; W.cal=[]; q('#wdKin').style.display='none';
+      el.querySelectorAll('[data-tool]').forEach(function(b){ b.classList.toggle('on', b.dataset.tool===t); });
+      view.style.cursor = t==='pan'?'grab':'crosshair'; drawOv(); drawInfo();
+    }
+
+    /* ----- interaksi gambar ----- */
+    var down = null;
+    function toPt(e){ var r = svg.getBoundingClientRect(); return [(e.clientX-r.left)/r.width*W.w, (e.clientY-r.top)/r.height*W.h]; }
+    stage.addEventListener('pointerdown', function(e){
+      down = {x:e.clientX, y:e.clientY, t:Date.now(), sl:view.scrollLeft, st:view.scrollTop, mouse:e.pointerType==='mouse'};
+    });
+    window.addEventListener('pointermove', pmove);
+    function pmove(e){ if(down && down.mouse && W.tool==='pan' && e.buttons&1){ view.scrollLeft = down.sl-(e.clientX-down.x); view.scrollTop = down.st-(e.clientY-down.y); } }
+    stage.addEventListener('pointerup', function(e){
+      var d = down; down = null; if(!d) return;
+      if(Math.hypot(e.clientX-d.x, e.clientY-d.y)>7 || Date.now()-d.t>700) return;
+      if(W.tool==='weld'){ W.cur.push(toPt(e)); drawOv(); }
+      else if(W.tool==='cal'){
+        if(W.cal.length>=2) W.cal=[]; W.cal.push(toPt(e)); drawOv();
+        if(W.cal.length===2){
+          var dist = Math.hypot(W.cal[1][0]-W.cal[0][0], W.cal[1][1]-W.cal[0][1]), kin = q('#wdKin');
+          kin.style.display='block'; kin.innerHTML = '<div style="margin-top:6px">Jarak 2 titik sebenarnya (mm):</div><div class="wd-row"><input type="number" id="wdCalMm" min="0" step="any" placeholder="mis. 1250"><button class="wd-btn" type="button" data-w="calok">Terapkan</button></div>';
+          var inp = q('#wdCalMm'); if(inp) inp.focus();
+        }
+      }
+    });
+    view.addEventListener('wheel', function(e){ if(e.ctrlKey){ e.preventDefault(); setZoom(W.zoom*(e.deltaY<0?1.15:1/1.15)); } }, {passive:false});
+    function onKey(e){
+      if(!document.body.contains(el)){ document.removeEventListener('keydown',onKey); return; }
+      if(/INPUT|SELECT|TEXTAREA/.test((e.target&&e.target.tagName)||'')) return;
+      if(e.key==='Enter'){ commit(); }
+      else if(e.key==='Escape'){ if(W.cur.length||W.cal.length){ W.cur=[]; W.cal=[]; drawOv(); } }
+      else if((e.key==='Backspace')||((e.ctrlKey||e.metaKey)&&e.key==='z')){ e.preventDefault(); W.cur.pop(); drawOv(); }
+    }
+    document.addEventListener('keydown', onKey);
+    function cleanup(){ window.removeEventListener('pointermove', pmove); document.removeEventListener('keydown', onKey); try{ if(W.pdf) W.pdf.destroy(); }catch(e){} el.remove(); }
+
+    /* ----- AI ----- */
+    async function pageImage(){
+      var mx = 2000, s = Math.min(mx/Math.max(W.w,W.h), 6), c = document.createElement('canvas');
+      c.width = Math.round(W.w*s); c.height = Math.round(W.h*s);
+      var x = c.getContext('2d'); x.fillStyle='#fff'; x.fillRect(0,0,c.width,c.height);
+      if(W.kind==='pdf'){ await W.page.render({canvasContext:x, viewport:W.page.getViewport({scale:s})}).promise; } else { x.drawImage(W.img,0,0,c.width,c.height); }
+      return c.toDataURL('image/jpeg',0.88).split(',')[1];
+    }
+    async function pageText(){
+      if(W.kind!=='pdf') return '';
+      try{ var t = await W.page.getTextContent(); return t.items.map(function(i){return i.str;}).filter(function(s){return s&&s.trim();}).join(' ').slice(0,6000); }catch(e){ return ''; }
+    }
+    async function runAI(){
+      var c = aiCfg(), out = q('#wdAiOut');
+      if(!c.key){ q('#wdAiCfg').style.display='block'; out.innerHTML='<div class="wd-warn" style="margin-top:6px">Isi API key dulu.</div>'; return; }
+      if(!W.w){ out.innerHTML='<div class="wd-warn" style="margin-top:6px">Drawing belum dimuat.</div>'; return; }
+      out.innerHTML = '<div style="margin-top:6px;color:#c4b5fd">⏳ AI sedang membaca halaman '+W.pg+'… (bisa 20–60 detik)</div>';
+      try{
+        var b64 = await pageImage(), txt = await pageText();
+        var prompt =
+          'You are assisting a welding quality inspector who reads a fabrication drawing.\n'+
+          'Drawing: '+(dw.code||'')+' '+(dw.name||'')+(dw.parent?(' (assembly: '+dw.parent+')'):'')+(dw.mat?(', material '+dw.mat):'')+'. Page '+W.pg+' of '+W.np+'.\n'+
+          'TASK: find every weld shown on this page and determine its length in mm for ONE unit of this part/assembly. Use weld symbols (fillet size, length, pitch, "all around", both sides), dimension text and notes.\n'+
+          (txt?('Text extracted from the PDF (use it to read dimensions exactly):\n'+txt+'\n'):'')+
+          'RULES: never invent numbers. If a length cannot be derived from what is drawn, set length_mm to null and explain in basis. For all-around welds compute the perimeter only if the dimensions are legible. For intermittent welds (e.g. 50-150) total = count x length. length_mm is per side; sides = 2 when the same weld is on both sides. Do not include bolts or non-weld items.\n'+
+          'Answer with ONLY JSON: {"scale":string|null,"welds":[{"label":string,"joint":string,"symbol":string,"size_mm":number|null,"length_mm":number|null,"sides":1|2,"confidence":"high"|"medium"|"low","basis":string}],"notes":string}';
+        var ac = new AbortController(), to = setTimeout(function(){ ac.abort(); }, 120000);
+        var mdl = c.model||'gemini-3.8-flash';
+        var res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(mdl)+':generateContent?key='+encodeURIComponent(c.key), {method:'POST', signal:ac.signal,
+          headers:{'content-type':'application/json'},
+          body:JSON.stringify({contents:[{role:'user', parts:[{text:prompt},{inline_data:{mime_type:'image/jpeg', data:b64}}]}], generationConfig:{temperature:0, responseMimeType:'application/json', maxOutputTokens:8000}})});
+        clearTimeout(to);
+        var js = await res.json();
+        if(!res.ok) throw new Error((js&&js.error&&js.error.message)||('HTTP '+res.status));
+        var t = ((js.candidates&&js.candidates[0]&&js.candidates[0].content&&js.candidates[0].content.parts)||[]).map(function(x){return x.text||'';}).join('');
+        if(!t) throw new Error('AI tidak memberi jawaban (mungkin diblokir / kuota habis)');
+        var a = t.indexOf('{'), b = t.lastIndexOf('}'); if(a<0||b<a) throw new Error('Jawaban AI bukan JSON');
+        var o = JSON.parse(t.slice(a,b+1)); W.ai = (o.welds||[]).filter(function(x){return x;});
+        var h = '<div style="margin-top:8px"><b>Saran AI</b>'+(o.scale?' · skala terbaca: '+esc(o.scale):'')+' <span class="wd-warn">— verifikasi dulu!</span></div>';
+        if(!W.ai.length) h += '<div style="color:#8fb0d3;margin-top:4px">AI tidak menemukan las yang bisa dihitung di halaman ini.'+(o.notes?' '+esc(o.notes):'')+'</div>';
+        W.ai.forEach(function(x,i){
+          var ok = typeof x.length_mm==='number' && x.length_mm>0;
+          h += '<div class="wd-ai"><label><input type="checkbox" data-ai="'+i+'"'+(ok?' checked':' disabled')+'><span><b>'+esc(x.label||('Las '+(i+1)))+'</b> — '+(ok? nf(x.length_mm,1)+' mm'+((x.sides===2)?' ×2 sisi':''):'<i>panjang tidak bisa ditentukan</i>')+
+            '<br><span style="color:#bcd4f0">'+esc([x.joint,x.symbol,x.size_mm?('size '+x.size_mm+' mm'):''].filter(Boolean).join(' · '))+'</span>'+
+            '<br><span style="color:#8fb0d3">'+esc(x.confidence||'')+' · '+esc(x.basis||'')+'</span></span></label></div>';
+        });
+        if(W.ai.some(function(x){return typeof x.length_mm==='number'&&x.length_mm>0;})) h += '<div class="wd-row"><button class="wd-btn" type="button" data-w="aiadd" style="flex:1">＋ Masukkan yang dicentang ke daftar</button></div>';
+        if(o.notes) h += '<div style="margin-top:6px;color:#8fb0d3;font-size:.7rem">'+esc(o.notes)+'</div>';
+        out.innerHTML = h;
+      }catch(e){
+        out.innerHTML = '<div class="wd-warn" style="margin-top:6px">⚠️ '+esc(e&&e.name==='AbortError'?'Waktu habis':(e&&e.message||e))+(/Failed to fetch|NetworkError/i.test(String(e&&e.message))?' — periksa koneksi internet / API key.':'')+'</div>';
+      }
+    }
+
+    /* ----- klik tombol ----- */
+    el.addEventListener('click', function(e){
+      var b = e.target.closest('[data-tool],[data-w]'); if(!b) return;
+      if(b.dataset.tool){ setTool(b.dataset.tool); return; }
+      var a = b.dataset.w, row = e.target.closest('.wd-w'), i = row ? +row.dataset.i : -1;
+      if(a==='close'){ if(W.welds.length && !confirm('Tutup tanpa menerapkan hasil ukur?')) return; cleanup(); }
+      else if(a==='zin') setZoom(W.zoom*1.25);
+      else if(a==='zout') setZoom(W.zoom/1.25);
+      else if(a==='fit'){ fit(); render(); }
+      else if(a==='prev') gotoPage(W.pg-1);
+      else if(a==='next') gotoPage(W.pg+1);
+      else if(a==='done') commit();
+      else if(a==='undo'){ W.cur.pop(); drawOv(); }
+      else if(a==='file'){ var inp = document.createElement('input'); inp.type='file'; inp.accept='application/pdf,image/*'; inp.style.cssText='position:fixed;left:-9999px';
+        inp.addEventListener('change', async function(){ var f = inp.files&&inp.files[0]; inp.remove(); if(!f) return;
+          try{ say('Membuka file…'); if(/pdf/i.test(f.type)||/\.pdf$/i.test(f.name)) await openBuf(await f.arrayBuffer()); else await openImg(f); }catch(er){ pickPrompt(er); } });
+        document.body.appendChild(inp); inp.click(); }
+      else if(a==='calok'){ var mm = parseFloat((q('#wdCalMm')||{}).value); if(!(mm>0) || W.cal.length<2){ flash('Isi panjang asli (mm) > 0'); return; }
+        var dist = Math.hypot(W.cal[1][0]-W.cal[0][0], W.cal[1][1]-W.cal[0][1]); if(dist<=0) return;
+        W.kp[W.pg] = mm/dist; W.cal=[]; q('#wdKin').style.display='none'; setTool('pan'); drawList(); }
+      else if(a==='scale'){ var n = parseFloat(q('#wdSc').value); if(!(n>0)) return; W.kp[W.pg] = 25.4/72*n; drawInfo(); drawList(); }
+      else if(a==='manual'){ W.welds.push({n:'', pts:null, pg:W.pg, mm:0, sd:1, src:'manual'}); W.sel=W.welds.length-1; drawList(); var ins = q('.wd-w:last-child input'); if(ins) ins.focus(); }
+      else if(a==='sel'){ W.sel = (W.sel===i)?-1:i; drawOv(); drawList(); var w = W.welds[i]; if(w && w.pts && (w.pg||1)!==W.pg){ gotoPage(w.pg); } }
+      else if(a==='del'){ W.welds.splice(i,1); W.sel=-1; drawOv(); drawList(); }
+      else if(a==='reset'){ e.preventDefault(); W.welds[i].mm=null; drawList(); }
+      else if(a==='aicfg'){ var bx = q('#wdAiCfg'); bx.style.display = bx.style.display==='none'?'block':'none'; var c = aiCfg(); q('#wdKey').value = c.key||''; q('#wdModel').value = c.model||'gemini-3.8-flash'; }
+      else if(a==='aisave'){ aiSet({key:q('#wdKey').value.trim(), model:q('#wdModel').value.trim()||'gemini-3.8-flash'}); q('#wdAiCfg').style.display='none'; flash('API key tersimpan di browser ini.'); }
+      else if(a==='ai') runAI();
+      else if(a==='aiadd'){ el.querySelectorAll('[data-ai]:checked').forEach(function(cb){ var x = W.ai[+cb.dataset.ai]; if(!x) return;
+          W.welds.push({n:(x.label||'')+(x.confidence?' ['+x.confidence+']':''), pts:null, pg:W.pg, mm:Math.round(x.length_mm*10)/10, sd:x.sides===2?2:1, src:'ai'}); });
+        q('#wdAiOut').innerHTML='<div class="wd-ok" style="margin-top:6px">Saran AI dimasukkan ke daftar — cek angkanya satu per satu.</div>'; drawList(); }
+      else if(a==='apply'){
+        var t = total(), qn = opt.qty(), mul = q('#wdMul').checked;
+        if(!W.welds.length){ flash('Belum ada las yang diukur.'); return; }
+        var miss = W.welds.filter(function(w){ return wMm(w)==null; }).length;
+        if(miss && !confirm(miss+' las belum punya panjang (belum dikalibrasi). Tetap terapkan tanpa las tersebut?')) return;
+        opt.onApply({wm:{kp:W.kp, welds:W.welds}, total:t, mul:mul, qty:qn}); cleanup();
+      }
+    });
+    el.addEventListener('change', function(e){
+      var t = e.target, row = t.closest('.wd-w'), i = row ? +row.dataset.i : -1;
+      if(t.id==='wdMul'){ drawList(); return; }
+      if(i<0) return;
+      if(t.dataset.w==='mm'){ var v = parseFloat(t.value); W.welds[i].mm = isNaN(v)?null:v; drawList(); }
+      else if(t.dataset.w==='sd'){ W.welds[i].sd = +t.value; drawList(); }
+    });
+    window.addEventListener('resize', function(){ if(document.body.contains(el)){ fit(); render(); } });
+    setTool('pan'); drawList();
+    if(opt.file){ (async function(){ try{ if(/pdf/i.test(opt.file.type)) await openBuf(await opt.file.arrayBuffer()); else await openImg(opt.file); }catch(e){ pickPrompt(e); } })(); }
+    else loadAuto();
+  }
+
   function saveRec(o, isEdit){
     var isBase = BASE.some(function(b){return b.id===o.id;});
     if(isBase){ S.edited[o.id] = o; }
@@ -16976,6 +17454,39 @@ textarea{resize:vertical;min-height:70px}
 .ubar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:12px}.ubar:empty{display:none}.utab{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer;font-weight:700}.utab:hover{border-color:var(--accent)}.utab.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}.utab small{margin-left:8px;opacity:.85;font-weight:600}
 .rpage .rin{position:absolute;inset:0}.rpage .rlb{position:absolute;box-sizing:border-box;background:#fff;color:#000;font:700 .95cqw/1 Arial,Helvetica,sans-serif;display:flex;align-items:center;padding-left:.2cqw;pointer-events:none}.rpage .seg{position:absolute;left:0;width:100%;overflow:hidden}.rpage .seg img{position:absolute;left:0;top:0;width:100%}
 .par{width:100%;min-width:640px;height:auto}.pt{font:10px var(--mono);fill:var(--muted)}.lgt{min-width:1500px}.lgt td{font-size:12.5px;max-width:260px;vertical-align:top}.lgt select.stt{font-weight:600}
+
+/* ===== Kartu kalender (Environmental Log & Daily Coating) ===== */
+.dcard{margin:6px 12px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface2);overflow:hidden}
+.dchead{display:flex;align-items:center;gap:8px;padding:8px 10px}
+.dctog{flex:1;min-width:0;display:flex;align-items:center;justify-content:space-between;gap:8px;background:transparent;border:0;padding:2px 0;cursor:pointer;text-align:left;color:var(--text);font:inherit}
+.dcm{display:flex;flex-direction:column;gap:2px;min-width:0}
+.dcm .cnt{font-size:12px;color:var(--muted)}
+.dcm .dr{color:var(--prog)}
+.chev{flex:none;color:var(--muted);transition:transform .2s}
+.dcard.open .chev{transform:rotate(180deg)}
+.dcbody{padding:2px 10px 12px;border-top:1px solid var(--line)}
+.calh{display:flex;align-items:center;gap:6px;margin:10px 0 8px}
+.calh b{flex:1;text-align:center;text-transform:capitalize;font-size:14px}
+.calg{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.calg .wd{font:600 10px var(--mono);text-align:center;color:var(--muted);text-transform:uppercase;padding:2px 0}
+.cd{position:relative;height:34px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--surface);color:var(--text);border:1px solid transparent;border-radius:8px;font-size:13px;cursor:pointer}
+.cd:hover{border-color:var(--accent)}
+.cd.today{border-color:var(--accent)}
+.cd.sel{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:700}
+.cd i{position:absolute;bottom:3px;left:50%;width:6px;height:6px;margin-left:-3px;border-radius:50%;background:var(--c,var(--none))}
+.cd.sel i{box-shadow:0 0 0 1.5px var(--accent-ink)}
+.cd.st-prog{--c:var(--prog)} .cd.st-done{--c:var(--done)} .cd.st-ng{--c:var(--danger)}
+.cleg{display:flex;flex-wrap:wrap;gap:4px 12px;margin:8px 0 0;font-size:12px;color:var(--muted)}
+.cleg span{display:inline-flex;align-items:center;gap:5px}
+.cleg i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.dchips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;font-size:12px;color:var(--muted)}
+.dchip{border:1px solid var(--prog);color:var(--prog);background:transparent;border-radius:99px;padding:2px 10px;font-size:12px;font-weight:600;cursor:pointer}
+.dchip:hover{background:var(--prog);color:#1b1100}
+.dayp{margin-top:10px;border-top:1px dashed var(--line);padding-top:10px}
+.dayh{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.dayh b{font-size:13px}
+.dayp .row{border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-top:6px;padding:8px 10px;width:100%}
+.dayp .note{margin:8px 0 2px}
 <@@/style>
 <@@/head>
 <body>
@@ -17073,15 +17584,18 @@ function lsSet(k,v){try{localStorage.setItem(k,v);return true;}catch(e){return f
 function load(){
   try{
     var o=JSON.parse(lsGet(LS_STATE)||'null');
-    if(o&&Array.isArray(o.projects)) return {projects:o.projects,active:o.active||null};
+    if(o&&Array.isArray(o.projects)) return {projects:o.projects,active:o.active||null,env:Array.isArray(o.env)?o.env:[]};
   }catch(e){}
-  return {projects:[],active:null};
+  return {projects:[],active:null,env:[]};
 }
 function loadLayout(){
   try{var o=JSON.parse(lsGet(LS_LAYOUT)||'null'); if(o&&typeof o==='object') return o;}catch(e){}
   return {};
 }
 var state=load(), layout=loadLayout(), sel=null, editPos=false, drag=null;
+/* Environmental Log (FRM-QC-03) tidak terikat project: pindahkan record lama dari dalam project ke state.env */
+state.env=state.env||[];
+(function(){var mv=0;state.projects.forEach(function(p){if(!p||!p.forms)return;var keep=[];p.forms.forEach(function(r){if(r&&r.code==='03'){if(r.d&&r.d.h)delete r.d.h['Project'];if(!state.env.some(function(e){return e.id===r.id;}))state.env.push(r);mv++;}else keep.push(r);});p.forms=keep;});if(mv)setTimeout(function(){try{save();}catch(e){}},0);})();
 if(!state.projects.some(function(p){return p.id===state.active;})) state.active=state.projects.length?state.projects[0].id:null;
 
 function save(){ if(!lsSet(LS_STATE,JSON.stringify(state))) toast('Penyimpanan browser tidak tersedia — data tidak tersimpan'); try{parent.QCCoat&&parent.QCCoat.saved(state);}catch(e){} }
@@ -17415,15 +17929,15 @@ function doImport(){
 
 
 /* ===== INTEGRASI FORM QC COATING (FRM-QC-01..12) ===== */
-var FORMS=[{"c": "01", "t": "MATERIAL RECEIVING REPORT (MRR)", "s": "Hold Point #2 ITP — Penerimaan material coating/sealant/filler", "hp": "", "b": [{"t": "h", "f": ["No. PO", "No. Delivery Order", "Tanggal Terima", "Supplier", "No. Surat Jalan", "Gudang/Lokasi"]}, {"t": "tbl", "c": ["Material", "Jenis (Primer/Int/TC/Sealant/Filler/Thinner)", "Brand/Merk", "Batch No.", "Mfg Date", "Exp Date", "Qty", "Kondisi Kemasan"], "n": 7}, {"t": "c", "l": "Dokumen dicek", "o": ["COA", "TDS", "SDS", "Batch cocok dgn PO", "Shelf life ≥ 3 bulan", "Suhu transport < 35°C"], "r": false}, {"t": "f", "l": "Suhu penyimpanan saat terima"}, {"t": "f", "l": "Catatan"}], "v": true, "sg": ["Prepared by (QC Inspector)", "Verified by (QC Supervisor)", "Approved by (QA Manager)"]}, {"c": "02", "t": "DAILY COATING INSPECTION REPORT", "s": "Record utama harian — traceability per komponen & per lapis", "hp": "", "b": [{"t": "h", "f": ["Project", "No. PO/Job", "Tanggal", "Shift", "Cuaca", "Booth/Lokasi"]}, {"t": "tbl", "c": ["Component ID", "Substrat (CS/GLV/AL/PC)", "System ID", "Lapis ke-", "Produk/Batch", "WFT (µm)", "DFT Spot (µm)", "Visual (miss/run/sag/pinhole)", "Recoat window OK?", "Keterangan"], "n": 9}, {"t": "f", "l": "Primer"}, {"t": "f", "l": "Intermediate"}, {"t": "f", "l": "Topcoat"}, {"t": "f", "l": "Sealant"}, {"t": "f", "l": "Dempul"}, {"t": "f", "l": "Temuan/NCR yang dibuka hari ini"}], "v": true, "sg": ["Prepared by (QC Inspector)", "Verified by (QC Supervisor)", "Approved by (QA Manager)"]}, {"c": "03", "t": "ENVIRONMENTAL LOG (KONDISI APLIKASI)", "s": "W Point #9 ITP — diukur minimal 3x per shift: pagi/siang/sore", "hp": "W Point #9", "b": [{"t": "h", "f": ["Project", "Tanggal", "Booth/Lokasi", "Instrumen (No./kalibrasi)"]}, {"t": "tbl", "c": ["Jam", "Suhu Udara (°C)", "Suhu Permukaan (°C)", "RH (%)", "Dew Point (°C)", "ΔT (Suhu Perm. – DP)", "Sesuai (≥3°C, RH≤85%)?", "Proses aplikasi berjalan", "Nama Inspector"], "n": 11}, {"t": "note", "x": "Batas: ΔT ≥ +3°C dan RH ≤ 85% — bila tidak terpenuhi, STOP aplikasi & catat tindakan korektif di bawah."}, {"t": "f", "l": "Tindakan korektif"}], "v": true, "sg": ["Prepared by (QC Inspector)", "Verified by (QC Supervisor)", "Approved by (QA Manager)"]}, {"c": "04", "t": "MIXING LOG (PENCATATAN BATCH CAT)", "s": "S Point #10 ITP — setiap batch mixing dicatat & diverifikasi QC", "hp": "S Point #10", "b": [{"t": "h", "f": ["Project", "Tanggal", "Produk/Jenis Cat", "Base Batch"]}, {"t": "tbl", "c": ["Jam Mulai Mix", "Komponen A (kg)", "Komponen B (kg)", "Thinner (kg/%)", "Rasio Aktual", "Rasio TDS", "Induction (start–finish)", "Pot Life Deadline", "QC Verify (initial)"], "n": 10}, {"t": "note", "x": "Rasio aktual HARUS = rasio TDS (toleransi ±3%). Pot life terlampaui = batch REJECT, jangan diencerkan untuk dipakai ulang."}], "v": true, "sg": ["Prepared by (QC Inspector)", "Verified by (QC Supervisor)", "Approved by (QA Manager)"]}, {"c": "05", "t": "SURFACE PREPARATION REPORT", "s": "H Point #5/#6 ITP — release sebelum priming (maks. 4 jam / sebelum flash rust)", "hp": "H Point #5/", "b": [{"t": "h", "f": ["Project", "Tanggal", "Component ID", "Substrat", "Metode (blast/sweep/grind)", "Abrasif (jenis/mesh)"]}, {"t": "tbl", "c": ["Area/Panel", "Standar Target", "Hasil Visual (derajat)", "Profile (µm)", "Garam Terlarut (mg/m²)", "Dust Rating (ISO 8502-3)", "Waktu Selesai Prep", "Flash Rust (Y/N)", "Verdict"], "n": 9}, {"t": "note", "x": "Target: CS = Sa2½, 50–75 µm, ≤50 mg/m² | Galvanis = bebas white rust, sweep 20–40 µm | AL = SP1+abrasi, dust≤2 | PC = MEK rub ≥50x"}, {"t": "f", "l": "Waktu mulai priming"}], "v": true, "sg": ["Prepared by (QC Inspector)", "Verified by (QC Supervisor)", "Approved by (QA Manager)"]}, {"c": "06", "t": "SEALANT APPLICATION LOG (JOINT LAS INTERMITEN & SAMBUNGAN)", "s": "W Point #12 ITP — sealant overcoatable, fully cured sebelum dicat", "hp": "W Point #12", "b": [{"t": "h", "f": ["Project", "Tanggal", "Sealant (merk/tipe)", "Batch", "Detail/Drawing joint"]}, {"t": "tbl", "c": ["Joint ID / Lokasi", "Dimensi P×L×D (mm)", "Backing Rod (Y/N)", "Primer (Y/N)", "Jam Aplikasi", "Tooling Rapi (Y/N)", "Bebas Gelembung/Gap (Y/N)", "Tgl Full Cure", "Overcoat OK (tgl/initial)"], "n": 9}, {"t": "note", "x": "Kriteria: ISO 11600 F25LM/F20HM overcoatable; joint gerak teleskopik garbarata wajib low modulus; backer rod bila depth >10 mm."}], "v": true, "sg": ["Prepared by (QC Inspector)", "Verified by (QC Supervisor)", "Approved by (QA Manager)"]}, {"c": "07", "t": "DFT MEASUREMENT REPORT (ISO 19840 / SSPC-PA 2)", "s": "H Point #17 ITP — aturan 5 bacaan: mean ≥ DFT spec, tidak ada bacaan < 80% spec", "hp": "H Point #17", "b": [{"t": "h", "f": ["Project", "Tanggal", "Component ID", "System ID / DFT Spec (µm)", "Instrumen (No./kalibrasi)", "Substrat"]}, {"t": "tbl", "c": ["Grp", "Bacaan 1", "Bacaan 2", "Bacaan 3", "Bacaan 4", "Bacaan 5", "Rata-rata (≥ spec)", "Min. Bacaan (≥80% spec)", "Verdict Grp (OK/NG)"], "n": 9}, {"t": "note", "x": "Contoh (DFT spec 260 µm): bacaan individual min. 208 µm; rata-rata tiap 5 bacaan ≥ 260 µm. Lengkapi grup sesuai luas area (SSPC-PA 2)."}, {"t": "f", "l": "Jumlah grup"}, {"t": "f", "l": "Grup OK"}, {"t": "f", "l": "Grup NG (repair & retest)"}, {"t": "f", "l": "Total area"}], "v": true, "sg": ["Prepared by (QC Inspector)", "Verified by (QC Supervisor)", "Approved by (QA Manager)"]}, {"c": "08", "t": "ADHESION TEST REPORT", "s": "W/H Point #18 ITP — kualifikasi & sampling: 1 per lot / per 10 komponen / per shift", "hp": "W/H Point #18", "b": [{"t": "h", "f": ["Project", "Tanggal", "Standard Uji", "Sistem Coating / DFT (µm)", "Umur Curing (jam/hari)"]}, {"t": "tbl", "c": ["No. Panel/Sample", "Substrat", "Metode (Cross-cut/Pull-off)", "Hasil (Class / MPa)", "Failure Mode (cohesive/adhesive/intercoat)", "Lokasi Test", "Foto No.", "Verdict", "Keterangan"], "n": 7}, {"t": "note", "x": "Kriteria: Cross-cut ISO 2409 ≤ Class 1 | Pull-off ASTM D4541 ≥5 MPa | FAILURE MODE harus cohesive/substrate — adhesive/intercoat = sistem DITOLAK, investigasi."}], "v": true, "sg": ["Prepared by (QC Inspector)", "Verified by (QC Supervisor)", "Approved by (QA Manager)"]}, {"c": "09", "t": "HOLIDAY TEST REPORT", "s": "H Point #19 ITP — applicable: interior immersed / DFT > 500 µm (NACE SP0188 / ISO 29601)", "hp": "H Point #19", "b": [{"t": "h", "f": ["Project", "Tanggal", "Component ID / Area", "DFT Terukur (µm)", "Tegangan Test (V)", "Instrumen"]}, {"t": "tbl", "c": ["Segmen/Joint Tested", "Panjang Area (m)", "Jumlah Holiday", "Lokasi Holiday (sket no.)", "Tindakan Repair", "Retest (tgl/hasil)", "Keterangan"], "n": 9}, {"t": "note", "x": "Kriteria: 0 holiday. Tegangan sesuai ISO 29601 (contoh: 300–500 µm → 1000–2500 V). Bila tidak applicable, tulis N/A + alasan."}], "v": true, "sg": ["Prepared by (QC Inspector)", "Verified by (QC Supervisor)", "Approved by (QA Manager)"]}, {"c": "10", "t": "FINAL VISUAL INSPECTION REPORT (ISO 4628)", "s": "H Point #16 ITP — 100% komponen sebelum release & packing", "hp": "H Point #16", "b": [{"t": "h", "f": ["Project", "Tanggal", "Component ID", "System ID", "Warna (RAL/No. sample)", "Lokasi Inspeksi (cahaya D65)"]}, {"t": "tbl", "c": ["Parameter (ISO 4628)", "Kriteria Batas", "Hasil Pengamatan", "Class/Jumlah", "OK/NG"], "n": 7, "p": [["Kar / Rusting (ISO 4628-3)", "Tidak boleh ada (Ri0)", "", "", ""], ["Blistering (ISO 4628-2)", "Tidak boleh ada (0-S0)", "", "", ""], ["Delaminasi / Flaking (ISO 4628-5)", "Tidak boleh ada", "", "", ""], ["Miss / Terlewat / Pinhole mayor", "Tidak boleh ada", "", "", ""], ["Run / Sag / Drip", "Hanya minor, area ≤0,5%", "", "", ""], ["Keseragaman warna & gloss", "Seragam @1 m di cahaya D65", "", "", ""], ["Kondisi sealant & dempul", "Rapi, fully cured, overcoated", "", "", ""]], "l": [0, 1]}, {"t": "f", "l": "Foto dokumentasi No."}], "v": true, "sg": ["Prepared by (QC Inspector)", "Verified by (QC Supervisor)", "Approved by (QA Manager)"]}, {"c": "11", "t": "NON-CONFORMANCE REPORT (NCR)", "s": "Semua temuan tidak sesuai WAJIB melalui NCR — tidak ada repair tanpa disposisi", "hp": "", "b": [{"t": "h", "f": ["No. NCR", "Project", "Tanggal Temuan", "Component ID", "ITP Ref (No. tahapan)", "System ID", "Pelapor", "Kategori (Major/Minor)"]}, {"t": "tx", "l": "DESKRIPSI KETIDAKSESUAIAN (what, where, luas/jumlah, foto no.)"}, {"t": "tx", "l": "ANALISA AKAR MASALAH (root cause)"}, {"t": "c", "l": "DISPOSISI", "o": ["REPAIR/REWORK", "REJECT/SCRAP", "USE-AS-IS (ETE — Engineer to Evaluate)"], "r": true}, {"t": "f", "l": "TARGET"}, {"t": "tx", "l": "TINDAKAN KOREKTIF (repair sistem coating sama, feathering ≥50 mm, DFT repair ≥ DFT sistem)"}, {"t": "tbl", "c": ["Re-inspection (tgl)", "Inspektor", "Hasil (OK/NG)", "DFT Repair (µm)", "Visual", "Foto"], "n": 3}, {"t": "c", "l": "CLOSE OUT", "o": ["CLOSED", "OPEN"], "r": true}, {"t": "f", "l": "QA Manager (name/sign/date)"}], "v": false, "sg": ["Prepared by (QC)", "Reviewed by (QC Spv)", "Disposisi oleh (QA Mgr/Eng.)"]}, {"c": "12", "t": "COATING DOSSIER — INDEX & CHECKLIST KELENGKAPAN", "s": "H Point #22 ITP — wajib lengkap sebelum shipment / serah terima klien", "hp": "H Point #22", "b": [{"t": "h", "f": ["Project", "No. PO/Kontrak", "Shipment/Package No.", "Jumlah Komponen"]}, {"t": "tbl", "c": ["No", "Dokumen", "Kode Form", "Jumlah Lembar", "Ada (Y/N)", "H-Point Release (initial/tgl)", "Catatan"], "n": 14, "p": [["1", "Material Approval (AAR) per sistem", "FRM-QC-00/AAR", "", "", "", ""], ["2", "Material Receiving Report", "FRM-QC-01", "", "", "", ""], ["3", "Storage & Environmental Log", "FRM-QC-03", "", "", "", ""], ["4", "Mixing Log", "FRM-QC-04", "", "", "", ""], ["5", "Surface Preparation Report (semua substrat)", "FRM-QC-05", "", "", "", ""], ["6", "Daily Coating Inspection Report (semua shift)", "FRM-QC-02", "", "", "", ""], ["7", "Sealant Application Log", "FRM-QC-06", "", "", "", ""], ["8", "DFT Measurement Report (semua komponen)", "FRM-QC-07", "", "", "", ""], ["9", "Adhesion Test Report", "FRM-QC-08", "", "", "", ""], ["10", "Holiday Test Report (bila applicable)", "FRM-QC-09", "", "", "", ""], ["11", "Final Visual Inspection Report (100% komponen)", "FRM-QC-10", "", "", "", ""], ["12", "NCR & Close-out Report (semua NCR tertutup)", "FRM-QC-11", "", "", "", ""], ["13", "Foto dokumentasi (label per komponen)", "—", "", "", "", ""], ["14", "Test patch approval SYS-04/SYS-06 (bila applicable)", "—", "", "", "", ""]], "l": [0, 1, 2]}, {"t": "c", "l": "Semua H-point pada ITP Master telah dirilis & didukung record lengkap", "o": ["YA"], "r": false}, {"t": "c", "l": "Packing & identitas komponen sesuai Packing List", "o": ["YA"], "r": false}], "v": true, "sg": ["Prepared by (QC Inspector)", "Verified by (QC Supervisor)", "Approved by (QA Manager)"]}], CODE={}, cur=null, delArm=false;
+var FORMS=[{"c": "01", "t": "MATERIAL RECEIVING REPORT (MRR)", "s": "Hold Point #2 ITP — Penerimaan material coating/sealant/filler", "hp": "", "b": [{"t": "h", "f": ["No. PO", "No. Delivery Order", "Tanggal Terima", "Supplier", "No. Surat Jalan", "Gudang/Lokasi"]}, {"t": "tbl", "c": ["Material", "Jenis (Primer/Int/TC/Sealant/Filler/Thinner)", "Brand/Merk", "Batch No.", "Mfg Date", "Exp Date", "Qty", "Kondisi Kemasan"], "n": 7}, {"t": "c", "l": "Dokumen dicek", "o": ["COA", "TDS", "SDS", "Batch cocok dgn PO", "Shelf life ≥ 3 bulan", "Suhu transport < 35°C"], "r": false}, {"t": "f", "l": "Suhu penyimpanan saat terima"}, {"t": "f", "l": "Catatan"}], "v": true, "sg": ["Prepared by (QC Inspector)", "Verified by (QC Supervisor)", "Approved by (QA Manager)"]}, {"c": "02", "t": "DAILY COATING INSPECTION REPORT", "s": "Record utama harian — traceability per komponen & per lapis", "hp": "", "b": [{"t": "h", "f": ["Tanggal", "Shift", "Cuaca", "Booth/Lokasi"]}, {"t": "tbl", "c": ["Component ID", "Substrat (CS/GLV/AL/PC)", "System ID", "Lapis ke-", "Produk/Batch", "WFT (µm)", "DFT Spot (µm)", "Visual (miss/run/sag/pinhole)", "Recoat window OK?", "Keterangan"], "n": 9}, {"t": "f", "l": "Primer"}, {"t": "f", "l": "Intermediate"}, {"t": "f", "l": "Topcoat"}, {"t": "f", "l": "Sealant"}, {"t": "f", "l": "Dempul"}, {"t": "f", "l": "Temuan/NCR yang dibuka hari ini"}], "v": true, "sg": ["Prepared by (QC Inspector)", "Verified by (QC Supervisor)", "Approved by (QA Manager)"]}, {"c": "03", "t": "ENVIRONMENTAL LOG (KONDISI APLIKASI)", "s": "W Point #9 ITP — diukur minimal 3x per shift: pagi/siang/sore", "hp": "W Point #9", "b": [{"t": "h", "f": ["Tanggal", "Booth/Lokasi", "Instrumen (No./kalibrasi)"]}, {"t": "tbl", "c": ["Jam", "Suhu Udara (°C)", "Suhu Permukaan (°C)", "RH (%)", "Dew Point (°C)", "ΔT (Suhu Perm. – DP)", "Sesuai (≥3°C, RH≤85%)?", "Proses aplikasi berjalan", "Nama Inspector"], "n": 11}, {"t": "note", "x": "Batas: ΔT ≥ +3°C dan RH ≤ 85% — bila tidak terpenuhi, STOP aplikasi & catat tindakan korektif di bawah."}, {"t": "f", "l": "Tindakan korektif"}], "v": true, "sg": ["Prepared by (QC Inspector)", "Verified by (QC Supervisor)", "Approved by (QA Manager)"]}, {"c": "04", "t": "MIXING LOG (PENCATATAN BATCH CAT)", "s": "S Point #10 ITP — setiap batch mixing dicatat & diverifikasi QC", "hp": "S Point #10", "b": [{"t": "h", "f": ["Project", "Tanggal", "Produk/Jenis Cat", "Base Batch"]}, {"t": "tbl", "c": ["Jam Mulai Mix", "Komponen A (kg)", "Komponen B (kg)", "Thinner (kg/%)", "Rasio Aktual", "Rasio TDS", "Induction (start–finish)", "Pot Life Deadline", "QC Verify (initial)"], "n": 10}, {"t": "note", "x": "Rasio aktual HARUS = rasio TDS (toleransi ±3%). Pot life terlampaui = batch REJECT, jangan diencerkan untuk dipakai ulang."}], "v": true, "sg": ["Prepared by (QC Inspector)", "Verified by (QC Supervisor)", "Approved by (QA Manager)"]}, {"c": "05", "t": "SURFACE PREPARATION REPORT", "s": "H Point #5/#6 ITP — release sebelum priming (maks. 4 jam / sebelum flash rust)", "hp": "H Point #5/", "b": [{"t": "h", "f": ["Project", "Tanggal", "Component ID", "Substrat", "Metode (blast/sweep/grind)", "Abrasif (jenis/mesh)"]}, {"t": "tbl", "c": ["Area/Panel", "Standar Target", "Hasil Visual (derajat)", "Profile (µm)", "Garam Terlarut (mg/m²)", "Dust Rating (ISO 8502-3)", "Waktu Selesai Prep", "Flash Rust (Y/N)", "Verdict"], "n": 9}, {"t": "note", "x": "Target: CS = Sa2½, 50–75 µm, ≤50 mg/m² | Galvanis = bebas white rust, sweep 20–40 µm | AL = SP1+abrasi, dust≤2 | PC = MEK rub ≥50x"}, {"t": "f", "l": "Waktu mulai priming"}], "v": true, "sg": ["Prepared by (QC Inspector)", "Verified by (QC Supervisor)", "Approved by (QA Manager)"]}, {"c": "06", "t": "SEALANT APPLICATION LOG (JOINT LAS INTERMITEN & SAMBUNGAN)", "s": "W Point #12 ITP — sealant overcoatable, fully cured sebelum dicat", "hp": "W Point #12", "b": [{"t": "h", "f": ["Project", "Tanggal", "Sealant (merk/tipe)", "Batch", "Detail/Drawing joint"]}, {"t": "tbl", "c": ["Joint ID / Lokasi", "Dimensi P×L×D (mm)", "Backing Rod (Y/N)", "Primer (Y/N)", "Jam Aplikasi", "Tooling Rapi (Y/N)", "Bebas Gelembung/Gap (Y/N)", "Tgl Full Cure", "Overcoat OK (tgl/initial)"], "n": 9}, {"t": "note", "x": "Kriteria: ISO 11600 F25LM/F20HM overcoatable; joint gerak teleskopik garbarata wajib low modulus; backer rod bila depth >10 mm."}], "v": true, "sg": ["Prepared by (QC Inspector)", "Verified by (QC Supervisor)", "Approved by (QA Manager)"]}, {"c": "07", "t": "DFT MEASUREMENT REPORT (ISO 19840 / SSPC-PA 2)", "s": "H Point #17 ITP — aturan 5 bacaan: mean ≥ DFT spec, tidak ada bacaan < 80% spec", "hp": "H Point #17", "b": [{"t": "h", "f": ["Project", "Tanggal", "Component ID", "System ID / DFT Spec (µm)", "Instrumen (No./kalibrasi)", "Substrat"]}, {"t": "tbl", "c": ["Grp", "Bacaan 1", "Bacaan 2", "Bacaan 3", "Bacaan 4", "Bacaan 5", "Rata-rata (≥ spec)", "Min. Bacaan (≥80% spec)", "Verdict Grp (OK/NG)"], "n": 9}, {"t": "note", "x": "Contoh (DFT spec 260 µm): bacaan individual min. 208 µm; rata-rata tiap 5 bacaan ≥ 260 µm. Lengkapi grup sesuai luas area (SSPC-PA 2)."}, {"t": "f", "l": "Jumlah grup"}, {"t": "f", "l": "Grup OK"}, {"t": "f", "l": "Grup NG (repair & retest)"}, {"t": "f", "l": "Total area"}], "v": true, "sg": ["Prepared by (QC Inspector)", "Verified by (QC Supervisor)", "Approved by (QA Manager)"]}, {"c": "08", "t": "ADHESION TEST REPORT", "s": "W/H Point #18 ITP — kualifikasi & sampling: 1 per lot / per 10 komponen / per shift", "hp": "W/H Point #18", "b": [{"t": "h", "f": ["Project", "Tanggal", "Standard Uji", "Sistem Coating / DFT (µm)", "Umur Curing (jam/hari)"]}, {"t": "tbl", "c": ["No. Panel/Sample", "Substrat", "Metode (Cross-cut/Pull-off)", "Hasil (Class / MPa)", "Failure Mode (cohesive/adhesive/intercoat)", "Lokasi Test", "Foto No.", "Verdict", "Keterangan"], "n": 7}, {"t": "note", "x": "Kriteria: Cross-cut ISO 2409 ≤ Class 1 | Pull-off ASTM D4541 ≥5 MPa | FAILURE MODE harus cohesive/substrate — adhesive/intercoat = sistem DITOLAK, investigasi."}], "v": true, "sg": ["Prepared by (QC Inspector)", "Verified by (QC Supervisor)", "Approved by (QA Manager)"]}, {"c": "09", "t": "HOLIDAY TEST REPORT", "s": "H Point #19 ITP — applicable: interior immersed / DFT > 500 µm (NACE SP0188 / ISO 29601)", "hp": "H Point #19", "b": [{"t": "h", "f": ["Project", "Tanggal", "Component ID / Area", "DFT Terukur (µm)", "Tegangan Test (V)", "Instrumen"]}, {"t": "tbl", "c": ["Segmen/Joint Tested", "Panjang Area (m)", "Jumlah Holiday", "Lokasi Holiday (sket no.)", "Tindakan Repair", "Retest (tgl/hasil)", "Keterangan"], "n": 9}, {"t": "note", "x": "Kriteria: 0 holiday. Tegangan sesuai ISO 29601 (contoh: 300–500 µm → 1000–2500 V). Bila tidak applicable, tulis N/A + alasan."}], "v": true, "sg": ["Prepared by (QC Inspector)", "Verified by (QC Supervisor)", "Approved by (QA Manager)"]}, {"c": "10", "t": "FINAL VISUAL INSPECTION REPORT (ISO 4628)", "s": "H Point #16 ITP — 100% komponen sebelum release & packing", "hp": "H Point #16", "b": [{"t": "h", "f": ["Project", "Tanggal", "Component ID", "System ID", "Warna (RAL/No. sample)", "Lokasi Inspeksi (cahaya D65)"]}, {"t": "tbl", "c": ["Parameter (ISO 4628)", "Kriteria Batas", "Hasil Pengamatan", "Class/Jumlah", "OK/NG"], "n": 7, "p": [["Kar / Rusting (ISO 4628-3)", "Tidak boleh ada (Ri0)", "", "", ""], ["Blistering (ISO 4628-2)", "Tidak boleh ada (0-S0)", "", "", ""], ["Delaminasi / Flaking (ISO 4628-5)", "Tidak boleh ada", "", "", ""], ["Miss / Terlewat / Pinhole mayor", "Tidak boleh ada", "", "", ""], ["Run / Sag / Drip", "Hanya minor, area ≤0,5%", "", "", ""], ["Keseragaman warna & gloss", "Seragam @1 m di cahaya D65", "", "", ""], ["Kondisi sealant & dempul", "Rapi, fully cured, overcoated", "", "", ""]], "l": [0, 1]}, {"t": "f", "l": "Foto dokumentasi No."}], "v": true, "sg": ["Prepared by (QC Inspector)", "Verified by (QC Supervisor)", "Approved by (QA Manager)"]}, {"c": "11", "t": "NON-CONFORMANCE REPORT (NCR)", "s": "Semua temuan tidak sesuai WAJIB melalui NCR — tidak ada repair tanpa disposisi", "hp": "", "b": [{"t": "h", "f": ["No. NCR", "Project", "Tanggal Temuan", "Component ID", "ITP Ref (No. tahapan)", "System ID", "Pelapor", "Kategori (Major/Minor)"]}, {"t": "tx", "l": "DESKRIPSI KETIDAKSESUAIAN (what, where, luas/jumlah, foto no.)"}, {"t": "tx", "l": "ANALISA AKAR MASALAH (root cause)"}, {"t": "c", "l": "DISPOSISI", "o": ["REPAIR/REWORK", "REJECT/SCRAP", "USE-AS-IS (ETE — Engineer to Evaluate)"], "r": true}, {"t": "f", "l": "TARGET"}, {"t": "tx", "l": "TINDAKAN KOREKTIF (repair sistem coating sama, feathering ≥50 mm, DFT repair ≥ DFT sistem)"}, {"t": "tbl", "c": ["Re-inspection (tgl)", "Inspektor", "Hasil (OK/NG)", "DFT Repair (µm)", "Visual", "Foto"], "n": 3}, {"t": "c", "l": "CLOSE OUT", "o": ["CLOSED", "OPEN"], "r": true}, {"t": "f", "l": "QA Manager (name/sign/date)"}], "v": false, "sg": ["Prepared by (QC)", "Reviewed by (QC Spv)", "Disposisi oleh (QA Mgr/Eng.)"]}, {"c": "12", "t": "COATING DOSSIER — INDEX & CHECKLIST KELENGKAPAN", "s": "H Point #22 ITP — wajib lengkap sebelum shipment / serah terima klien", "hp": "H Point #22", "b": [{"t": "h", "f": ["Project", "No. PO/Kontrak", "Shipment/Package No.", "Jumlah Komponen"]}, {"t": "tbl", "c": ["No", "Dokumen", "Kode Form", "Jumlah Lembar", "Ada (Y/N)", "H-Point Release (initial/tgl)", "Catatan"], "n": 14, "p": [["1", "Material Approval (AAR) per sistem", "FRM-QC-00/AAR", "", "", "", ""], ["2", "Material Receiving Report", "FRM-QC-01", "", "", "", ""], ["3", "Storage & Environmental Log", "FRM-QC-03", "", "", "", ""], ["4", "Mixing Log", "FRM-QC-04", "", "", "", ""], ["5", "Surface Preparation Report (semua substrat)", "FRM-QC-05", "", "", "", ""], ["6", "Daily Coating Inspection Report (semua shift)", "FRM-QC-02", "", "", "", ""], ["7", "Sealant Application Log", "FRM-QC-06", "", "", "", ""], ["8", "DFT Measurement Report (semua komponen)", "FRM-QC-07", "", "", "", ""], ["9", "Adhesion Test Report", "FRM-QC-08", "", "", "", ""], ["10", "Holiday Test Report (bila applicable)", "FRM-QC-09", "", "", "", ""], ["11", "Final Visual Inspection Report (100% komponen)", "FRM-QC-10", "", "", "", ""], ["12", "NCR & Close-out Report (semua NCR tertutup)", "FRM-QC-11", "", "", "", ""], ["13", "Foto dokumentasi (label per komponen)", "—", "", "", "", ""], ["14", "Test patch approval SYS-04/SYS-06 (bila applicable)", "—", "", "", "", ""]], "l": [0, 1, 2]}, {"t": "c", "l": "Semua H-point pada ITP Master telah dirilis & didukung record lengkap", "o": ["YA"], "r": false}, {"t": "c", "l": "Packing & identitas komponen sesuai Packing List", "o": ["YA"], "r": false}], "v": true, "sg": ["Prepared by (QC Inspector)", "Verified by (QC Supervisor)", "Approved by (QA Manager)"]}], CODE={}, cur=null, delArm=false;
 FORMS.forEach(function(f){CODE[f.c]=f;});
 var COMPN=PARTS.map(function(P){return P.n;});
 var STAGES=[{k:'prep',n:'Surface Preparation',f:'05'},{k:'primer',n:'Primer',f:'02',lap:'Primer'},{k:'inter',n:'Intermediate',f:'02',lap:'Intermediate'},{k:'top',n:'Topcoat',f:'02',lap:'Topcoat'},{k:'dft',n:'DFT Measurement',f:'07'},{k:'adh',n:'Adhesion Test',f:'08'},{k:'fin',n:'Final Visual',f:'10'}];
-var PROJ_FORMS=['02','03'], DER={'07':[6,7,8],'03':[5,6]};
+var PROJ_FORMS=['02'], DER={'07':[6,7,8],'03':[5,6]};
 var SLB={none:'Belum',draft:'Draft',done:'Selesai',ng:'REJECT',na:'N/A'}, SC={none:0,draft:.5,done:1,ng:0};
 var SEL={'02':{0:COMPN,3:['Primer','Intermediate','Topcoat','Lain']}};
 function ro(pr,k){return {pr:pr,k:k};}
-function recsOf(pr,c){return ((pr&&pr.forms)||[]).filter(function(r){return r.code===c;});}
+function recsOf(pr,c){if(c==='03')return state.env||[];return ((pr&&pr.forms)||[]).filter(function(r){return r.code===c;});}
 function stRecs(pr,k,S){
   var n=partDef(k).n;
   return recsOf(pr,S.f).filter(function(r){
@@ -17463,15 +17977,73 @@ function renderDetail(){
   el.innerHTML=h+'<@@/div><@@/div>';
 }
 function dotc(r){var v=r.d.v;return v==='REJECT'?'ng':v?'done':'prog';}
+function envDate(r){var t=r.d.h['Tanggal'];if(!t)return 'Tanpa tanggal';var d=new Date(t+'T00:00:00');return isNaN(d.getTime())?esc(t):d.toLocaleDateString('id-ID',{weekday:'short',day:'numeric',month:'short',year:'numeric'});}
+/* ===== Kartu kalender: Environmental Log (FRM-QC-03) & Daily Coating (FRM-QC-02) =====
+   Daftar draft tidak lagi ditumpuk terbuka. Tiap fitur jadi satu kartu (tertutup secara default);
+   buka kartu → pilih tanggal di kalender mini → pilih form/draft mana yang mau dibuka. */
+var CAL={};
+function isoD(d){return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);}
+function calOf(c){var s=CAL[c];if(!s){var t=new Date();s=CAL[c]={open:false,sel:isoD(t),y:t.getFullYear(),m:t.getMonth()};}return s;}
+function recDay(r){var t=r&&r.d&&r.d.h&&r.d.h['Tanggal'];return /^\d{4}-\d{2}-\d{2}$/.test(t||'')?t:isoD(new Date(r.created||Date.now()));}
+function dayLabel(iso,o){var d=new Date(iso+'T00:00:00');return isNaN(d.getTime())?iso:d.toLocaleDateString('id-ID',o);}
+function cardRecs(code){var pr=proj();return code==='03'?(state.env||[]):(pr?recsOf(pr,code):[]);}
+function dayState(list){var p=0,n=0;list.forEach(function(r){var k=dotc(r);if(k==='prog')p=1;else if(k==='ng')n=1;});return p?'prog':n?'ng':'done';}
+function filled(r){return (r.d.r||[]).filter(function(w){return w.some(function(x){return String(x).trim();});}).length;}
+function recTitle(r){
+  if(r.code==='03') return r.d.h['Booth/Lokasi']?esc(r.d.h['Booth/Lokasi']):'Environmental Log';
+  var p=[]; if(r.d.h['Shift']) p.push('Shift '+esc(r.d.h['Shift'])); if(r.d.h['Booth/Lokasi']) p.push(esc(r.d.h['Booth/Lokasi']));
+  return p.length?p.join(' \u00b7 '):'Daily Coating';
+}
+function dayCard(code){
+  var F=CODE[code], S=calOf(code), all=cardRecs(code), by={}, drafts=[], env=code==='03';
+  all.forEach(function(r){var d=recDay(r);(by[d]=by[d]||[]).push(r);if(dotc(r)==='prog'&&drafts.indexOf(d)<0)drafts.push(d);});
+  var nd=all.filter(function(r){return dotc(r)==='prog';}).length, today=isoD(new Date());
+  var h='<div class="dcard'+(S.open?' open':'')+'"><div class="dchead"><button class="dctog" data-act="ctog" data-c="'+code+'" aria-expanded="'+(S.open?'true':'false')+'"><span class="dcm"><span><b>FRM-QC-'+code+'<@@/b> '+(env?'Environmental Log':'Daily Coating Inspection')+(F.hp?'<span class="tag2">'+F.hp+'<@@/span>':'')+'<@@/span><span class="cnt">'+all.length+' record'+(nd?' \u00b7 <b class="dr">'+nd+' draft<@@/b>':'')+(env?' \u00b7 berlaku untuk semua project':'')+'<@@/span><@@/span><span class="chev" aria-hidden="true">\u25be<@@/span><@@/button>'+
+    '<button class="btn sm" data-act="cnew" data-c="'+code+'" data-d="'+today+'" title="Buat form baru untuk hari ini">+ Baru<@@/button><@@/div>';
+  if(!S.open) return h+'<@@/div>';
+  var first=new Date(S.y,S.m,1), lead=(first.getDay()+6)%7, dim=new Date(S.y,S.m+1,0).getDate();
+  h+='<div class="dcbody"><div class="calh"><button class="btn sm" data-act="cnav" data-c="'+code+'" data-n="-1" aria-label="Bulan sebelumnya">\u2039<@@/button><b>'+first.toLocaleDateString('id-ID',{month:'long',year:'numeric'})+'<@@/b><button class="btn sm" data-act="cnav" data-c="'+code+'" data-n="1" aria-label="Bulan berikutnya">\u203a<@@/button><button class="btn sm" data-act="ctoday" data-c="'+code+'">Hari ini<@@/button><@@/div><div class="calg">';
+  ['Sen','Sel','Rab','Kam','Jum','Sab','Min'].forEach(function(w){h+='<span class="wd">'+w+'<@@/span>';});
+  for(var i=0;i<lead;i++) h+='<span><@@/span>';
+  for(var d=1;d<=dim;d++){
+    var iso=S.y+'-'+('0'+(S.m+1)).slice(-2)+'-'+('0'+d).slice(-2), L=by[iso]||[];
+    h+='<button class="cd'+(iso===today?' today':'')+(iso===S.sel?' sel':'')+(L.length?' has st-'+dayState(L):'')+'" data-act="cday" data-c="'+code+'" data-d="'+iso+'" aria-label="'+d+' '+first.toLocaleDateString('id-ID',{month:'long'})+(L.length?', '+L.length+' form':'')+'" aria-pressed="'+(iso===S.sel?'true':'false')+'"><span>'+d+'<@@/span>'+(L.length?'<i><@@/i>':'')+'<@@/button>';
+  }
+  h+='<@@/div><div class="cleg"><span><i style="background:var(--prog)"><@@/i>Draft<@@/span><span><i style="background:var(--done)"><@@/i>Selesai<@@/span><span><i style="background:var(--danger)"><@@/i>Reject<@@/span><@@/div>';
+  if(drafts.length){
+    drafts.sort().reverse();
+    h+='<div class="dchips"><span>Draft di tanggal:<@@/span>'+drafts.slice(0,6).map(function(x){return '<button class="dchip" data-act="cday" data-c="'+code+'" data-d="'+x+'">'+dayLabel(x,{day:'numeric',month:'short'})+'<@@/button>';}).join('')+(drafts.length>6?'<span>+'+(drafts.length-6)+' lagi<@@/span>':'')+'<@@/div>';
+  }
+  var list=(by[S.sel]||[]).slice().sort(function(a,b){return a.created-b.created;});
+  h+='<div class="dayp"><div class="dayh"><b>'+esc(dayLabel(S.sel,{weekday:'long',day:'numeric',month:'long',year:'numeric'}))+'<@@/b><button class="btn sm pri" data-act="cnew" data-c="'+code+'" data-d="'+S.sel+'">+ Form tanggal ini<@@/button><@@/div>';
+  if(!list.length) h+='<p class="note">Belum ada form pada tanggal ini.<@@/p>';
+  list.forEach(function(r){
+    h+='<button class="row arc st-'+dotc(r)+'" data-act="fopen" data-id="'+r.id+'"><span class="d"><@@/span><span class="n">'+recTitle(r)+'<@@/span><span class="p">'+esc(r.d.v||'DRAFT')+'<@@/span><div class="cnt">'+filled(r)+(env?' pembacaan':' baris lapis')+' \u00b7 ketuk untuk membuka<@@/div><@@/button>';
+  });
+  return h+'<@@/div><@@/div><@@/div>';
+}
+function envHTML(){return dayCard('03');}
 function renderForms(){
-  var pr=proj(), el=$('#forms'); if(!pr){el.innerHTML='';return;}
-  var h='<div class="lh"><div class="eyebrow">Form proyek<@@/div><@@/div><div class="pad" style="padding-top:2px">';h+=outLine(pr);
-  PROJ_FORMS.forEach(function(c){var F=CODE[c];h+='<div class="pf"><div><b>FRM-QC-'+c+'<@@/b> '+esc(F.t)+(F.hp?'<span class="tag2">'+F.hp+'<@@/span>':'')+'<div class="cnt">'+recsOf(pr,c).length+' record<@@/div><@@/div><button class="btn sm" data-act="fnew" data-c="'+c+'">+ Baru<@@/button><@@/div>';});
-  var all=(pr.forms||[]).filter(function(r){return PROJ_FORMS.indexOf(r.code)>=0;}).sort(function(a,b){return b.created-a.created;});
-  h+='<@@/div><div class="lh"><div class="eyebrow">Arsip form ('+all.length+')<@@/div><@@/div>';
-  all.forEach(function(r){h+='<button class="row arc st-'+dotc(r)+'" data-act="fopen" data-id="'+r.id+'"><span class="d"><@@/span><span class="n">FRM-QC-'+r.code+' · '+esc(CODE[r.code].t.split(' (')[0])+'<@@/span><span class="p">'+esc(r.d.v||'DRAFT')+'<@@/span><div class="cnt">'+(r.comp?esc(partDef(r.comp).n)+' · ':'')+new Date(r.created).toLocaleDateString('id-ID')+'<@@/div><@@/button>';});
+  var pr=proj(), el=$('#forms'); if(!pr){el.innerHTML=envHTML();return;}
+  var h=envHTML()+'<div class="lh"><div class="eyebrow">Form proyek<@@/div><@@/div><div class="pad" style="padding-top:2px">'+outLine(pr)+'<@@/div>'+dayCard('02');
   el.innerHTML=h;
 }
+document.addEventListener('click',function(e){
+  var a=e.target.closest&&e.target.closest('[data-act]'); if(!a) return;
+  var act=a.getAttribute('data-act'); if(!/^(ctog|cnav|ctoday|cday|cnew)$/.test(act)) return;
+  var c=a.getAttribute('data-c'), S=calOf(c), t, p;
+  if(act==='ctog') S.open=!S.open;
+  else if(act==='cnav'){t=new Date(S.y,S.m+(+a.getAttribute('data-n')),1);S.y=t.getFullYear();S.m=t.getMonth();}
+  else if(act==='ctoday'){t=new Date();S.y=t.getFullYear();S.m=t.getMonth();S.sel=isoD(t);}
+  else if(act==='cday'){S.sel=a.getAttribute('data-d');p=S.sel.split('-');S.y=+p[0];S.m=+p[1]-1;S.open=true;}
+  else if(act==='cnew'){
+    if(c!=='03'&&!proj()) return;
+    var day=a.getAttribute('data-d')||S.sel, r=newRec(c,null);
+    r.d.h['Tanggal']=day; S.sel=day; p=day.split('-'); S.y=+p[0]; S.m=+p[1]-1; S.open=true;
+    save(); openForm(r.id); return;
+  }
+  renderForms();
+});
 
 function newRec(code,comp){
   var pr=proj(),F=CODE[code],d={h:{},r:[],x:{},v:'',vn:'',s:[]},today=new Date().toISOString().slice(0,10);
@@ -17486,7 +18058,8 @@ function newRec(code,comp){
   });
   (F.sg||[]).forEach(function(){d.s.push({n:'',d:''});});
   var r={id:uid(),code:code,comp:comp||null,created:Date.now(),d:d};
-  (pr.forms=pr.forms||[]).push(r); save(); return r;
+  if(code==='03')(state.env=state.env||[]).push(r); else (pr.forms=pr.forms||[]).push(r);
+  save(); return r;
 }
 function specOf(r){var m=String(r.d.h['System ID / DFT Spec (µm)']||'').match(/(\d+(?:[.,]\d+)?)\s*$/);return m?parseFloat(m[1].replace(',','.')):0;}
 function calc(r,w){
@@ -17533,11 +18106,11 @@ function formHTML(r){
     h+='<div class="vd"><b>Kesimpulan / Verdict<@@/b>'+[['ACCEPT','ACCEPT (release)'],['REJECT','REJECT'],['ACCEPT WITH COMMENT','ACCEPT WITH COMMENT']].map(function(o){return '<label><input type="radio" name="vd" data-t="v" value="'+o[0]+'"'+(d.v===o[0]?' checked':'')+'> '+o[1]+'<@@/label>';}).join('')+'<input type="text" data-t="vn" placeholder="Komentar (wajib bila ACCEPT WITH COMMENT)" value="'+esc(d.vn)+'"><@@/div>';
   }
   h+='<div class="sgs">'+(F.sg||[]).map(function(l,i){var s=d.s[i]||(d.s[i]={n:'',d:''});return '<div>'+esc(l)+'<input type="text" data-t="s" data-i="'+i+'" data-f="n" placeholder="Name/Sign" value="'+esc(s.n)+'"><input type="date" data-t="s" data-i="'+i+'" data-f="d" value="'+esc(s.d)+'"><@@/div>';}).join('')+'<@@/div>';
-  h+='<div class="act"><button class="btn dng" data-act="fdel">Hapus form<@@/button><button class="btn dng" id="ncrBtn" data-act="fncr" style="display:'+(d.v==='REJECT'&&r.code!=='11'?'':'none')+'">Buat NCR dari form ini<@@/button><button class="btn pri" data-act="close">Simpan &amp; tutup<@@/button><@@/div>';
+  h+='<div class="act"><button class="btn dng" data-act="fdel">Hapus form<@@/button><button class="btn dng" id="ncrBtn" data-act="fncr" style="display:'+(d.v==='REJECT'&&r.code!=='11'&&r.code!=='03'?'':'none')+'">Buat NCR dari form ini<@@/button><button class="btn pri" data-act="close">Simpan &amp; tutup<@@/button><@@/div>';
   return h;
 }
 function openForm(id){
-  var pr=proj(); cur=(pr.forms||[]).find(function(r){return r.id===id;}); if(!cur) return;
+  var pr=proj(); cur=((pr&&pr.forms)||[]).concat(state.env||[]).find(function(r){return r.id===id;}); if(!cur) return;
   delArm=false; openModal(formHTML(cur)); $('#modal .md').classList.add('wide');
 }
 function recalc(i){
@@ -17551,15 +18124,16 @@ document.addEventListener('input',function(e){
   else if(ty==='r'){d.r[i][j]=t.value; recalc(i);}
   else if(ty==='x'||ty==='xr') d.x[k]=t.value;
   else if(ty==='xc'){var a=d.x[k]=d.x[k]||[],p=a.indexOf(t.value); if(t.checked&&p<0)a.push(t.value); if(!t.checked&&p>=0)a.splice(p,1);}
-  else if(ty==='v'){d.v=t.value; $('#ncrBtn').style.display=(d.v==='REJECT'&&cur.code!=='11')?'':'none';}
+  else if(ty==='v'){d.v=t.value; $('#ncrBtn').style.display=(d.v==='REJECT'&&cur.code!=='11'&&cur.code!=='03')?'':'none';}
   else if(ty==='vn') d.vn=t.value;
   else if(ty==='s') d.s[i][t.getAttribute('data-f')]=t.value;
   save();
 });
 document.addEventListener('click',function(e){
   var a=e.target.closest('[data-act]'); if(!a) return;
-  var act=a.getAttribute('data-act'), pr=proj(); if(!pr) return;
+  var act=a.getAttribute('data-act'), pr=proj(); if(!pr&&!/^(fnew|fopen|fdel|radd|rdel)$/.test(act)) return;
   if(act==='fnew'){
+    if(!pr&&a.getAttribute('data-c')!=='03') return;
     var code=a.getAttribute('data-c'), S=STAGES.find(function(x){return x.k===a.getAttribute('data-s');}), r=newRec(code,(code!=='02'&&sel&&S)?sel:null);
     if(S&&S.lap&&sel){var B=CODE['02'].b.find(function(b){return b.t==='tbl';}); r.d.r[0][0]=partDef(sel).n; r.d.r[0][3]=S.lap;}
     save(); openForm(r.id);
@@ -17570,7 +18144,8 @@ document.addEventListener('click',function(e){
   else if(act==='rdel'&&cur){cur.d.r.splice(+a.getAttribute('data-i'),1); save(); $('#modal .md').innerHTML=formHTML(cur);}
   else if(act==='fdel'&&cur){
     if(!delArm){delArm=true;a.textContent='Yakin hapus?';return;}
-    pr.forms=pr.forms.filter(function(r){return r!==cur;}); save(); closeModal(); toast('Form dihapus');
+    if(cur.code==='03')state.env=(state.env||[]).filter(function(r){return r!==cur;}); else pr.forms=pr.forms.filter(function(r){return r!==cur;});
+    save(); closeModal(); toast('Form dihapus');
   }
   else if(act==='fncr'&&cur){
     var src=cur, r=newRec('11',src.comp), F=CODE[src.code];
@@ -18616,7 +19191,7 @@ body.is-wi #qoBtn{display:none}
   'use strict';
   if(window.QCOut) return;
   var KEY='qc_outstanding_v1', PFX='qcout_';
-  var MODS={fab:'Fabrikasi Main Assy',comp:'FAT',nt:'Non Tunnel',wi:'WI & NDT',inc:'Incoming',ship:'Pengiriman',coat:'Coating Inspection'};
+  var MODS={fab:'Fabrikasi Main Assy',comp:'FAT',nt:'Fabrication & Preparation',wi:'WI & NDT',inc:'Incoming',ship:'Pengiriman',coat:'Coating Inspection'};
   var PH={}, ctx=null, filt='all', pend=null, ov=null, DB=null, _idb=null;
 
   /* ---------- util ---------- */
@@ -19451,7 +20026,7 @@ body.bk-light #incFCount{color:#5b6677!important}
 </style><script id="gx-share">var GX_SNAP_CSS="main #ls{display:block}.sec{background:#fff;border-radius:20px;padding:18px 20px 8px;margin:0 0 20px;box-shadow:0 12px 30px -20px #0a2a5a66;scroll-margin-top:12px}\n.sh{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}.sh h2{margin:0;font-size:1.3rem;letter-spacing:-.03em}.sh small{font-size:.8rem;color:#587190;font-weight:600}\n.chs{display:flex;gap:6px;flex-wrap:wrap}.ch{padding:3px 11px;border-radius:999px;font-size:.78rem;font-weight:800;color:#fff}.ch.cl{background:#16a34a}.ch.op{background:#f59e0b}.ch.ov{background:#e11d48}.ch.z{background:#c5d3e4;color:#587190}\n.rh,.rw{display:grid;grid-template-columns:78px minmax(0,1fr) 130px 100px 140px 92px;gap:14px;align-items:start}\n.rh{margin-top:12px;padding:8px 0;border-bottom:2px solid #dbe6f3;font-size:.75rem;font-weight:700;color:#587190}\n.rw{padding:14px 0;border-bottom:1px solid #e6eef7;border-left:5px solid var(--c);padding-left:10px;margin-left:-10px;border-radius:2px}.rw:last-child{border-bottom:0}\n.rw.op{--c:#f59e0b}.rw.ov{--c:#e11d48;background:#fff5f7}.rw.cl{--c:#16a34a}.rw.hl{background:#fff3c4;transition:background .3s}\n.no{font-weight:900;font-size:.95rem;letter-spacing:-.02em;color:#10243e;background:#eef3f9;border-radius:8px;padding:4px 8px;text-align:center}\n.tt{margin:0 0 4px;line-height:1.45;white-space:pre-wrap}.ms{color:#587190;font-size:.8rem}.ce{font-size:.88rem;color:#35506f}\n.sla{margin-top:5px;height:6px;border-radius:9px;background:#e6eef7;overflow:hidden}.sla i{display:block;height:100%;background:linear-gradient(90deg,#f59e0b,#e11d48)}\n.rw .pill{background:var(--c)}.rw .ph{grid-template-columns:repeat(2,130px);margin-top:8px}.rw .ph img{height:84px}\n.od{margin-right:auto;margin-left:12px;color:#e11d48;font-style:normal;font-weight:800;font-size:.8rem}.bh{align-items:center}\n.ovl{border-radius:20px;padding:18px 20px;margin-top:18px}.ovl.ok{background:#e8f8ee;color:#12643a;font-weight:700}.ovl.bad{background:#fff1f3;border:2px solid #fda4af}\n.ovl h2{margin:0;color:#be123c;font-size:1.2rem}.ovl p{margin:4px 0 10px;color:#7a3646;font-size:.85rem}\n.oi{all:unset;box-sizing:border-box;display:grid;grid-template-columns:70px 1fr auto;gap:12px;width:100%;padding:9px 10px;border-top:1px solid #fecdd3;cursor:pointer;font-size:.88rem}.oi:hover{background:#ffe4e8}.oi b{color:#be123c}.oi em{font-style:normal;color:#7a3646;font-weight:700}\n@media(max-width:820px){.rh{display:none}.rw{grid-template-columns:1fr;gap:6px}.no{justify-self:start}.ce:before{content:attr(data-l)': ';font-weight:700;color:#10243e}.rw .ph{grid-template-columns:1fr 1fr}.oi{grid-template-columns:1fr}}\n.cat{display:grid;grid-template-columns:230px 1fr;gap:28px;align-items:center;background:#fff;border-radius:22px;padding:24px;margin-top:18px;box-shadow:0 14px 34px -20px #0a2a5a66}\n.cl-l{display:grid;gap:14px;justify-items:center}.dn{width:170px;height:170px;border-radius:50%;display:grid;place-items:center}\n.hole{width:112px;height:112px;border-radius:50%;background:#fff;display:grid;place-content:center;text-align:center}.hole b{font-size:2rem;line-height:1;letter-spacing:-.04em}.hole span{font-size:.72rem;color:#587190}\n.lg{display:grid;gap:5px;width:100%;font-size:.85rem}.lg div{display:flex;align-items:center;gap:8px}.lg i{width:11px;height:11px;border-radius:3px}.lg span{flex:1;color:#35506f}\n.cl-r{display:grid;gap:10px}.cl-r h2{margin:0 0 4px;font-size:1.15rem;letter-spacing:-.02em}\n.br{all:unset;box-sizing:border-box;display:grid;gap:6px;padding:12px 14px;border-radius:14px;cursor:pointer;background:#f4f8fd;border:1px solid #dbe6f3;color:#10243e}.br:hover{border-color:#2563eb;background:#eaf2ff}\n.bh{display:flex;justify-content:space-between;gap:10px;font-weight:700}.bh b{color:#16a34a}.tr{display:flex;height:14px;border-radius:99px;overflow:hidden;background:#dbe6f3}.tr i{display:block;height:100%}.br small{color:#587190;font-size:.78rem}\n@media(max-width:720px){.cat{grid-template-columns:1fr}}\n\n*{box-sizing:border-box}body{margin:0;background:#eef3f9;color:#10243e;font-family:\"Segoe UI Variable\",\"Segoe UI\",system-ui,sans-serif}\n.w{max-width:1120px;margin:0 auto;padding:0 20px}\nheader{background:radial-gradient(700px 300px at 10% 0,#22d3ee40,transparent 70%),linear-gradient(120deg,#071a33,#14307a 60%,#3b1d7a);color:#fff;padding:38px 0 78px}\n.hd{display:flex;justify-content:space-between;align-items:center;gap:24px;flex-wrap:wrap}\nh1{margin:0;font-size:clamp(1.9rem,5vw,3.2rem);line-height:1;letter-spacing:-.045em;font-weight:900}\nheader p{margin:10px 0 0;color:#b7cdea;font-size:.95rem}\n.ring{width:132px;height:132px;border-radius:50%;display:grid;place-content:center;text-align:center;background:radial-gradient(closest-side,#0b1f44 74%,transparent 76%),conic-gradient(#34d399 calc(var(--p)*1%),#ffffff26 0);box-shadow:0 0 40px #34d39944}\n.ring b{font-size:1.9rem;line-height:1}.ring span{font-size:.72rem;color:#b7cdea}\n.kp{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-top:-52px}\n.k{background:#fff;border-radius:18px;padding:16px 18px;box-shadow:0 16px 36px -18px #0a2a5a66;border-top:4px solid var(--c)}\n.k small{color:#587190;font-weight:600}.k b{display:block;font-size:2.1rem;letter-spacing:-.04em;color:var(--c)}\n.ctl{display:flex;gap:10px;flex-wrap:wrap;margin:24px 0 8px;align-items:center}\n.ctl button,.ctl select,.ctl input{font:inherit;font-size:.9rem;padding:9px 14px;border-radius:999px;border:1px solid #c5d3e4;background:#fff;color:#10243e}\n.ctl button.on{background:#10243e;color:#fff;border-color:#10243e}.ctl input{flex:1;min-width:180px}\n#cnt{color:#587190;font-size:.85rem;margin:6px 2px 12px}\n#ls{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:16px}\n.c{background:#fff;border-radius:18px;padding:18px;border-left:6px solid var(--c);box-shadow:0 10px 28px -18px #0a2a5a66;display:flex;flex-direction:column;gap:10px}\n.c.op{--c:#f59e0b}.c.ov{--c:#e11d48}.c.cl{--c:#16a34a}\n.pill{align-self:flex-start;padding:3px 11px;border-radius:999px;font-weight:800;font-size:.75rem;color:#fff;background:var(--c)}\n.mt{color:#587190;font-size:.82rem}.cm{margin:0;font-size:1rem;line-height:1.5;white-space:pre-wrap}\n.f{display:flex;gap:14px;flex-wrap:wrap;font-size:.82rem;color:#35506f}.f b{color:#10243e}\n.ph{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ph figure{margin:0}.ph img{width:100%;height:130px;object-fit:cover;border-radius:12px;cursor:zoom-in;background:#e3ebf5}\n.ph figcaption{font-size:.72rem;color:#587190;margin-top:3px;font-weight:700}\n#lb{position:fixed;inset:0;background:#000d;display:none;place-items:center;z-index:9;cursor:zoom-out}#lb img{max-width:94vw;max-height:92vh;border-radius:12px}\nfooter{margin:34px 0;color:#587190;font-size:.8rem;text-align:center}\n@media print{header{background:#14307a!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.ctl{display:none}.c{break-inside:avoid}}\n";
 
 (function(){
-var MODS={fab:'Fabrikasi Main Assy',comp:'FAT',nt:'Non Tunnel',wi:'WI & NDT',inc:'Incoming',ship:'Pengiriman',coat:'Coating Inspection'};
+var MODS={fab:'Fabrikasi Main Assy',comp:'FAT',nt:'Fabrication & Preparation',wi:'WI & NDT',inc:'Incoming',ship:'Pengiriman',coat:'Coating Inspection'};
 function toast(m){if(typeof window.showToastMsg==='function')window.showToastMsg(m);}
 function items(){var a=[];try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf('qcout_')===0){try{var o=JSON.parse(localStorage.getItem(k));if(o&&o.id)a.push(o);}catch(e){}}}}catch(e){}return a.sort(function(x,y){return (x.c||0)-(y.c||0);});}
 function photo(db,k){return new Promise(function(res){try{var r=db.transaction('p').objectStore('p').get(k);r.onsuccess=function(){res(r.result||'');};r.onerror=function(){res('');};}catch(e){res('');}});}
@@ -19554,7 +20129,7 @@ var t;new MutationObserver(function(){clearTimeout(t);t=setTimeout(ensure,150);}
 .gx-mp button:hover{background:#eaf2ff!important;border-color:#2563eb!important}
 </style><script id="gx-cat">
 (function(){
-var MODS={fab:'Fabrikasi Main Assy',comp:'FAT',nt:'Non Tunnel',wi:'WI & NDT',inc:'Incoming',ship:'Pengiriman',coat:'Coating Inspection'};
+var MODS={fab:'Fabrikasi Main Assy',comp:'FAT',nt:'Fabrication & Preparation',wi:'WI & NDT',inc:'Incoming',ship:'Pengiriman',coat:'Coating Inspection'};
 function toast(m){if(typeof window.showToastMsg==='function')window.showToastMsg(m);}
 var G=!!window.__gxGuest;
 /* ---- mode tamu: hanya-baca, data tetap sinkron ---- */
@@ -19572,7 +20147,7 @@ function guestLink(){var u=(localStorage.getItem('qc_sync_api_url')||'').trim();
 var TAMU_URL='https://script.google.com/macros/s/AKfycbwA9d5Z_ktXNNFLSLcNog4vM8bDGilBARzi_F3JBT5uGg4DBwFbA31rpuKc4QHmTDdqrA/exec?view=tamu';
 function outLink(){var l=TAMU_URL;(navigator.clipboard?navigator.clipboard.writeText(l):Promise.reject()).then(function(){toast('🌐 Link Outstanding tamu disalin.');},function(){prompt('Salin link:',l);});}
 window.gxOutLink=outLink;
-var MN={comp:'FAT',fab:'Fabrikasi Main Assy',nt:'Non Tunnel',wi:'WI & NDT',inc:'Incoming',ship:'Pengiriman',coat:'Coating Inspection'},MI={comp:'🧪',fab:'🏗️',nt:'🚇',wi:'🔍',inc:'📦',ship:'🚚',coat:'🎨'};
+var MN={comp:'FAT',fab:'Fabrikasi Main Assy',nt:'Fabrication & Preparation',wi:'WI & NDT',inc:'Incoming',ship:'Pengiriman',coat:'Coating Inspection'},MI={comp:'🧪',fab:'🏗️',nt:'🚇',wi:'🔍',inc:'📦',ship:'🚚',coat:'🎨'};
 function oc(){var a={},o={n:0,c:0,ov:0},now=Date.now();try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf('qcout_')===0){var x=JSON.parse(localStorage.getItem(k));if(!x||!x.id)continue;var m=a[x.mod]=a[x.mod]||{n:0,c:0,ov:0};m.n++;o.n++;if(x.st==='CLOSE'){m.c++;o.c++;}else if(x.od&&(now-new Date(x.od))/864e5>7){m.ov++;o.ov++;}}}}catch(e){}return {all:o,mod:a};}
 function openOut(k,add){if(!window.QCOut||!window.QCOut.open){alert('Modul Outstanding belum siap, muat ulang halaman.');return;}var u=document.querySelector('#homeView .hm-urow.on'),e=u?{textContent:u.dataset.p}:document.querySelector('#homeView .hm-proj.sel .hm-proj-name');window.QCOut.open({mod:k,proj:null,projLbl:e?e.textContent.trim():'',ref:null,refLbl:''});if(add)setTimeout(function(){var b=document.querySelector('.qo-ov [data-a="add"]');if(b)b.click();},60);}
 function pickUnit(k){
@@ -19595,7 +20170,7 @@ function pickUnit(k){
  bx.addEventListener('click',function(e){var b=e.target.closest('.gx-pu');if(!b)return;var p=b.getAttribute('data-p'),l=b.getAttribute('data-l');ov.remove();window.QCOut.open({mod:k,proj:p,projLbl:p||l,ref:null,refLbl:''});});
  ov.appendChild(bx);ov.onclick=function(e){if(e.target===ov)ov.remove();};document.body.appendChild(ov);}
 function pick(){var d=oc(),ov=document.createElement('div');ov.className='gx-ov';var bx=document.createElement('div');bx.className='gx-pk';bx.innerHTML='<h3>📌 Outstanding <span class="gx-bd">'+(G?'Mode Tamu':'Admin QC')+'</span></h3><p>'+(G?'Pilih kategori, lalu project &amp; unit':'Pilih kategori, lalu project &amp; unit')+'</p>';
- ['comp','fab','nt','wi','inc','ship','coat'].forEach(function(k){var m=d.mod[k]||{n:0,c:0,ov:0},b=document.createElement('button');b.type='button';b.className='gx-opt';
+ ['comp','nt','wi','inc','ship','coat'].forEach(function(k){var m=d.mod[k]||{n:0,c:0,ov:0},b=document.createElement('button');b.type='button';b.className='gx-opt';
   b.innerHTML='<span class="gx-i">'+MI[k]+'</span><span class="gx-t"><b>'+MN[k]+'</b><small>'+(m.n-m.c)+' belum closed'+(m.ov?' · <u>'+m.ov+' overdue</u>':'')+' · '+m.n+' total</small><i><s style="width:'+(m.n?Math.round(m.c/m.n*100):0)+'%"></s></i></span><span class="gx-go">Buka →</span>';
   b.onclick=function(){ov.remove();if(k==='wi'||k==='inc')openOut(k);else pickUnit(k);};var row=document.createElement('div');row.className='gx-rw';row.appendChild(b);
   bx.appendChild(row);});
@@ -19604,7 +20179,7 @@ function pick(){var d=oc(),ov=document.createElement('div');ov.className='gx-ov'
 function outCard(){var hv=document.getElementById('homeView'),menu=hv&&hv.querySelector('.hm-menu');if(!menu)return;var d=oc().all,pct=d.n?Math.round(d.c/d.n*1000)/10:0,sg=[d.n,d.c,d.ov].join('|'),ex=document.getElementById('gxOutCard');if(ex&&ex.parentNode===menu&&ex.getAttribute('data-sg')===sg)return;
  var ring=(typeof window.ring==='function')?window.ring(pct,100,9,'#ef4444','#f59e0b',pct.toLocaleString('id-ID')+'%','','gOut','1.3rem'):'';
  var b=document.createElement('button');b.type='button';b.id='gxOutCard';b.className='hm-menu-card hm-in';b.setAttribute('data-sg',sg);b.style.cssText='--c1:#ef4444;--c2:#f59e0b;--i:10';
- b.innerHTML='<div class="hm-mc-top"><div class="hm-mc-ico">📌</div>'+ring+'</div><h3>Outstanding</h3><p>Temuan inspeksi yang belum selesai. Pilih kategori: FAT, Main Assy, Non Tunnel, WI &amp; NDT, Incoming, atau Pengiriman.</p><div class="hm-mc-foot"><span><b>'+(d.n-d.c)+'</b> belum closed'+(d.ov?' · <b>'+d.ov+'</b> overdue':'')+'</span><span class="hm-go">Pilih kategori →</span></div>';
+ b.innerHTML='<div class="hm-mc-top"><div class="hm-mc-ico">📌</div>'+ring+'</div><h3>Outstanding</h3><p>Temuan inspeksi yang belum selesai. Pilih kategori: FAT, Fabrication &amp; Preparation, WI &amp; NDT, Incoming, atau Pengiriman.</p><div class="hm-mc-foot"><span><b>'+(d.n-d.c)+'</b> belum closed'+(d.ov?' · <b>'+d.ov+'</b> overdue':'')+'</span><span class="hm-go">Pilih kategori →</span></div>';
  b.onclick=pick;if(ex)ex.replaceWith(b);else menu.appendChild(b);}
 function ensure(){try{outCard();}catch(e){console.warn('[outCard]',e);}[].forEach.call(document.querySelectorAll('.gx-mp'),function(p){if(p._w&&!p._w.isConnected)p.remove();});try{if(!G){tidyControls();tidyQo();syncBadge();}}catch(e){console.warn('[tidy]',e);}}
 function closeAll(){[].forEach.call(document.querySelectorAll('.gx-mp'),function(p){p.hidden=true;});}
@@ -19798,7 +20373,6 @@ function sumM(M){
 function chartLines(M){
   var series=[
     {n:'Welding repair rate',c:'#e8590c',v:M.map(function(m){return rate(m.wR,m.wL);})},
-    {n:'Fabrikasi repair rate',c:'#2f7fd6',v:M.map(function(m){return rate(m.fR,m.fI);})},
     {n:'Incoming reject rate',c:'#7b3fc0',v:M.map(function(m){return rate(m.ir,m.iq);})},
     {n:'Outstanding rate (temuan)',c:'#c92a2a',v:M.map(function(m){return rate(m.oO,m.oN);})}
   ];
@@ -19829,17 +20403,16 @@ function secMonthly(){
     var none=!m.wL&&!m.fI&&!m.iq&&!m.oN;
     return '<tr class="'+(cls||'')+(none&&!cls?' dim':'')+'"'+(hl?' style="outline:2px solid #2f7fd6;outline-offset:-2px"':'')+'><td><b>'+label+'</b></td>'+
       '<td class="n">'+nf(m.wL/1000,0)+'</td><td class="n">'+nf(m.wR/1000,1)+'</td><td class="n">'+badge(rate(m.wR,m.wL),RW,RB,'Repair ÷ panjang diinspeksi')+'</td>'+
-      '<td class="n">'+nf(m.fI)+'</td><td class="n">'+nf(m.fR)+'</td><td class="n">'+badge(rate(m.fR,m.fI),RW,RB,'Item Reject ÷ item diinspeksi')+'</td>'+
       '<td class="n">'+nf(m.iq)+'</td><td class="n">'+nf(m.ir)+'</td><td class="n">'+badge(rate(m.ir,m.iq),RW,RB,'Qty reject ÷ qty masuk')+'</td>'+
       '<td class="n">'+nf(m.io)+'</td><td class="n">'+badge(rate(m.io,m.iq),OW,OB,'Qty HOLD/belum final ÷ qty masuk')+'</td>'+
       '<td class="n">'+nf(m.oN)+'</td><td class="n">'+nf(m.oO)+'</td><td class="n">'+badge(rate(m.oO,m.oN),OW,OB,'Temuan Open ÷ total temuan')+'</td></tr>';
   }
   var body=S.month?row(MON[S.month-1]+' '+S.year,M[S.month-1],'',false):(M.map(function(m,i){return row(MON[i]+' '+S.year,m);}).join('')+row('Total '+S.year,T,'tot'));
   return '<div class="so-card"><h3>Repair &amp; Outstanding Rate — WSC1 (bulanan)</h3>'+
-    '<p class="so-def">Filter: periode '+(S.month?MON[S.month-1]+' ':'tahun ')+S.year+(S.proj?' · project <b>'+esc(S.proj)+'</b>':' · semua project')+'. Welding = panjang repair ÷ panjang diinspeksi (WI &amp; NDT). Fabrikasi = item berstatus Reject ÷ item Main Assy yang sudah diinspeksi. Incoming (QC-WSC1) = qty reject ÷ qty masuk; Outstanding Incoming = qty HOLD/belum final ÷ qty masuk. Temuan Outstanding = temuan Open ÷ total temuan yang dibuat pada bulan itu (semua kategori).</p>'+
+    '<p class="so-def">Filter: periode '+(S.month?MON[S.month-1]+' ':'tahun ')+S.year+(S.proj?' · project <b>'+esc(S.proj)+'</b>':' · semua project')+'. Welding = panjang repair ÷ panjang diinspeksi (WI &amp; NDT). Incoming (QC-WSC1) = qty reject ÷ qty masuk; Outstanding Incoming = qty HOLD/belum final ÷ qty masuk. Temuan Outstanding = temuan Open ÷ total temuan yang dibuat pada bulan itu (semua kategori).</p>'+
     '<h4 style="margin-top:4px">Tren Jan–Des '+S.year+'</h4>'+chartLines(M)+(S.month?'<h4>Detail bulan '+MON[S.month-1]+' '+S.year+'</h4>':'')+
-    '<div class="so-scroll" style="margin-top:10px"><table data-csv="Bulanan WSC1"><thead><tr><th rowspan="2">Bulan</th><th colspan="3">Welding (WI &amp; NDT)</th><th colspan="3">Fabrikasi Main Assy</th><th colspan="5">Incoming (QC-WSC1)</th><th colspan="3">Temuan Outstanding</th></tr>'+
-    '<tr><th class="n">Insp (m)</th><th class="n">Repair (m)</th><th class="n">Repair Rate</th><th class="n">Diinspeksi</th><th class="n">Reject</th><th class="n">Repair Rate</th><th class="n">Qty masuk</th><th class="n">Qty reject</th><th class="n">Reject Rate</th><th class="n">Qty HOLD</th><th class="n">Outst. Rate</th><th class="n">Total</th><th class="n">Open</th><th class="n">Outst. Rate</th></tr></thead><tbody>'+body+'</tbody></table></div></div>';
+    '<div class="so-scroll" style="margin-top:10px"><table data-csv="Bulanan WSC1"><thead><tr><th rowspan="2">Bulan</th><th colspan="3">Welding (WI &amp; NDT)</th><th colspan="5">Incoming (QC-WSC1)</th><th colspan="3">Temuan Outstanding</th></tr>'+
+    '<tr><th class="n">Insp (m)</th><th class="n">Repair (m)</th><th class="n">Repair Rate</th><th class="n">Qty masuk</th><th class="n">Qty reject</th><th class="n">Reject Rate</th><th class="n">Qty HOLD</th><th class="n">Outst. Rate</th><th class="n">Total</th><th class="n">Open</th><th class="n">Outst. Rate</th></tr></thead><tbody>'+body+'</tbody></table></div></div>';
 }
 
 /* ---------- KPI ---------- */
@@ -19848,7 +20421,6 @@ function secKpi(){
   function k(c,l,v,s){return '<div class="so-kpi" style="--c:'+c+'"><small>'+l+'</small><b>'+v+'</b><span>'+s+'</span></div>';}
   return '<div class="so-kpis">'+
     k('#e8590c','Welding Repair Rate',pf(rate(T.wR,T.wL),2),nf(T.wR/1000,1)+' m repair / '+nf(T.wL/1000,0)+' m')+
-    k('#2f7fd6','Fabrikasi Repair Rate',pf(rate(T.fR,T.fI),1),nf(T.fR)+' reject / '+nf(T.fI)+' item')+
     k('#7b3fc0','Incoming Reject Rate',pf(rate(T.ir,T.iq),1),nf(T.ir)+' / '+nf(T.iq)+' qty masuk')+
     k('#c92a2a','Outstanding Rate',pf(rate(T.oO,T.oN),1),nf(T.oO)+' open / '+nf(T.oN)+' temuan')+
   '</div>';
@@ -19930,7 +20502,7 @@ function secRepeat(){
   var og={};
   D.out.forEach(function(x){var d=ym(x.od);if(!inP(d))return;if(S.proj&&x.proj!==S.proj)return;var lbl=(x.lbl||'').trim();if(!lbl)return;
     var k=x.mod+'|'+projOf(x.proj)+'|'+lbl;var o=og[k]||(og[k]={mod:x.mod,p:projOf(x.proj),l:lbl,n:0,o:0});o.n++;if(x.st!=='CLOSE')o.o++;});
-  var MN={fab:'Fabrikasi',comp:'FAT',nt:'Non Tunnel',wi:'WI & NDT',ship:'Pengiriman',coat:'Coating Inspection'};
+  var MN={fab:'Fabrikasi',comp:'FAT',nt:'Fabrication & Preparation',wi:'WI & NDT',ship:'Pengiriman',coat:'Coating Inspection'};
   var ok=Object.keys(og).map(function(k){return og[k];}).filter(function(o){return o.n>=2;}).sort(function(a,b){return b.n-a.n;});
   var oHtml='<h4>Outstanding — item dengan temuan berulang (≥ 2)</h4>'+(ok.length?'<div class="so-scroll"><table data-csv="Berulang Outstanding"><thead><tr><th>#</th><th>Kategori</th><th>Project</th><th>Item</th><th class="n">Jumlah temuan</th><th class="n">Masih Open</th></tr></thead><tbody>'+
     ok.slice(0,12).map(function(o,i){return '<tr><td>'+(i+1)+'</td><td>'+esc(MN[o.mod]||o.mod)+'</td><td>'+esc(o.p)+'</td><td>'+esc(o.l)+'</td><td class="n">'+o.n+'</td><td class="n">'+o.o+'</td></tr>';}).join('')+'</tbody></table></div>':'<div class="so-empty">Tidak ada item dengan temuan berulang.</div>');
@@ -19944,7 +20516,7 @@ function secComplete(){
   var rows=[],tot={mt:0,mc:0,ct:0,cc:0,lk:0,all:0,ins:0,gap:0};
   Object.keys(D.pd||{}).forEach(function(p){
     var arr=D.pd[p]||[],o={mt:0,mc:0,ct:0,cc:0,lk:0,ins:0,gap:0};
-    arr.forEach(function(r,i){var k=p+'_'+i,main=isMain(r),chk=!!D.chk[k],has=!!(r.link&&String(r.link).indexOf('http')===0),insp=!!inspKeys[k];
+    arr.forEach(function(r,i){var k=p+'_'+i,main=isMain(r),chk=!!(D.chk[k]||D.chk[k+'~F']),has=!!(r.link&&String(r.link).indexOf('http')===0),insp=!!inspKeys[k];
       if(main){o.mt++;if(chk)o.mc++;}else{o.ct++;if(chk)o.cc++;}
       if(has)o.lk++;if(insp)o.ins++;if(chk&&!insp)o.gap++;});
     o.all=arr.length;for(var q in tot)if(o[q]!=null)tot[q]+=o[q];tot.all+=arr.length;rows.push([p,o]);
@@ -19966,7 +20538,6 @@ function secComplete(){
 /* ---------- 5. total report by inspection ---------- */
 function secTotals(){
   var types=[
-    {n:'Fabrikasi Main Assy (hasil inspeksi)',f:function(add){D.insp.forEach(function(x){if(x.main)add(x.date,x.proj);});}},
     {n:'FAT / Komponen (hasil inspeksi)',f:function(add){D.insp.forEach(function(x){if(!x.main)add(x.date,x.proj);});}},
     {n:'Welding Inspection (Visual)',f:function(add){D.wi.forEach(function(r){if(r.wi)add(r.t,r.p);});}},
     {n:'NDT — MPI',f:function(add){D.wi.forEach(function(r){if((r.a||[]).indexOf('MPI')>=0)add(r.t,r.p);});}},
@@ -20171,7 +20742,7 @@ function render(){
     safe(secKpi,'KPI')+
     '<div class="so-sec">Umum</div>'+safe(secMonthly,'Bulanan WSC1')+safe(secRepeat,'Report berulang')+safe(secComplete,'Completeness')+safe(secTotals,'Total report')+
     '<div class="so-sec">Analisis temuan (defect)</div>'+safe(secPareto,'Pareto')+safe(sec5M,'5M')+safe(secProjOC,'Open vs Closed')+safe(secPicProc,'PIC x Process')+safe(secComp,'Component')+
-    '<div class="so-sec">Per project</div>'+safe(secFab,'Fabrikasi')+safe(secWeld,'Welding')+
+    '<div class="so-sec">Per project</div>'+safe(secWeld,'Welding')+
     safe(function(){return secOutMod('comp','FAT → Outstanding Rate (per project)');},'FAT')+
     safe(function(){return secOutMod('ship','Pengiriman → Outstanding Rate (per project)','Belum ada temuan kategori Pengiriman. Tambahkan lewat Dashboard → Outstanding → Pengiriman.');},'Pengiriman')+
     '<div class="so-sec">Analisis Defect</div>'+safe(secDefect,'Analisis defect');
@@ -20279,7 +20850,7 @@ window.QCSummary={render:render,open:window.showSummary};
 (function(){
 'use strict';
 if(window.incApplyItems) return;
-var KEY='qc_gemini_key',MK='qc_gemini_model',DEF='gemini-2.5-flash';
+var KEY='qc_gemini_key',MK='qc_gemini_model',DEF='gemini-3.8-flash';
 function ls(k){try{return localStorage.getItem(k)||'';}catch(e){return '';}}
 function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
 function $(id){return document.getElementById(id);}
@@ -20561,7 +21132,7 @@ function showCfg(pending){
   s.innerHTML=(pending?'Untuk memakai Scan / Generate AI, masukkan <b>kunci API Gemini</b> (gratis — buat di <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>). ':'Pengaturan AI (Gemini). ')+
     '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px"><input id="_iaAiKey" type="password" placeholder="AIza…" autocomplete="off" style="flex:1;min-width:180px" value="'+E(ls(KEY))+'">'+
     '<input id="_iaAiModel" type="text" style="width:150px" value="'+E(ls(MK)||DEF)+'" title="Model"><button type="button" id="_iaAiKeySave" style="background:#14314f;color:#fff;border:0;border-radius:6px;padding:6px 12px;font-weight:800;cursor:pointer">Simpan</button></div>'+
-    '<div style="margin-top:4px;color:#6b7a93">Kunci hanya disimpan di browser ini dan dikirim langsung ke Google. Jangan dipakai di komputer umum. Model bawaan: gemini-2.5-flash. Jika model dihentikan Google, aplikasi otomatis mencari model lain yang aktif untuk kunci Anda (mis. gemini-flash-latest).</div>';
+    '<div style="margin-top:4px;color:#6b7a93">Kunci hanya disimpan di browser ini dan dikirim langsung ke Google. Jangan dipakai di komputer umum. Model bawaan: gemini-3.8-flash. Jika model dihentikan Google, aplikasi otomatis mencari model lain yang aktif untuk kunci Anda (mis. gemini-flash-latest).</div>';
   try{s.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){}
 }
 function srcImages(){
@@ -20589,7 +21160,7 @@ function gemMsg(status,msg,model){
   if(status===400&&/API key/i.test(msg))return 'Kunci API Gemini tidak valid. Periksa kunci di ⚙.';
   if(status===401||status===403)return 'Kunci API Gemini ditolak ('+status+'). Periksa kunci di ⚙ (atau API belum diaktifkan untuk kunci ini).';
   if(status===429)return 'Kuota gratis Gemini habis sementara (429). Tunggu 1 menit lalu coba lagi.';
-  if(status===404)return 'Model "'+model+'" tidak ditemukan. Ganti nama model di ⚙ (mis. gemini-2.5-flash).';
+  if(status===404)return 'Model "'+model+'" tidak ditemukan. Ganti nama model di ⚙ (mis. gemini-3.8-flash).';
   return 'Server Gemini menjawab '+status+(msg?': '+msg:'');
 }
 async function gemList(key){
@@ -20636,7 +21207,7 @@ async function gemini(b64s,prompt){
     }
     return null;
   }
-  var t=await run([ls(MK)||DEF,DEF,'gemini-flash-latest','gemini-2.5-flash','gemini-flash-lite-latest','gemini-2.5-flash-lite']);
+  var t=await run([ls(MK)||DEF,DEF,'gemini-flash-latest','gemini-3.8-flash','gemini-flash-lite-latest','gemini-3.8-flash-lite']);
   if(t!=null)return t;
   /* model bawaan sudah dihentikan / tidak ada -> cari model yang aktif untuk kunci ini */
   var names=[];try{names=await gemList(key);}catch(e){if(quotaErr)throw quotaErr;throw e;}
@@ -20965,9 +21536,8 @@ body.bk-light .hm-bar{background:#d9d9d9}
     var a=pc(m.mainChecked,m.mainTotal),b=pc(m.compChecked,m.compTotal);
     return '<div class="hm-urow'+(on?' on':'')+'" data-p="'+esc(name)+'" onclick="selectHomeProject(this.dataset.p)">'
       +'<div class="hm-un">'+(on?'<i>●</i>':'')+esc(label)+'</div>'
-      +'<div class="hm-mt"><small>Fabrikasi <b>'+a+'%</b></small>'+bar(a,'#22d3ee','#3b82f6')+'<span>'+nf(m.mainChecked)+' / '+nf(m.mainTotal)+'</span></div>'
       +'<div class="hm-mt"><small>FAT <b>'+b+'%</b></small>'+bar(b,'#a78bfa','#ec4899')+'<span>'+nf(m.compChecked)+' / '+nf(m.compTotal)+'</span></div>'
-      +'<div class="hm-uft"><em>Drawing '+nf(m.mainLink)+'/'+nf(m.mainTotal)+' · '+nf(m.compLink)+'/'+nf(m.compTotal)+'</em><em>Inspeksi '+nf(m.inspected)+'</em><span class="hm-stbar">'+chips(m)+'</span></div>'
+      +'<div class="hm-uft"><em>Drawing '+nf(m.compLink)+'/'+nf(m.compTotal)+'</em><em>Inspeksi '+nf(m.inspected)+'</em><span class="hm-stbar">'+chips(m)+'</span></div>'
       +'</div>';
   }
   function build(){
@@ -23192,7 +23762,6 @@ function dashHtml(D){
   var wiN=D.wi.length,wiFin=0;D.wi.forEach(function(r){if(r.cat==='acc'||r.cat==='accr')wiFin++;});
   var J=[
     {t:'FAT · Bay 1',c:'#7c5cd6',p:rate(compInsp,T.comp),a:nf(compInsp)+' / '+nf(T.comp),b:'komponen sudah diinspeksi'},
-    {t:'Fabrikasi · Bay 2 & 4',c:'#0e8fb0',p:rate(fabInsp,T.main),a:nf(fabInsp)+' / '+nf(T.main),b:'item fabrikasi sudah diinspeksi'},
     {t:'Incoming',c:'#0284c7',p:rate(incFin,incN),a:nf(incFin)+' / '+nf(incN),b:'record sudah final (Accept/Reject)'},
     {t:'WI & NDT',c:'#d98a0b',p:rate(wiFin,wiN),a:nf(wiFin)+' / '+nf(wiN),b:'record Accept tanpa repair'},
     {t:'Coating · Bay 3',c:'#0f9d74',p:D.coat.projects?D.coat.pct:null,a:nf(D.coat.projects)+' unit',b:D.coat.projects?'rata-rata progres 12 sub komponen':'belum ada project coating'}
@@ -23207,7 +23776,7 @@ function dashHtml(D){
       return '<div class="nv-jp" style="--c:'+j.c+'">'+ringHtml(p,84,10,j.c,'#002060',nf(p,0)+'%','','gNvJ'+i,'1rem')+'<div><small>'+j.t+'</small><strong>'+j.a+'</strong><span>'+j.b+'</span></div></div>';}).join('')+'</div>';}},
     day:{ico:'🗓️',t:'Resume Inspeksi Harian',sub:nf(todayN)+' kegiatan hari ini · bisa pilih tanggal & inspector',body:function(){return dayHtml(D);}},
     rep:{ico:'🛠️',t:'Poin Repair — Prioritas Terbesar',sub:TOPTXT||'Belum ada data repair pada '+PL(),body:function(){return periodBar(D)+rhtml;}},
-    mon:{ico:'📅',t:'Evaluasi Bulanan Workshop C1',sub:'Welding '+pf(rate(T2.wR,T2.wL),1)+' · Fabrikasi '+pf(rate(T2.fR,T2.fI),1)+' · Incoming '+pf(rate(T2.ir,T2.iq),1)+' · '+PL(),body:function(){return periodBar(D)+evalHtml(D,'mon');}},
+    mon:{ico:'📅',t:'Evaluasi Bulanan Workshop C1',sub:'Welding '+pf(rate(T2.wR,T2.wL),1)+' · Incoming '+pf(rate(T2.ir,T2.iq),1)+' · '+PL(),body:function(){return periodBar(D)+evalHtml(D,'mon');}},
     prj:{ico:'📁',t:'Evaluasi per Project',sub:nf(pcount)+' project dengan data · '+PL(),body:function(){return periodBar(D)+evalHtml(D,'proj');}}
   };
   h+='<div class="nv-accs">'+['prog','day','rep','mon','prj'].map(accHtml).join('')+'</div>';
@@ -23218,7 +23787,7 @@ function dashHtml(D){
 /* --- resume inspeksi per hari --- */
 function dayRecords(D,day,carry){
   var rows=[];
-  D.insp.concat(D.add||[]).forEach(function(x){if(x.date!==day)return;rows.push({kind:(x.main||x.add)?'FAB':'FAT',t:x.t,by:x.by,name:x.name,sub:x.proj+(x.add?' · Additional':'')+(x.dwg?' · '+x.dwg:''),
+  D.insp.concat(D.add||[]).forEach(function(x){if(x.date!==day||x.main||x.add)return;rows.push({kind:(x.main||x.add)?'FAB':'FAT',t:x.t,by:x.by,name:x.name,sub:x.proj+(x.add?' · Additional':'')+(x.dwg?' · '+x.dwg:''),
     st:x.st==='special'?'accept':x.st,stLbl:(window.INSP_ST&&INSP_ST[x.st]&&INSP_ST[x.st].t)||x.st,stC:(window.INSP_ST&&INSP_ST[x.st]&&INSP_ST[x.st].c)||'#64748b',key:x.key});});
   D.inc.forEach(function(r){var s=incSplit(r),rd=String(r.date||'').slice(0,10),isOut=s.open>0;
     if(carry?(!isOut&&rd!==day):rd!==day)return;
@@ -23236,7 +23805,7 @@ function dayHtml(D){
   var rows=dayRecords(D,NV.day),by={};rows.forEach(function(r){by[r.by||'(tanpa nama)']=1;});
   var inspectors=Object.keys(by).sort();if(NV.by!=='all'&&inspectors.indexOf(NV.by)<0)NV.by='all';
   var f=rows.filter(function(r){return NV.by==='all'||(r.by||'(tanpa nama)')===NV.by;});
-  var kinds=[['FAT','FAT · Bay 1'],['FAB','Fabrikasi · Bay 2 & 4'],['INC','Incoming'],['WI','WI & NDT']];
+  var kinds=[['FAT','FAT · Bay 1'],['INC','Incoming'],['WI','WI & NDT']];
   var tb=kinds.map(function(k){var a=f.filter(function(r){return r.kind===k[0];}),c={accept:0,hold:0,reject:0};a.forEach(function(r){c[r.st==='hold'?'hold':(r.st==='reject'?'reject':'accept')]++;});
     return '<tr class="nvr'+(a.length?'':' dim')+(NV.kind===k[0]?' sel':'')+'" data-nv-kind="'+k[0]+'" tabindex="0" title="Klik untuk melihat aktivitas '+k[1]+'"><td><b>'+k[1]+'</b></td><td class="n">'+a.length+'</td><td class="n">'+c.accept+'</td><td class="n">'+c.hold+'</td><td class="n">'+c.reject+'</td></tr>';}).join('');
   var tot={accept:0,hold:0,reject:0};f.forEach(function(r){tot[r.st==='hold'?'hold':(r.st==='reject'?'reject':'accept')]++;});
@@ -23253,7 +23822,7 @@ function dayHtml(D){
     return '<tr class="nv-ar'+(_ca?' clk':'')+'" '+_ca+'><td class="n">'+(i+1)+'</td><td>'+hhmm(r.t)+'</td><td><b>'+esc(r.name)+'</b></td><td>'+esc(r.kind==='FAB'?'Fabrikasi':r.kind)+'</td><td>'+esc(r.sub)+'</td><td>'+esc(r.by||'-')+'</td><td><span class="nv-st nv-st-'+(r.st==='hold'?'hold':(r.st==='reject'?'rej':'ok'))+'">'+esc(r.stLbl)+'</span></td></tr>';}).join('');
   var list=rowsH?'<div class="nv-scroll nv-dl"><table class="nv-tbl nv-atbl"><thead><tr><th class="n">No</th><th>Jam</th><th>Kegiatan</th><th>Jenis</th><th>Project / Detail</th><th>Inspector</th><th>Status</th></tr></thead><tbody>'+rowsH+'</tbody></table></div>'+(fk.length>200?'<p class="nv-def">Menampilkan 200 dari '+fk.length+' kegiatan.</p>':''):empty;
   var actHtml=NV.kind?'<h3>Aktivitas · '+esc(kLbl)+'</h3><p class="nv-def">Klik baris hasil inspeksi untuk membukanya. <a href="#" data-nv-kind="">Tutup</a></p>'+list
-    :'<h3>Aktivitas</h3><p class="nv-def">Klik salah satu jenis inspeksi pada tabel untuk menampilkan aktivitasnya.</p><div class="nv-hint">👆 Pilih FAT, Fabrikasi, Incoming, WI &amp; NDT, atau Total</div>';
+    :'<h3>Aktivitas</h3><p class="nv-def">Klik salah satu jenis inspeksi pada tabel untuk menampilkan aktivitasnya.</p><div class="nv-hint">👆 Pilih FAT, Incoming, WI &amp; NDT, atau Total</div>';
   return '<div class="nv-tools" id="nvDayTools" style="margin-bottom:12px"><input type="date" data-nv="day" class="nv-date" value="'+NV.day+'"><select data-nv="by"><option value="all">Semua inspector</option>'+inspectors.map(function(b){return '<option value="'+esc(b)+'"'+(NV.by===b?' selected':'')+'>'+esc(b)+'</option>';}).join('')+'</select><button type="button" data-nv-act="today">Hari ini</button></div>'+
     '<div class="nv-panel"><div class="nv-day"><div style="grid-column:1/-1"><h3>Ringkasan per Jenis Inspeksi</h3><p class="nv-def">Jumlah kegiatan inspeksi pada '+NV.day+(NV.by!=='all'?' · '+esc(NV.by):'')+'. Accept termasuk Spesial Accepted.</p>'+
     '<div class="nv-scroll"><table class="nv-tbl"><thead><tr><th>Jenis inspeksi</th><th class="n">Total</th><th class="n">✔ Accept</th><th class="n">⏸ Hold</th><th class="n">✖ Reject/Repair</th></tr></thead><tbody>'+tb+'</tbody></table></div>'+
@@ -23290,15 +23859,13 @@ function repairHtml(D){
   /* prioritas terbesar: rasio terhadap batas merah (RB) */
   var cand=[];
   if(wr[0]&&wr[0].p)cand.push({s:wr[0].p/RB,t:'Welding',n:wr[0].k,p:wr[0].p,d:2});
-  if(fr[0]&&fr[0].p)cand.push({s:fr[0].p/RB,t:'Fabrikasi',n:fr[0].k,p:fr[0].p,d:1});
   if(ir[0]&&ir[0].p)cand.push({s:ir[0].p/RB,t:'Incoming (supplier)',n:ir[0].k,p:ir[0].p,d:1});
   cand.sort(function(a,b){return b.s-a.s;});
   TOPTXT=cand.length?('🔴 '+cand[0].t+' — '+cand[0].n+' · '+pf(cand[0].p,cand[0].d)+' ('+PL()+')'):'';
   var top=cand.length?'<div class="nv-top">🔴 <span>Prioritas terbesar: <b>'+esc(cand[0].t)+' — '+esc(cand[0].n)+'</b> dengan repair/reject rate <b>'+pf(cand[0].p,cand[0].d)+'</b> pada '+PL()+'.</span></div>':'';
   function col(title,def,list,mk,w,b){return '<div class="nv-panel"><h3>'+title+'</h3><p class="nv-def">'+def+'</p>'+(list.length?'<ol class="nv-rk">'+list.slice(0,6).map(mk).join('')+'</ol>':'<div class="nv-empty">Belum ada data pada '+PL()+'.</div>')+'</div>';}
-  return top+'<div class="nv-grid nv-g3">'+
+  return top+'<div class="nv-grid nv-g2">'+
     col('Welding','Repair rate = panjang repair ÷ panjang diinspeksi (WI &amp; NDT). Urut dari terbesar.',wr,function(x,i){return rankLi(i,x.k,nf(x.o.R/1000,1)+' m repair / '+nf(x.o.L/1000,0)+' m',x.p,RW,RB);})+
-    col('Fabrikasi','Repair rate = item Reject ÷ item fabrikasi yang diinspeksi. Urut dari terbesar.',fr,function(x,i){return rankLi(i,x.k,nf(x.o.rej)+' reject / '+nf(x.o.n)+' item',x.p,RW,RB);})+
     col('Incoming (per supplier)','Reject rate = qty reject ÷ qty masuk. Urut dari terbesar.',ir,function(x,i){return rankLi(i,x.k,nf(x.o.rej)+' reject / '+nf(x.o.q)+' qty',x.p,RW,RB);})+'</div>';
 }
 
@@ -23314,8 +23881,7 @@ function monthly(D,full,proj){
 }
 function sumM(M){var T={wL:0,wR:0,fI:0,fR:0,iq:0,ir:0,io:0,oN:0,oO:0};M.forEach(function(m){for(var k in T)T[k]+=m[k];});return T;}
 function chartLines(M){
-  var S=[{n:'Welding repair rate',c:'#e8590c',v:M.map(function(m){return rate(m.wR,m.wL);})},{n:'Fabrikasi repair rate',c:'#2f7fd6',v:M.map(function(m){return rate(m.fR,m.fI);})},
-    {n:'Incoming reject rate',c:'#7b3fc0',v:M.map(function(m){return rate(m.ir,m.iq);})},{n:'Outstanding rate',c:'#c92a2a',v:M.map(function(m){return rate(m.oO,m.oN);})}];
+  var S=[{n:'Welding repair rate',c:'#e8590c',v:M.map(function(m){return rate(m.wR,m.wL);})},{n:'Incoming reject rate',c:'#7b3fc0',v:M.map(function(m){return rate(m.ir,m.iq);})},{n:'Outstanding rate',c:'#c92a2a',v:M.map(function(m){return rate(m.oO,m.oN);})}];
   var mx=0;S.forEach(function(s){s.v.forEach(function(x){if(x!=null&&x>mx)mx=x;});});
   if(mx<=0)return '<div class="nv-empty">Belum ada data rate pada filter ini.</div>';
   var step=mx<=5?1:mx<=10?2:mx<=25?5:mx<=50?10:20;mx=Math.ceil(mx/step)*step;
@@ -23335,19 +23901,18 @@ function evalHtml(D,which){
   function row(label,m,cls){var none=!m.wL&&!m.fI&&!m.iq&&!m.oN;
     return '<tr class="'+(cls||'')+(none&&!cls?' dim':'')+'"><td><b>'+label+'</b></td>'+
       '<td class="n">'+nf(m.wL/1000,0)+'</td><td class="n">'+nf(m.wR/1000,1)+'</td><td class="n">'+badge(rate(m.wR,m.wL),RW,RB)+'</td>'+
-      '<td class="n">'+nf(m.fI)+'</td><td class="n">'+nf(m.fR)+'</td><td class="n">'+badge(rate(m.fR,m.fI),RW,RB)+'</td>'+
       '<td class="n">'+nf(m.iq)+'</td><td class="n">'+nf(m.ir)+'</td><td class="n">'+badge(rate(m.ir,m.iq),RW,RB)+'</td>'+
       '<td class="n">'+nf(m.oN)+'</td><td class="n">'+nf(m.oO)+'</td><td class="n">'+badge(rate(m.oO,m.oN),OW,OB)+'</td></tr>';}
   var body=NV.month?row(MON[NV.month-1]+' '+NV.year,M[NV.month-1]):(M.map(function(m,i){return row(MON[i]+' '+NV.year,m);}).join('')+row('Total '+NV.year,T,'tot'));
-  var mon='<div class="nv-panel"><h3>Evaluasi Bulanan Workshop C1</h3><p class="nv-def">Periode '+PL()+(NV.proj?' · project <b>'+esc(NV.proj)+'</b>':' · semua project')+'. Welding = repair ÷ panjang diinspeksi · Fabrikasi = Reject ÷ item diinspeksi · Incoming = qty reject ÷ qty masuk · Outstanding = temuan Open ÷ total temuan.</p>'+
-    chartLines(M)+'<div class="nv-scroll" style="margin-top:10px"><table class="nv-tbl"><thead><tr><th rowspan="2">Bulan</th><th colspan="3">Welding (WI &amp; NDT)</th><th colspan="3">Fabrikasi</th><th colspan="3">Incoming</th><th colspan="3">Outstanding</th></tr>'+
-    '<tr><th class="n">Insp (m)</th><th class="n">Repair (m)</th><th class="n">Rate</th><th class="n">Diinspeksi</th><th class="n">Reject</th><th class="n">Rate</th><th class="n">Qty masuk</th><th class="n">Reject</th><th class="n">Rate</th><th class="n">Temuan</th><th class="n">Open</th><th class="n">Rate</th></tr></thead><tbody>'+body+'</tbody></table></div></div>';
+  var mon='<div class="nv-panel"><h3>Evaluasi Bulanan Workshop C1</h3><p class="nv-def">Periode '+PL()+(NV.proj?' · project <b>'+esc(NV.proj)+'</b>':' · semua project')+'. Welding = repair ÷ panjang diinspeksi · Incoming = qty reject ÷ qty masuk · Outstanding = temuan Open ÷ total temuan.</p>'+
+    chartLines(M)+'<div class="nv-scroll" style="margin-top:10px"><table class="nv-tbl"><thead><tr><th rowspan="2">Bulan</th><th colspan="3">Welding (WI &amp; NDT)</th><th colspan="3">Incoming</th><th colspan="3">Outstanding</th></tr>'+
+    '<tr><th class="n">Insp (m)</th><th class="n">Repair (m)</th><th class="n">Rate</th><th class="n">Qty masuk</th><th class="n">Reject</th><th class="n">Rate</th><th class="n">Temuan</th><th class="n">Open</th><th class="n">Rate</th></tr></thead><tbody>'+body+'</tbody></table></div></div>';
   /* per project */
   var allp=projsOf(D).filter(function(p){return !NV.proj||p===NV.proj;});
   var pr=allp.map(function(p){var t=sumM(monthly(D,false,p));return {p:p,t:t,tot:t.wL+t.fI+t.iq+t.oN};}).filter(function(x){return x.tot>0;});
   pr.sort(function(a,b){var sa=Math.max(rate(a.t.wR,a.t.wL)||0,rate(a.t.fR,a.t.fI)||0);var sb=Math.max(rate(b.t.wR,b.t.wL)||0,rate(b.t.fR,b.t.fI)||0);return sb-sa;});
-  var pt='<div class="nv-panel"><h3>Evaluasi per Project</h3><p class="nv-def">Periode '+PL()+'. Diurutkan dari repair rate tertinggi (Welding / Fabrikasi).</p>'+(pr.length?'<div class="nv-scroll"><table class="nv-tbl"><thead><tr><th>Project</th><th class="n">Welding repair</th><th class="n">Fabrikasi repair</th><th class="n">Incoming reject</th><th class="n">Temuan Open</th><th class="n">Outstanding rate</th></tr></thead><tbody>'+
-    pr.map(function(x){var t=x.t;return '<tr><td><b>'+esc(x.p)+'</b></td><td class="n">'+badge(rate(t.wR,t.wL),RW,RB)+' <small>'+nf(t.wR/1000,1)+'/'+nf(t.wL/1000,0)+' m</small></td><td class="n">'+badge(rate(t.fR,t.fI),RW,RB)+' <small>'+nf(t.fR)+'/'+nf(t.fI)+'</small></td><td class="n">'+badge(rate(t.ir,t.iq),RW,RB)+'</td><td class="n">'+nf(t.oO)+' / '+nf(t.oN)+'</td><td class="n">'+badge(rate(t.oO,t.oN),OW,OB)+'</td></tr>';}).join('')+'</tbody></table></div>':'<div class="nv-empty">Belum ada data pada '+PL()+'.</div>')+'</div>';
+  var pt='<div class="nv-panel"><h3>Evaluasi per Project</h3><p class="nv-def">Periode '+PL()+'. Diurutkan dari repair rate tertinggi (Welding).</p>'+(pr.length?'<div class="nv-scroll"><table class="nv-tbl"><thead><tr><th>Project</th><th class="n">Welding repair</th><th class="n">Incoming reject</th><th class="n">Temuan Open</th><th class="n">Outstanding rate</th></tr></thead><tbody>'+
+    pr.map(function(x){var t=x.t;return '<tr><td><b>'+esc(x.p)+'</b></td><td class="n">'+badge(rate(t.wR,t.wL),RW,RB)+' <small>'+nf(t.wR/1000,1)+'/'+nf(t.wL/1000,0)+' m</small></td><td class="n">'+badge(rate(t.ir,t.iq),RW,RB)+'</td><td class="n">'+nf(t.oO)+' / '+nf(t.oN)+'</td><td class="n">'+badge(rate(t.oO,t.oN),OW,OB)+'</td></tr>';}).join('')+'</tbody></table></div>':'<div class="nv-empty">Belum ada data pada '+PL()+'.</div>')+'</div>';
   return which==='proj'?pt:mon;
 }
 
@@ -23371,7 +23936,7 @@ function monitorHtml(D){
       ring:rate(compInsp,T.comp),stat:'<b>'+nf(compInsp)+'</b> / '+nf(T.comp)+' diinspeksi',open:oc('comp').o},
     fab:{id:'fab',ico:'🏗️',c1:'#22d3ee',c2:'#3b82f6',tag:'Bay 2 &amp; Bay 4',t:'Fabrication — Dimensional &amp; General Visual',d:'Inspeksi dimensional dan general visual fabrikasi, per project.',
       ring:rate(fabInsp,T.main),stat:'<b>'+nf(fabInsp)+'</b> / '+nf(T.main)+' diinspeksi',open:oc('fab').o},
-    nt:{id:'nt',ico:'🚇',c1:'#fb923c',c2:'#f43f5e',tag:'Bay 2 &amp; Bay 4',t:'Non Tunnel',d:'Fabrikasi Non Tunnel (termasuk dalam Bay 2 &amp; Bay 4), per project.',
+    nt:{id:'nt',ico:'🚇',c1:'#fb923c',c2:'#f43f5e',tag:'Bay 2 &amp; Bay 4',t:'Fabrication &amp; Preparation - Dimensional &amp; General Visual Check',d:'Inspeksi dimensional dan general visual fabrikasi &amp; preparation (Non Tunnel), per project.',
       ring:null,stat:'Daftar &amp; hasil sama dengan FAT',open:oc('nt').o},
     wi:{id:'wi',ico:'🔥',c1:'#f59e0b',c2:'#ef4444',tag:'WI &amp; NDT',t:'WI &amp; NDT Inspect',d:'Daily Inspection Record Welding Inspection (Visual) &amp; NDT (MPI, UT). Tidak dipisah per project.',
       ring:rate(D.wi.filter(function(r){return r.cat==='acc'||r.cat==='accr';}).length,D.wi.length),stat:'<b>'+nf(D.wi.length)+'</b> record',open:wiOpen},
@@ -23386,7 +23951,7 @@ function monitorHtml(D){
     '<div class="nv-grid nv-bays">'+
     grp('Incoming','Penerimaan material',card(C.inc),1)+
     grp('Bay 1','FAT',card(C.fat),1)+
-    grp('Bay 2 &amp; Bay 4','Fabrication','<div class="nv-grid nv-g2">'+card(C.fab)+card(C.nt)+'</div>',2,'Dimensional · General Visual · termasuk Non Tunnel')+
+    grp('Bay 2 &amp; Bay 4','Fabrication &amp; Preparation',card(C.nt),2,'Dimensional · General Visual')+
     grp('WI &amp; NDT','Welding Inspection &amp; NDT',card(C.wi),1)+
     grp('Bay 3','Coating',card(C.coa),1,'Outstanding = sub komponen belum 100%')+
     grp('Di luar bay','Packing &amp; Delivery',card(C.ship),2,'','out')+'</div>';
@@ -23410,7 +23975,7 @@ function openInspection(id){
   if(id==='coa'){window.showCoating();return;}
   if(id==='ship'){openOutstanding('ship');return;}
   var view={fat:'complete',fab:'main',nt:'nontunnel'}[id],mod={fat:'comp',fab:'fab',nt:'nt'}[id];
-  pickProject('Pilih project — '+(id==='fat'?'FAT':id==='fab'?'Fabrication':'Non Tunnel'),'Inspeksi baru dibuka per project / unit.',function(p){
+  pickProject('Pilih project — '+(id==='fat'?'FAT':id==='fab'?'Fabrication':'Fabrication & Preparation'),'Inspeksi baru dibuka per project / unit.',function(p){
     var m=pst(p),o=oc(mod,p).o;var main=id==='fab';
     return {o:o,t:nf(main?m.mainChecked:m.compChecked)+' / '+nf(main?m.mainTotal:m.compTotal)+' dicek'+(o?' · <u>'+o+' outstanding</u>':'')};
   },function(p){setP(p);window.openView(view);});
@@ -23420,7 +23985,7 @@ function openOutstanding(id){
   if(id==='inc'){window.QCOut.open({mod:'inc',proj:null,projLbl:'',ref:null,refLbl:''});return;}
   if(id==='coa'){window.showCoating();return;}
   if(id==='wi'){window.QCOut.open({mod:'wi',proj:null});return;}
-  var mod={fat:'comp',fab:'fab',nt:'nt',ship:'ship'}[id],nm={comp:'FAT',fab:'Fabrication',nt:'Non Tunnel',ship:'Packing & Delivery'}[mod];
+  var mod={fat:'comp',fab:'fab',nt:'nt',ship:'ship'}[id],nm={comp:'FAT',fab:'Fabrication',nt:'Fabrication & Preparation',ship:'Packing & Delivery'}[mod];
   pickProject('📌 Outstanding — '+esc(nm),'Pilih project &amp; unit. Temuan tiap unit ditampilkan terpisah.',function(p){
     var c=oc(mod,p),n=c.o+c.c;return {o:c.o,t:n?(c.o?'<u>'+c.o+' open</u> · ':'')+c.c+' closed · '+n+' total':'Belum ada temuan'};
   },function(p){window.QCOut.open({mod:mod,proj:p,projLbl:p,ref:null,refLbl:''});});
@@ -23559,6 +24124,207 @@ setInterval(function(){try{
 }catch(e){}},15000);
 window.NVMenu={goTab:goTab,build:build};
 try{if(document.body.classList.contains('is-home'))window.renderHome(false);}catch(e){}
+})();
+</script>
+
+<style id="stg-css">
+/* ===== 2 kolom centang tahap: Fab & Prep (oranye) dan FAT (ungu). Centang kiri = otomatis mengikuti keduanya ===== */
+#checkTable th.stg-h{text-align:center;white-space:nowrap;padding-left:6px;padding-right:6px}
+.stg-pill{display:inline-block;padding:2px 8px;border-radius:99px;font-size:.68rem;font-weight:800;color:#fff;letter-spacing:.2px;opacity:.55}
+.stg-pill.f{background:#f97316}.stg-pill.t{background:#7c3aed}
+.stg-pill.f.act{opacity:1;box-shadow:0 0 0 2px #fff,0 0 0 4px #f97316}.stg-pill.t.act{opacity:1;box-shadow:0 0 0 2px #fff,0 0 0 4px #7c3aed}
+#checkTable td.stg-c{text-align:center;width:64px;padding-left:4px;padding-right:4px}
+#checkTable td.stg-c[data-s=F].act{background:rgba(249,115,22,.09)}
+#checkTable td.stg-c[data-s=T].act{background:rgba(124,58,237,.09)}
+.stg-box{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:4px;border:2px solid #cbd5e1;font-size:12px;font-weight:900;line-height:1;color:#fff;background:transparent;vertical-align:middle;opacity:.8}
+.stg-box.f.on{background:#f97316;border-color:#f97316}.stg-box.t.on{background:#7c3aed;border-color:#7c3aed}
+.stg-box.f:not(.on){border-color:#fdba74}.stg-box.t:not(.on){border-color:#c4b5fd}
+.stg-cb{width:18px;height:18px;vertical-align:middle;cursor:pointer}
+.stg-cb.f{accent-color:#f97316}.stg-cb.t{accent-color:#7c3aed}
+.stg-cb:disabled{opacity:.35;cursor:not-allowed}
+#checkTable td:first-child input[type=checkbox]{accent-color:#16a34a;pointer-events:none}
+.stg-prog{display:block;font-size:.62rem;font-weight:800;line-height:1.1;margin-top:2px;color:#64748b}
+.stg-prog.ok{color:#16a34a}
+</style>
+<script id="stg-chk">
+/* Centang per tahap, disimpan di checkedState (ikut sinkron):
+   - Fab & Prep: kunci "<key>~F"   - FAT: kunci lama "<key>" (Dashboard membaca ini)
+   Kolom kanan = yang diklik inspector (menu Fab & Prep -> kolom Fab & Prep, menu FAT -> kolom FAT).
+   Kolom kiri = OTOMATIS (tidak bisa diklik langsung):
+   - baris tanpa sub : tercentang bila salah satu tahap (Fab & Prep atau FAT) sudah dicentang.
+   - baris ASSY (punya sub) : tercentang bila Fab & Prep DAN FAT sama-sama dicentang + semua sub sudah lengkap.
+   BYPASS: saat Fab & Prep dan FAT sama-sama dicentang pada baris assy, seluruh sub di bawahnya otomatis ikut
+   dicentang (kedua tahap), jadi assy tidak perlu menunggu sub dicentang satu per satu. */
+(function(){
+'use strict';
+var SUF='~F';
+function $(i){return document.getElementById(i);}
+function stage(){return (typeof currentView!=='undefined'&&currentView==='nontunnel')?'F':'T';}
+function sk(key,s){return s==='F'?key+SUF:key;}
+function isOn(key,s){return !!checkedState[sk(key,s)];}
+function esc(v){return String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
+function toast(m){try{if(typeof window.showToastMsg==='function')window.showToastMsg(m);}catch(e){}}
+var HC={};
+function hier(p){
+  var rows=projectData[p]||[],h=HC[p];
+  if(h&&h.rows===rows&&h.n===rows.length)return h;
+  var depth=rows.map(function(r){var L=String((r&&r.level)||'');if(L.charAt(0)==='\u25b6')return 0;var m=/L(\d+)/.exec(L);return m?+m[1]:1;});
+  var par=new Array(rows.length),st=[];
+  for(var i=0;i<rows.length;i++){while(st.length&&depth[st[st.length-1]]>=depth[i])st.pop();par[i]=st.length?st[st.length-1]:-1;st.push(i);}
+  return HC[p]=h={rows:rows,n:rows.length,depth:depth,par:par};
+}
+/* baris i punya sub (= assy)? */
+function kids(h,i){return i+1<h.n&&h.depth[i+1]>h.depth[i];}
+/* baris j (sebagai sub) dianggap selesai: leaf = salah satu tahap; sub-assy = kedua tahap */
+function subOk(p,j,h){
+  var k=p+'_'+j,F=isOn(k,'F'),T=isOn(k,'T');
+  return kids(h,j)?(F&&T):(F||T);
+}
+function gate(p,i,s,h){
+  var d=h.depth,n=h.n,tot=0,done=0;
+  for(var j=i+1;j<n&&d[j]>d[i];j++){tot++;if(subOk(p,j,h))done++;}
+  return {tot:tot,done:done};
+}
+/* status centang kiri (otomatis) */
+function leftOn(p,i,h){
+  var k=p+'_'+i,F=isOn(k,'F'),T=isOn(k,'T');
+  if(!kids(h,i))return F||T;
+  if(!(F&&T))return false;
+  var g=gate(p,i,null,h);return g.done===g.tot;
+}
+/* BYPASS: centang kedua tahap pada semua sub di bawah baris i. Mengembalikan jumlah centang baru. */
+function cascade(p,i,h){
+  var d=h.depth,n=h.n,ch=0;
+  for(var j=i+1;j<n&&d[j]>d[i];j++){
+    var k=p+'_'+j;
+    if(!checkedState[k]){checkedState[k]=true;ch++;}
+    if(!checkedState[k+SUF]){checkedState[k+SUF]=true;ch++;}
+  }
+  return ch;
+}
+/* kebalikan bypass: assy dilepas di kedua tahap -> semua sub dilepas di kedua tahap. Mengembalikan jumlah yang dilepas. */
+function uncascade(p,i,h){
+  var d=h.depth,n=h.n,ch=0;
+  for(var j=i+1;j<n&&d[j]>d[i];j++){
+    var k=p+'_'+j;
+    if(checkedState[k]){checkedState[k]=false;ch++;}
+    if(checkedState[k+SUF]){checkedState[k+SUF]=false;ch++;}
+  }
+  return ch;
+}
+function keyIdx(key,p){
+  if(!key||key.indexOf(p+'_')!==0)return -1;
+  var t=key.slice(p.length+1);return /^\d+$/.test(t)?+t:-1;
+}
+function box(c,on){return '<span class="stg-box '+c+(on?' on':'')+'">'+(on?'\u2714':'')+'</span>';}
+function ensureCells(tr){
+  if(tr.getAttribute('data-stg'))return;
+  tr.setAttribute('data-stg','1');
+  var col=0,tgt=null;
+  for(var i=0;i<tr.cells.length;i++){var c=tr.cells[i],sp=c.colSpan||1;if(col<=7&&7<col+sp){tgt=c;break;}col+=sp;}
+  if(!tgt)return;
+  if((tgt.colSpan||1)>1){tgt.colSpan=tgt.colSpan+2;return;}
+  tgt.insertAdjacentHTML('afterend','<td class="stg-c" data-s="F"></td><td class="stg-c" data-s="T"></td>');
+}
+function decorate(){
+  var tb=$('tableBody'),tbl=$('checkTable');
+  if(!tb||!tbl||typeof currentProject==='undefined'||typeof currentView==='undefined'||currentView==='home')return;
+  var s=stage(),p=currentProject,rows=projectData[p]||[],h=hier(p);
+  var pf=document.querySelector('#checkTable .stg-pill.f'),pt=document.querySelector('#checkTable .stg-pill.t');
+  if(pf)pf.classList.toggle('act',s==='F');if(pt)pt.classList.toggle('act',s==='T');
+  [].forEach.call(tb.rows,function(tr){
+    ensureCells(tr);
+    var cb=tr.cells[0]&&tr.cells[0].querySelector('input[type=checkbox]');
+    var m=cb&&/toggleCheck\('([^']+)'/.exec(cb.getAttribute('onchange')||'');
+    var key=m?m[1]:null,idx=keyIdx(key,p);
+    var cs=tr.querySelectorAll('td.stg-c');
+    if(idx<0){[].forEach.call(cs,function(c){c.innerHTML='';c.classList.remove('act');});return;}
+    var g=gate(p,idx,s,h),hk=kids(h,idx),full=!g.tot||g.done===g.tot;
+    [].forEach.call(cs,function(c){
+      var q=c.getAttribute('data-s'),cl=q==='F'?'f':'t',o=isOn(key,q);
+      c.classList.toggle('act',q===s);
+      if(q!==s){c.innerHTML=box(cl,o);return;}
+      var nm=q==='F'?'Fab & Prep':'FAT';
+      var tip=hk?('Centang '+nm+'. Jika Fab & Prep dan FAT sama-sama dicentang, semua sub komponen ikut dicentang otomatis (bypass). Sub tercentang: '+g.done+' / '+g.tot+'.'):('Centang '+nm);
+      c.innerHTML='<input type="checkbox" class="stg-cb '+cl+'" data-k="'+esc(key)+'" data-s="'+q+'"'+(o?' checked':'')+' title="'+esc(tip)+'">'+
+        (g.tot?'<small class="stg-prog'+(full?' ok':'')+'">'+g.done+'/'+g.tot+'</small>':'');
+    });
+    /* kiri = otomatis. Assy: butuh Fab & Prep + FAT + semua sub lengkap. Bukan assy: salah satu tahap. */
+    var on=leftOn(p,idx,h);
+    cb.checked=on;cb.disabled=false;cb.tabIndex=-1;
+    cb.title=hk?'Otomatis: tercentang bila Fab & Prep DAN FAT sama-sama dicentang dan semua sub komponen lengkap':'Otomatis mengikuti kolom kanan: tercentang bila Fab & Prep atau FAT sudah dicentang';
+    tr.classList.toggle('checked',on);
+    var pg=tr.cells[0].querySelector('.stg-prog');if(pg)pg.remove();
+  });
+  {
+    /* angka ringkasan di atas tabel = jumlah baris yang tercentang di kiri, termasuk komponen Additional */
+    var c=0,t=0;
+    for(var i=0;i<rows.length;i++){if(h.depth[i]===0)continue;t++;if(leftOn(p,i,h))c++;}
+    try{var ad=window.QCAdd&&window.QCAdd.stats&&window.QCAdd.stats(p);if(ad){t+=ad.total;c+=ad.checked;}}catch(e){}
+    var set=function(id,v){var e=$(id);if(e)e.innerText=v;};
+    set('progressCount','Checked: '+c+' / '+t);set('totalStat',t.toLocaleString());set('checkedStat',c.toLocaleString());
+    set('pendingStat',Math.max(0,t-c).toLocaleString());set('checkedNote',(t?(c/t*100).toFixed(1):0)+'% selesai');
+  }
+}
+/* klik pada kolom kanan */
+document.addEventListener('change',function(e){
+  var t=e.target;if(!t||!t.classList||!t.classList.contains('stg-cb'))return;
+  var key=t.getAttribute('data-k'),s=t.getAttribute('data-s'),p=currentProject,idx=keyIdx(key,p),h=hier(p);
+  checkedState[sk(key,s)]=t.checked;
+  if(idx>=0){
+    if(t.checked){
+      /* BYPASS: Fab & Prep + FAT sama-sama tercentang pada assy -> semua sub otomatis tercentang */
+      if(kids(h,idx)&&isOn(key,'F')&&isOn(key,'T')){
+        if(cascade(p,idx,h))toast('Fab & Prep dan FAT sama-sama dicentang: semua sub komponen ikut dicentang otomatis.');
+      }
+    }else{
+      /* assy dilepas di kedua tahap (Fab & Prep dan FAT) -> semua sub ikut dilepas */
+      if(kids(h,idx)&&!isOn(key,'F')&&!isOn(key,'T')){
+        if(uncascade(p,idx,h))toast('Fab & Prep dan FAT sama-sama dilepas: semua sub komponen ikut dilepas.');
+      }
+      /* sub dilepas -> assy induk yang sudah lengkap (Fab & Prep + FAT) ikut dilepas bila sub-nya tidak lengkap lagi */
+      var a=h.par[idx],un=0;
+      while(a>=0){
+        var ka=p+'_'+a;
+        if(isOn(ka,'F')&&isOn(ka,'T')){
+          var g2=gate(p,a,s,h);
+          if(g2.done<g2.tot){checkedState[ka]=false;checkedState[ka+SUF]=false;un++;}
+        }
+        a=h.par[a];
+      }
+      if(un)toast('Centang komponen induk ikut dilepas karena sub komponennya tidak lengkap lagi.');
+    }
+  }
+  saveChecked();updateCounts();
+});
+/* centang kiri tidak bisa diubah langsung: selalu mengikuti kanan */
+window.toggleCheck=function(key,checkbox){decorate();};
+window.toggleCheckAll=function(m){
+  var s=stage(),p=currentProject,rows=projectData[p]||[],v=m.checked,h=hier(p);
+  rows.forEach(function(r,i){checkedState[sk(p+'_'+i,s)]=v;});
+  if(v)rows.forEach(function(r,i){var k=p+'_'+i;if(kids(h,i)&&isOn(k,'F')&&isOn(k,'T'))cascade(p,i,h);});
+  else rows.forEach(function(r,i){var k=p+'_'+i;if(kids(h,i)&&!isOn(k,'F')&&!isOn(k,'T'))uncascade(p,i,h);});
+  saveChecked();renderTable();
+};
+var _rt=renderTable;
+renderTable=function(){var r=_rt.apply(this,arguments);try{decorate();}catch(e){console.error('STG',e);}return r;};
+var _uc=window.updateCounts;
+if(typeof _uc==='function')window.updateCounts=function(){var r=_uc.apply(this,arguments);try{decorate();}catch(e){console.error('STG',e);}return r;};
+var _ps=window.projStats;
+/* statistik dashboard: samakan dengan aturan kolom kiri (assy butuh Fab & Prep + FAT) */
+if(typeof _ps==='function')window.projStats=function(p){
+  var m=_ps.apply(this,arguments);
+  try{var rows=projectData[p]||[],h=hier(p);
+    for(var i=0;i<rows.length;i++){
+      var c0=!!checkedState[p+'_'+i],d=leftOn(p,i,h);
+      if(c0===d)continue;
+      var dl=d?1:-1;
+      if(String((rows[i]&&rows[i].level)||'').charAt(0)==='\u25b6')m.mainChecked+=dl;else m.compChecked+=dl;
+    }
+  }catch(e){}
+  return m;
+};
+window.QCStage={decorate:decorate,stage:stage,gate:function(p,i,s){return gate(p,i,s,hier(p));},leftOn:function(p,i){return leftOn(p,i,hier(p));}};
 })();
 </script>
 
