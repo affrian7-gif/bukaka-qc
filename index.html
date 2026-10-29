@@ -17076,6 +17076,7 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
           '<div class="wd-card"><h5>3 · AI hitung keliling las (opsional)</h5>'+
             '<div style="color:#bcd4f0">Gemini membaca simbol las &amp; dimensi di <b>seluruh halaman drawing</b>, menghitung <b>keliling pengelasan</b> tiap sambungan (mis. 2×(P+L) atau π×D) lalu menjumlahkannya. Hanya dimensi yang tertulis di gambar yang dipakai. Hasil berupa <b>saran</b> — cek tiap angka.</div>'+
             '<div class="wd-row"><button class="wd-btn" type="button" data-w="ai" style="flex:1">🤖 Hitung keliling total las</button><button class="wd-btn" type="button" data-w="aipg" title="Hanya halaman yang sedang tampil">Hal. ini</button><button class="wd-btn" type="button" data-w="aicfg">⚙️</button></div>'+
+            '<label style="display:flex;gap:6px;align-items:center;margin-top:6px;font-size:.72rem;text-transform:none;letter-spacing:0;color:#bcd4f0"><input type="checkbox" id="wdAuto"> Hitung otomatis saat drawing dibuka</label>'+
             '<div id="wdAiCfg" style="display:none;margin-top:6px"><input type="password" id="wdKey" placeholder="Gemini API key (AIza…)" autocomplete="off"><input type="text" id="wdModel" placeholder="model (default gemini-3.8-flash)" style="margin-top:5px"><div style="margin-top:4px;color:#8fb0d3;font-size:.66rem">Gratis: buat key di aistudio.google.com/apikey. Key hanya disimpan di browser ini. Gambar halaman dikirim ke Google Gemini saat tombol AI ditekan.</div><div class="wd-row"><button class="wd-btn" type="button" data-w="aisave">Simpan</button></div></div>'+
             '<div id="wdAiOut"></div></div>'+
         '</div>'+
@@ -17087,6 +17088,8 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
     var q = function(s){ return el.querySelector(s); };
     var view = q('#wdView'), stage = q('#wdStage'), cv = q('#wdCv'), svg = q('#wdSvg'), msg = q('#wdMsg');
     q('#wdQ').textContent = opt.qty();
+    q('#wdAuto').checked = aiCfg().auto!==false;
+    q('#wdAuto').addEventListener('change', function(){ aiSet({auto:this.checked}); });
     function say(h){ msg.style.display='flex'; msg.firstChild.innerHTML = h; }
     function hide(){ msg.style.display='none'; }
     function curK(){ return W.kind==='img' && !W.kp[W.pg] ? null : (W.kp[W.pg]||null); }
@@ -17111,11 +17114,11 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
       var L = await window.iq.pdfjs();
       if(W.pdf){ try{ W.pdf.destroy(); }catch(e){} }
       W.pdf = await L.getDocument({data:new Uint8Array(buf.slice(0))}).promise;
-      W.kind='pdf'; W.np=W.pdf.numPages; W.img=null; await gotoPage(1, true);
+      W.kind='pdf'; W.np=W.pdf.numPages; W.img=null; W.autoDone=false; W.bom=null; await gotoPage(1, true); setTimeout(autoAI, 400);
     }
     function openImg(file){
       return new Promise(function(ok,no){
-        var im = new Image(); im.onload=function(){ W.kind='img'; W.img=im; W.pdf=null; W.np=1; W.w=im.naturalWidth; W.h=im.naturalHeight; W.pg=1; fit(); render(); ok(); };
+        var im = new Image(); im.onload=function(){ W.kind='img'; W.img=im; W.pdf=null; W.np=1; W.w=im.naturalWidth; W.h=im.naturalHeight; W.pg=1; W.autoDone=false; W.bom=null; fit(); render(); ok(); setTimeout(autoAI, 600); };
         im.onerror=function(){ no(new Error('Gambar tidak bisa dibuka')); };
         im.src = URL.createObjectURL(file);
       });
@@ -17262,7 +17265,7 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
     }
     async function pageText(){
       if(W.kind!=='pdf') return '';
-      try{ var t = await W.page.getTextContent(); return t.items.map(function(i){return i.str;}).filter(function(s){return s&&s.trim();}).join(' ').slice(0,6000); }catch(e){ return ''; }
+      try{ var t = await W.page.getTextContent(); return t.items.map(function(i){return i.str;}).filter(function(s){return s&&s.trim();}).join(' ').slice(0,14000); }catch(e){ return ''; }
     }
     /* ----- AI: hitung keliling total pengelasan ----- */
     function aiLen(x){
@@ -17286,36 +17289,42 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
     }
     function aiMul(x){ return (x.sides===2?2:1) * (x.count>1?Math.round(x.count):1); }
     function aiTot(){
-      var t = 0, n = 0;
-      el.querySelectorAll('[data-ai]:checked').forEach(function(cb){ var x = W.ai[+cb.dataset.ai]; if(x && x._len>0){ t += x._len*aiMul(x); n++; } });
-      var sm = q('#wdAiSum'); if(sm) sm.innerHTML = 'Σ keliling total las (yang dicentang): <b style="font-size:1rem">'+nf(Math.round(t))+' mm</b> · '+n+' sambungan';
+      var t = 0, ts = 0, ta = 0, n = 0;
+      W.ai.forEach(function(x){ if(x && x._len>0){ var v = x._len*aiMul(x); t += v; if(x._asm) ta += v; else ts += v; n++; } });
+      var sm = q('#wdAiSum');
+      if(sm) sm.innerHTML = 'Σ keliling total las: <b style="font-size:1rem">'+nf(Math.round(t))+' mm</b> ('+nf(Math.round(t)/1000,2)+' m) · '+n+' sambungan'+
+        '<br><span style="font-size:.72rem;color:#bcd4f0">✔ pasti dari drawing/BOM: <b>'+nf(Math.round(ts))+' mm</b> &nbsp;·&nbsp; ≈ berdasarkan asumsi: <b>'+nf(Math.round(ta))+' mm</b></span>';
       return t;
     }
-    el.addEventListener('change', function(e){ if(e.target && e.target.dataset && e.target.dataset.ai!==undefined) aiTot(); });
-    async function askPage(c, pgNo, found){
-      var imgs = await pageImage(), txt = await pageText();
-      var prompt =
-        'You are assisting a QC welding inspector. GOAL: compute the TOTAL WELD LENGTH ("keliling pengelasan") on this fabrication drawing, joint by joint, from the dimensions printed on the drawing.\n'+
-        'Drawing: '+(dw.code||'')+' '+(dw.name||'')+(dw.parent?(' (assembly: '+dw.parent+')'):'')+(dw.mat?(', material '+dw.mat):'')+'. Page '+pgNo+' of '+W.np+'.\n'+
-        'You receive IMAGE 1 = the whole page, followed by '+(imgs.length-1)+' zoomed, overlapping crops of the same page (left-to-right, top-to-bottom) so small symbols and dimension numbers are legible. Study every crop.\n'+
-        'STEP 1: find every weld symbol/note (leader arrow + reference line, fillet triangle with size number, groove/bevel, circle = weld all around, flag = field weld, TYP = typical).\n'+
-        'STEP 2: for each distinct welded joint decide the weld PATH and read the dimensions that define it (dimension lines, notes, PDF text):\n'+
-        ' - straight weld: shape "line", dims_mm = [its length].\n'+
-        ' - weld all around a rectangular plate / tube / frame: shape "rectangle", dims_mm = [width, height].\n'+
-        ' - weld all around a round part / pipe / hole: shape "circle", dims_mm = [diameter at the weld].\n'+
-        ' - any other path (L, U, stepped, several edges): shape "polyline", dims_mm = the length of EVERY welded edge.\n'+
-        ' - intermittent weld written like 50-150: set stitch_seg_mm=50 and stitch_pitch_mm=150 (dims_mm is then the full run length).\n'+
-        'STEP 3: sides = 2 if the weld is made on both sides of the joint (symbols on both sides of the reference line / stacked numbers) else 1. count = how many identical joints this one symbol stands for (TYP, left/right pairs, quantity notes, repeated identical items) else 1.\n'+
-        'RULES: use ONLY dimensions printed on the drawing or in the PDF text; convert to mm (inch x 25.4). NEVER estimate a length from pixel size or by eye. If a needed dimension is not readable, set dims_mm to [] and say in "missing" what is lacking. Report dimensions only: do NOT compute perimeters or totals yourself. List each distinct joint once even when it appears in several views. Ignore bolts, holes and other non-weld items. Do not answer "no welds" when any weld symbol is visible.\n'+
-        (found.length?('Already listed from earlier pages (skip duplicates): '+found.slice(-60).join('; ')+'\n'):'')+
-        (txt?('Text extracted from the PDF page (use it to read dimensions exactly):\n'+txt+'\n'):'')+
-        'Answer with ONLY JSON: {"scale":string|null,"welds":[{"label":string,"view":string,"joint":string,"symbol":string,"shape":"line"|"rectangle"|"circle"|"polyline","dims_mm":number[],"stitch_seg_mm":number|null,"stitch_pitch_mm":number|null,"all_around":boolean,"sides":1|2,"count":number,"typ":boolean,"confidence":"high"|"medium"|"low","basis":string,"missing":string}],"notes":string}';
+    function bomHtml(){
+      var b = (W.bom && W.bom.bom) || [];
+      if(!b.length) return '<div style="color:#8fb0d3;font-size:.7rem;margin-bottom:4px">BOM tidak terbaca dari drawing — ukuran komponen hanya dari dimensi di gambar.</div>';
+      return '<details style="margin:4px 0"><summary style="cursor:pointer;color:#bcd4f0">BOM terbaca ('+b.length+' komponen)</summary>'+
+        b.map(function(r){ return '<div style="font-size:.7rem;color:#8fb0d3">'+esc([r.item,r.name,r.spec,(r.dims_mm&&r.dims_mm.length?r.dims_mm.join(' × '):''),(r.qty!=null?('qty '+r.qty):'')].filter(function(v){return v!=null&&v!=='';}).join(' · '))+'</div>'; }).join('')+'</details>';
+    }
+    /* render 1 halaman utuh (tanpa mengubah halaman yang sedang tampil) + teks PDF-nya */
+    async function overview(pgNo, maxPx){
+      var c = document.createElement('canvas'), x, w, h, sc, txt = '';
+      if(W.kind==='pdf'){
+        var pg = await W.pdf.getPage(pgNo), vp = pg.getViewport({scale:1}); w = vp.width; h = vp.height; sc = Math.min(maxPx/Math.max(w,h), 8);
+        c.width = Math.max(1,Math.round(w*sc)); c.height = Math.max(1,Math.round(h*sc));
+        x = c.getContext('2d'); x.fillStyle='#fff'; x.fillRect(0,0,c.width,c.height);
+        await pg.render({canvasContext:x, viewport:pg.getViewport({scale:sc})}).promise;
+        try{ var tc = await pg.getTextContent(); txt = tc.items.map(function(i){ return i.str; }).filter(function(v){ return v&&v.trim(); }).join(' '); }catch(e){}
+      } else {
+        w = W.w; h = W.h; sc = Math.min(maxPx/Math.max(w,h), 8);
+        c.width = Math.max(1,Math.round(w*sc)); c.height = Math.max(1,Math.round(h*sc));
+        x = c.getContext('2d'); x.fillStyle='#fff'; x.fillRect(0,0,c.width,c.height); x.drawImage(W.img,0,0,c.width,c.height);
+      }
+      return {img:c.toDataURL('image/jpeg',0.9).split(',')[1], text:txt};
+    }
+    async function gem(c, prompt, imgs){
       var mdl = c.model||'gemini-3.8-flash', res, js;
       for(var tr=0; tr<2; tr++){
-        var ac = new AbortController(), to = setTimeout(function(){ ac.abort(); }, 120000);
+        var ac = new AbortController(), to = setTimeout(function(){ ac.abort(); }, 150000);
         res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(mdl)+':generateContent?key='+encodeURIComponent(c.key), {method:'POST', signal:ac.signal,
           headers:{'content-type':'application/json'},
-          body:JSON.stringify({contents:[{role:'user', parts:[{text:prompt}].concat(imgs.map(function(d){return {inline_data:{mime_type:'image/jpeg', data:d}};}))}], generationConfig:{temperature:0, responseMimeType:'application/json', maxOutputTokens:8000}})});
+          body:JSON.stringify({contents:[{role:'user', parts:[{text:prompt}].concat(imgs.map(function(d){return {inline_data:{mime_type:'image/jpeg', data:d}};}))}], generationConfig:{temperature:0, responseMimeType:'application/json', maxOutputTokens:12000}})});
         clearTimeout(to);
         js = await res.json();
         if(res.status===429 && tr===0){ await new Promise(function(r){ setTimeout(r,25000); }); continue; }
@@ -17327,16 +17336,75 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
       var a = t.indexOf('{'), b = t.lastIndexOf('}'); if(a<0||b<a) throw new Error('Jawaban AI bukan JSON');
       return JSON.parse(t.slice(a,b+1));
     }
-    async function runAI(mode){
+    /* TAHAP 1: baca BOM / title block dari SEMUA sheet sekaligus (seperti membaca drawing utuh) */
+    async function readBom(c){
+      var all = []; for(var p=1; p<=W.np; p++) all.push(p);
+      if(all.length>8) all = all.slice(0,4).concat(all.slice(-4));
+      var imgs = [], texts = [];
+      for(var i=0; i<all.length; i++){ var o = await overview(all[i], 2400); imgs.push(o.img); if(o.text) texts.push('--- SHEET '+all[i]+' ---\n'+o.text.slice(0,9000)); }
+      var prompt =
+        'You are reading a fabrication drawing of a steel structure. IMAGE k = sheet '+all.join(', ')+' (in this order). '+(dw.code?('Drawing: '+dw.code+' '+(dw.name||'')+'. '):'')+'\n'+
+        'TASK: read the BILL OF MATERIAL / parts list (and title block) from ALL sheets and return every BOM row exactly as printed.\n'+
+        'For each row: item (balloon/item no.), name, spec (material/grade/size text as printed), qty (number as printed, null if unreadable), shape ("pipe"|"plate"|"bar"|"profile"|"other") and dims_mm in mm: pipe = [outside diameter, length]; plate = [thickness, width, length]; bar/profile = [length] (put the section size in spec). Pipe sizes written in inches (e.g. 28 inch) are OUTSIDE DIAMETER in inches: multiply by 25.4. Convert any inch value to mm. Copy numbers exactly; never invent a row or a number.\n'+
+        (texts.length?('Text extracted from the PDF (use it to read the BOM exactly):\n'+texts.join('\n').slice(0,20000)+'\n'):'')+
+        'Answer with ONLY JSON: {"drawing_title":string,"bom":[{"item":string,"name":string,"spec":string,"qty":number|null,"shape":string,"dims_mm":number[],"note":string}],"notes":string}';
+      return await gem(c, prompt, imgs);
+    }
+    /* TAHAP 2: hitung keliling las tiap sambungan di satu halaman, dengan konteks BOM */
+    async function askPage(c, pgNo, found){
+      var imgs = await pageImage(), txt = await pageText();
+      var bomJson = JSON.stringify((W.bom&&W.bom.bom)||[]).slice(0,7000);
+      var prompt =
+        'You are an experienced fabrication estimator and QC welding inspector. GOAL: compute the TOTAL WELD LENGTH ("keliling pengelasan") of the welds on this sheet, joint by joint.\n'+
+        'Drawing: '+(dw.code||'')+' '+(dw.name||'')+(dw.parent?(' (assembly: '+dw.parent+')'):'')+(dw.mat?(', material '+dw.mat):'')+'. Sheet '+pgNo+' of '+W.np+'.\n'+
+        'BILL OF MATERIAL of this drawing, read from all sheets (use it as the source of part sizes and quantities): '+(bomJson==='[]'?'(not available)':bomJson)+'\n'+
+        'You receive IMAGE 1 = the whole sheet, then '+(imgs.length-1)+' zoomed overlapping crops (left-to-right, top-to-bottom) so small symbols and dimensions are legible. Study every crop.\n'+
+        'STEP 1: find every weld symbol/note (leader + reference line, fillet triangle with size, groove/bevel, circle = all around, flag = field weld, TYP) and which BOM parts each one joins (balloon numbers).\n'+
+        'STEP 2: decide the weld PATH of each joint and give the dimensions of that path in dims_mm:\n'+
+        ' - pipe/round part welded to a plate (or pipe to pipe): shape "circle", dims_mm = [outside diameter] (use the BOM pipe OD).\n'+
+        ' - plate welded all around: shape "rectangle", dims_mm = [width, length] from the BOM or the drawing.\n'+
+        ' - plate welded to another part (stiffener, gusset, lug): the weld normally runs along every edge that touches the other part(s), e.g. a stiffener touches the pipe along one edge and the base plate along another: shape "polyline", dims_mm = the length of each touching edge, taken from the BOM size / dimensions in the view.\n'+
+        ' - straight weld: shape "line", dims_mm = [length].  Intermittent weld like 50-150: stitch_seg_mm=50, stitch_pitch_mm=150 (dims_mm = full run).\n'+
+        'STEP 3: sides = 2 if the weld is made on both sides of the joint (symbols on both sides of the reference line, stacked numbers, or a plate welded on both faces) else 1. count = number of identical joints/parts in the WHOLE assembly: use the BOM quantity (e.g. 4 pcs stiffener = 4), TYP or L/R pairs; count each BOM item once even if it appears in several views.\n'+
+        'SOURCES: dims_source = "drawing" (printed in the views), "bom" (from the BOM) or "assumed" (you had to assume WHICH edges are welded, or the symbol does not say). When assumed, set assumed=true and explain in "assumption" (e.g. "las dianggap sepanjang 2 sisi plat yang menempel pada pipa dan bottom plate"). Prefer an assumed estimate with a clear explanation over skipping a weld. But NEVER invent a number that is neither on the drawing nor in the BOM: then dims_mm=[] and explain in "missing".\n'+
+        'Convert all values to mm (inch x 25.4). Report dimensions only: do NOT compute perimeters or totals yourself. List each distinct joint once. Ignore bolts, holes and non-weld items. Do not answer "no welds" when a weld symbol is visible.\n'+
+        (found.length?('Already listed from earlier sheets (skip duplicates): '+found.slice(-60).join('; ')+'\n'):'')+
+        (txt?('Text extracted from this sheet (use it to read dimensions exactly):\n'+txt+'\n'):'')+
+        'Answer with ONLY JSON: {"scale":string|null,"welds":[{"label":string,"view":string,"joint":string,"symbol":string,"shape":"line"|"rectangle"|"circle"|"polyline","dims_mm":number[],"stitch_seg_mm":number|null,"stitch_pitch_mm":number|null,"all_around":boolean,"sides":1|2,"count":number,"typ":boolean,"dims_source":"drawing"|"bom"|"assumed","assumed":boolean,"assumption":string,"confidence":"high"|"medium"|"low","basis":string,"missing":string}],"notes":string}';
+      return await gem(c, prompt, imgs);
+    }
+    function aiAddAll(){
+      var added = 0;
+      W.ai.forEach(function(x){ if(!x || !(x._len>0) || x._added) return; x._added = true;
+        W.welds.push({n:[x.label,x.view,x.joint].filter(Boolean).join(' · ')+' ['+(x.shape||'')+(x.confidence?', '+x.confidence:'')+(x._asm?', ASUMSI':'')+']', pts:null, pg:x._pg||W.pg, mm:x._len, sd:x.sides===2?2:1, ct:(x.count>1?Math.round(x.count):1), src:'ai'}); added++; });
+      return added;
+    }
+    function autoAI(){
+      var c = aiCfg(), out = q('#wdAiOut');
+      if(!document.body.contains(el) || W.autoDone || !W.w) return;
+      if(c.auto===false) return;
+      if(W.welds.length) return;                 /* sudah ada daftar las: jangan ditimpa */
+      if(!c.key){ out.innerHTML = '<div class="wd-warn" style="margin-top:6px">Agar keliling las terhitung otomatis, isi API key Gemini dulu (tombol ⚙️).</div>'; return; }
+      W.autoDone = true; runAI('all', true);
+    }
+    async function runAI(mode, auto){
       var c = aiCfg(), out = q('#wdAiOut');
       if(!c.key){ q('#wdAiCfg').style.display='block'; out.innerHTML='<div class="wd-warn" style="margin-top:6px">Isi API key dulu.</div>'; return; }
       if(!W.w){ out.innerHTML='<div class="wd-warn" style="margin-top:6px">Drawing belum dimuat.</div>'; return; }
       var orig = W.pg, pages = [];
       if(mode==='page') pages = [W.pg]; else for(var p=1; p<=W.np; p++) pages.push(p);
-      if(pages.length>12 && !confirm('Drawing ini '+pages.length+' halaman — AI akan membaca semuanya (lama & memakai kuota). Lanjut?')) return;
+      if(pages.length>12){
+        if(auto){ out.innerHTML = '<div class="wd-warn" style="margin-top:6px">Drawing ini '+pages.length+' halaman — tidak dihitung otomatis. Tekan 🤖 untuk menghitung manual.</div>'; return; }
+        if(!confirm('Drawing ini '+pages.length+' halaman — AI akan membaca semuanya (lama & memakai kuota). Lanjut?')) return;
+      }
       var btns = el.querySelectorAll('[data-w="ai"],[data-w="aipg"]'); btns.forEach(function(b){ b.disabled = true; });
       W.ai = []; var notes = [], found = [], scales = [];
       try{
+        if(!W.bom){
+          out.innerHTML = '<div style="margin-top:6px;color:#c4b5fd">⏳ AI membaca BOM &amp; seluruh sheet drawing… (30–90 detik)</div>';
+          try{ W.bom = await readBom(c); }
+          catch(er){ var bm = (er&&er.name==='AbortError') ? 'waktu habis' : (er&&er.message||String(er)); notes.push('BOM tidak terbaca: '+bm); if(/API key|HTTP 40[13]|permission|not valid|PERMISSION_DENIED/i.test(bm)) throw er; }
+        }
         for(var k=0; k<pages.length; k++){
           if(!document.body.contains(el)) return;
           out.innerHTML = '<div style="margin-top:6px;color:#c4b5fd">⏳ AI menghitung keliling las — halaman '+pages[k]+' ('+(k+1)+'/'+pages.length+')… (20–60 detik per halaman)</div>'+(W.ai.length?'<div id="wdAiSum" style="margin-top:4px;color:#bcd4f0"></div>':'');
@@ -17346,7 +17414,7 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
             if(o.scale) scales.push('hal. '+pages[k]+': '+o.scale);
             if(o.notes) notes.push('Hal. '+pages[k]+': '+o.notes);
             (o.welds||[]).filter(function(x){ return x; }).forEach(function(x){
-              x._pg = pages[k]; x._len = aiLen(x); W.ai.push(x); if(x.label) found.push(x.label);
+              x._pg = pages[k]; x._len = aiLen(x); x._asm = !!(x.assumed || x.dims_source==='assumed'); W.ai.push(x); if(x.label) found.push(x.label);
             });
           }catch(er){
             var em = (er&&er.name==='AbortError') ? 'waktu habis' : (er&&er.message||String(er));
@@ -17356,19 +17424,20 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
         }
         if(W.pg!==orig && document.body.contains(el)) await gotoPage(orig);
         var h = '<div style="margin-top:8px"><b>Saran AI</b> — '+pages.length+' halaman dibaca'+(scales.length?' · skala: '+esc(scales.join('; ')):'')+' <span class="wd-warn">— verifikasi dulu!</span></div>';
-        h += '<div id="wdAiSum" style="margin:6px 0;padding:6px 8px;border-radius:8px;background:rgba(124,58,237,.15);color:#e9e2ff"></div>';
+        h += '<div id="wdAiSum" style="margin:6px 0;padding:6px 8px;border-radius:8px;background:rgba(124,58,237,.15);color:#e9e2ff"></div>'+bomHtml();
         if(!W.ai.length) h += '<div style="color:#8fb0d3;margin-top:4px">AI tidak menemukan las pada halaman yang dibaca. Coba pilih halaman detail/section lalu tekan <b>Hal. ini</b>.</div>';
         W.ai.forEach(function(x,i){
           var ok = x._len>0, mul = aiMul(x);
-          h += '<div class="wd-ai"><label><input type="checkbox" data-ai="'+i+'"'+(ok?' checked':'')+'><span><b>'+esc(x.label||('Las '+(i+1)))+'</b> <span style="color:#8fb0d3">· hal. '+x._pg+(x.view?' · '+esc(x.view):'')+'</span><br>'+
+          h += '<div class="wd-ai"><label style="cursor:default"><span style="margin-right:6px;color:'+(ok?(x._asm?'#f59e0b':'#22c55e'):'#ef4444')+'">'+(ok?(x._asm?'≈':'✔'):'⚠')+'</span><span><b>'+esc(x.label||('Las '+(i+1)))+'</b> <span style="color:#8fb0d3">· hal. '+x._pg+(x.view?' · '+esc(x.view):'')+'</span><br>'+
             (ok ? 'keliling = '+esc(aiFormula(x))+' = <b>'+nf(x._len,1)+' mm</b>'+(mul>1?' × '+(x.sides===2?'2 sisi':'')+((x.sides===2&&x.count>1)?' × ':'')+(x.count>1?Math.round(x.count)+' titik':'')+' = <b>'+nf(Math.round(x._len*mul*10)/10,1)+' mm</b>':'')
                 : '<i style="color:#fbbf24">dimensi tidak terbaca'+(x.missing?': '+esc(x.missing):'')+' — tidak dihitung</i>')+
-            '<br><span style="color:#bcd4f0">'+esc([x.joint,x.symbol,x.all_around?'all around':'',x.typ?'TYP':''].filter(Boolean).join(' · '))+'</span>'+
+            '<br><span style="color:#bcd4f0">'+esc([x.joint,x.symbol,x.all_around?'all around':'',x.typ?'TYP':'',x._asm?('ASUMSI: '+(x.assumption||'')):''].filter(Boolean).join(' · '))+'</span>'+
             '<br><span style="color:#8fb0d3">'+esc(x.confidence||'')+' · '+esc(x.basis||'')+'</span></span></label></div>';
         });
-        if(W.ai.some(function(x){ return x._len>0; })) h += '<div class="wd-row"><button class="wd-btn" type="button" data-w="aiadd" style="flex:1">＋ Masukkan yang dicentang ke daftar</button></div>';
+        if(auto){ var nAdd = aiAddAll(); if(nAdd) h += '<div class="wd-ok" style="margin-top:6px">✅ '+nAdd+' sambungan otomatis masuk ke daftar las. Periksa angkanya, lalu <b>Terapkan ke form</b>.</div>'; }
+        else if(W.ai.some(function(x){ return x._len>0 && !x._added; })) h += '<div class="wd-row"><button class="wd-btn" type="button" data-w="aiadd" style="flex:1">＋ Masukkan semua ke daftar</button></div>';
         if(notes.length) h += '<div style="margin-top:6px;color:#8fb0d3;font-size:.7rem">'+notes.map(esc).join('<br>')+'</div>';
-        out.innerHTML = h; aiTot();
+        out.innerHTML = h; aiTot(); drawList();
       }catch(e){
         out.innerHTML = '<div class="wd-warn" style="margin-top:6px">⚠️ '+esc(e&&e.name==='AbortError'?'Waktu habis':(e&&e.message||e))+(/Failed to fetch|NetworkError/i.test(String(e&&e.message))?' — periksa koneksi internet / API key.':'')+'</div>';
       }finally{ btns.forEach(function(b){ b.disabled = false; }); }
@@ -17403,8 +17472,7 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
       else if(a==='aisave'){ aiSet({key:q('#wdKey').value.trim(), model:q('#wdModel').value.trim()||'gemini-3.8-flash'}); q('#wdAiCfg').style.display='none'; flash('API key tersimpan di browser ini.'); }
       else if(a==='ai') runAI('all');
       else if(a==='aipg') runAI('page');
-      else if(a==='aiadd'){ var added = 0; el.querySelectorAll('[data-ai]:checked').forEach(function(cb){ var x = W.ai[+cb.dataset.ai]; if(!x || !(x._len>0)) return;
-          W.welds.push({n:[x.label,x.view,x.joint].filter(Boolean).join(' · ')+' ['+(x.shape||'')+(x.confidence?', '+x.confidence:'')+']', pts:null, pg:x._pg||W.pg, mm:x._len, sd:x.sides===2?2:1, ct:(x.count>1?Math.round(x.count):1), src:'ai'}); added++; });
+      else if(a==='aiadd'){ var added = aiAddAll();
         q('#wdAiOut').innerHTML='<div class="wd-ok" style="margin-top:6px">'+added+' sambungan masuk ke daftar (panjang = keliling per titik; sisi &amp; jumlah titik sudah terisi). Periksa angkanya, lalu <b>Terapkan ke form</b>.</div>'; drawList(); }
       else if(a==='apply'){
         var t = total(), qn = opt.qty(), mul = q('#wdMul').checked;
