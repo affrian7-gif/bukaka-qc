@@ -16127,6 +16127,14 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
   '.wi-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}'+
   '.wi-form label{display:flex;flex-direction:column;gap:4px;font-size:.66rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#9db8d8}'+
   '.wi-form .full{grid-column:1/-1}'+
+  '.wi-ost{border:1px dashed rgba(251,191,36,.5);border-radius:10px;padding:10px;background:rgba(251,191,36,.05)}'+
+  '.wi-osth{font-size:.66rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#fbbf24;margin-bottom:8px}'+
+  '.wi-osadd{display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:start}'+
+  '.wi-osadd button{padding:8px 12px;border-radius:8px;border:0;background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff;font-weight:700;cursor:pointer;white-space:nowrap}'+
+  '.wi-osi{display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid rgba(110,170,235,.15);font-size:.8rem;text-transform:none;letter-spacing:0;font-weight:600;color:#e6f0ff}'+
+  '.wi-osi input{width:auto!important}.wi-osi.dn .t{text-decoration:line-through;opacity:.55}.wi-osi small{color:#8fb0d3}'+
+  '.wi-osi button{border:0;background:#b91c1c;color:#fff;border-radius:6px;padding:2px 8px;cursor:pointer}'+
+  '@media (max-width:700px){.wi-osadd{grid-template-columns:1fr}}'+
   '.wi-form input,.wi-form select,.wi-form textarea{width:100%;padding:8px 9px;border-radius:8px;font-size:13px;font-family:inherit}'+
   '.wi-form .chk{display:flex;gap:14px;flex-wrap:wrap;padding:6px 0;text-transform:none;letter-spacing:0;font-size:.82rem;font-weight:700;color:#e6f0ff}'+
   '.wi-form .chk label{flex-direction:row;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-size:.82rem;color:#e6f0ff}'+
@@ -16191,10 +16199,10 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
   '.wd-card input,.wd-card select{padding:6px 8px;border-radius:7px;font-size:12px;width:100%;box-sizing:border-box}'+
   '.wd-row{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}'+
   '.wd-row>*{min-width:0}'+
-  '.wd-w{display:grid;grid-template-columns:auto 1fr auto auto;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid rgba(110,170,235,.15)}'+
+  '.wd-w{display:grid;grid-template-columns:auto 1fr auto auto auto;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid rgba(110,170,235,.15)}'+
   '.wd-w{padding-left:4px!important}.wd-w.sel{background:rgba(245,158,11,.15)}'+
   '.wd-w b{color:#fbbf24;cursor:pointer}'+
-  '.wd-w select{width:62px!important}'+
+  '.wd-w select{width:74px!important}'+
   '.wd-w button{padding:3px 7px;border-radius:6px;border:0;background:#b91c1c;color:#fff;cursor:pointer}'+
   '.wd-w .m{grid-column:1/-1;font-size:.64rem;color:#8fb0d3}'+
   '.wd-tot{font-size:1rem;font-weight:800;color:#fbbf24}'+
@@ -16243,6 +16251,7 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
       '<div class="wi-seg" id="wiSubs">'+
         '<button type="button" data-sub="dash" class="on">📊 Dashboard</button>'+
         '<button type="button" data-sub="data">📋 Data Inspeksi</button>'+
+        '<button type="button" data-sub="out">⚠️ Outstanding <span id="wiOutCnt"></span></button>'+
       '</div>'+
     '</div>'+
     '<p class="wi-note">Record berkegiatan “Visual, MPI” dihitung di tab WI maupun NDT. Repair rate = total panjang repair ÷ total panjang pengelasan yang diinspeksi.</p>'+
@@ -16445,8 +16454,35 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
     '</div>';
   }
 
+  /* ---------- Outstanding (format standar modul 📌 Outstanding, per Project + Marking ID) ---------- */
+  function wiOutItems(rows){
+    var Q=window.QCOut; if(!Q||!Q.scopeWi) return [];
+    var g={}, out=[];
+    rows.forEach(function(r){ var k=(normTxt(r.p)+'|'+normTxt(r.m)).toLowerCase(); (g[k]=g[k]||{p:r.p,m:r.m,ids:[]}).ids.push(r.id); });
+    Object.keys(g).forEach(function(k){ var G=g[k]; Q.scopeWi(G.p,G.m,G.ids).forEach(function(it){ out.push({p:G.p,m:G.m,rid:G.ids[G.ids.length-1],it:it}); }); });
+    return out;
+  }
+  function updOutCnt(rows){
+    var oc=0; try{ oc=wiOutItems(rows).filter(function(x){return x.it.st!=='CLOSE';}).length; }catch(e){}
+    if($('wiOutCnt')) $('wiOutCnt').textContent = oc? '('+oc+')' : '';
+  }
+  /* outstanding lama yang tersimpan di dalam record -> dipindah ke format Outstanding standar (sekali jalan) */
+  var _mig=false;
+  function migrateOld(){
+    if(_mig || !window.QCOut || !window.QCOut.importWi) return;
+    _mig=true;
+    try{
+      allRecords().filter(function(r){ return r.o && r.o.length; }).forEach(function(r){
+        window.QCOut.importWi(r.p, r.m, r.o, r.id);
+        var c=JSON.parse(JSON.stringify(r)); delete c.wi; delete c.ndt; delete c.cat; c.o=[]; saveRec(c,true);
+      });
+    }catch(e){ console.warn('[WI outstanding migrate]',e); }
+    _mig=false;
+  }
+
   /* ---------- render ---------- */
   function render(){
+    migrateOld();
     buildFilters();
     var rows = filtered();
     $('wiBody').innerHTML = kpiHtml(rows) + (UI.sub==='dash'
@@ -16456,9 +16492,10 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
           '<div class="wi-panel c4"><h3>Metode Inspeksi</h3>'+methodBars(rows)+'<h3 style="margin-top:16px">Record per Inspektor</h3>'+inspBars(rows)+'</div>'+
           '<div class="wi-panel c8"><h3>Ringkasan per Bulan</h3>'+monthTable(rows)+'</div>'+
         '</div>'+ '<div class="wi-grid">'+rankPanel(rows)+'</div>'
-      : '<div class="wi-grid">'+dataTable(rows)+'</div>');
+      : UI.sub==='out' ? outView(rows) : '<div class="wi-grid">'+dataTable(rows)+'</div>');
     $('wiTabs').querySelectorAll('button').forEach(function(b){ b.classList.toggle('on', b.dataset.tab===F.tab); });
     $('wiSubs').querySelectorAll('button').forEach(function(b){ b.classList.toggle('on', b.dataset.sub===UI.sub); });
+    updOutCnt(rows);
     refreshMenuCard();
   }
 
@@ -16484,9 +16521,10 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
       '<dt>Kode Project</dt><dd>'+esc(r.p)+'</dd>'+
       '<dt>Shop Area</dt><dd>'+esc(r.s)+'</dd>'+
       '<dt>Marking ID</dt><dd><b>'+esc(r.m)+'</b> &nbsp;·&nbsp; Qty '+nf(r.q)+'</dd>'+
-      (r.dw?'<dt>Drawing</dt><dd>'+(hasLink(r.dw.link)?'<a href="'+esc(r.dw.link)+'" target="_blank" rel="noopener" style="color:#93c5fd">'+esc(r.dw.code)+' ↗</a>':esc(r.dw.code))+(r.dw.name&&r.dw.name!==r.dw.code?' — '+esc(r.dw.name):'')+(wdSummary(r.dw.wm).n?' · '+wdSummary(r.dw.wm).n+' las terukur = '+nf(wdSummary(r.dw.wm).tot)+' mm/unit':'')+'</dd>':'')+
+      (r.dw?'<dt>Drawing</dt><dd>'+(hasLink(r.dw.link)?'<a href="'+esc(r.dw.link)+'" target="_blank" rel="noopener" style="color:#93c5fd">'+esc(r.dw.code)+' ↗</a>':esc(r.dw.code))+(r.dw.name?' — <b>'+esc(r.dw.name)+'</b>':'')+[r.dw.no?'Item '+esc(r.dw.no):'', r.dw.mat?esc(r.dw.mat):'', r.dw.parent?'induk: '+esc(r.dw.parent):''].filter(Boolean).map(function(x){return '<br><span style="color:#8fb0d3;font-size:.74rem">'+x+'</span>';}).join('')+(wdSummary(r.dw.wm).n?' · '+wdSummary(r.dw.wm).n+' las terukur = '+nf(wdSummary(r.dw.wm).tot)+' mm/unit':'')+'</dd>':'')+
       '<dt>Subkon + Line</dt><dd>'+esc(r.u)+'</dd>'+
       '<dt>Welder ID</dt><dd>'+esc(r.w)+'</dd>'+
+      (function(){ var L=(window.QCOut&&window.QCOut.scopeWi)?window.QCOut.scopeWi(r.p,r.m,[r.id]):[]; return L.length?'<dt>Outstanding</dt><dd>'+L.map(function(i){return (i.st==='CLOSE'?'✅ ':'⏳ ')+esc(i.cm||i.lbl||'')+' <small>('+esc([i.prc,i.cat,i.pic].filter(Boolean).join(' · '))+')</small>';}).join('<br>')+'</dd>':''; })()+
       '<dt>Kegiatan</dt><dd>'+r.a.map(function(a){return '<span class="act '+esc(a)+'">'+esc(a)+'</span>';}).join('')+'</dd>'+
       '<dt>Panjang diinspeksi</dt><dd>'+nf(r.l)+' mm ('+nf(mm2m(r.l),2)+' m)</dd>'+
       '<dt>Panjang repair</dt><dd>'+nf(r.r)+' mm &nbsp;·&nbsp; repair rate <b style="color:#fbbf24">'+pc(rate,2)+'</b></dd>'+
@@ -16543,6 +16581,62 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
     document.body.appendChild(ov);
   }
 
+  /* ---------- master project, area, panjang las tersimpan, outstanding ---------- */
+  var OCATS = ['Welding','NDT (MPI/UT)','Dimensi / Fit-up','Coating','Dokumen','Lainnya'];
+  var LEN_KEY = 'qc_wi_wlen_v1';
+  function masterProjects(){
+    var a=[]; try{ a=(window.QCCoatMaster&&window.QCCoatMaster())||[]; }catch(e){}
+    if(!a.length && hasPD()) a=Object.keys(projectData).map(function(n){return n.replace(/ - Unit \d+$/,'');}).filter(function(n,i,z){return z.indexOf(n)===i;});
+    if(!a.length) a=uniq(allRecords(),'p');
+    return a;
+  }
+  function projOpts(cur){
+    var a=masterProjects(); cur=cur||'';
+    var h='<option value="">— pilih project dari master —</option>';
+    if(cur && a.indexOf(cur)<0) h+='<option value="'+esc(cur)+'" selected>'+esc(cur)+' (di luar master)</option>';
+    return h+a.map(function(n){ return '<option value="'+esc(n)+'"'+(n===cur?' selected':'')+'>'+esc(n)+'</option>'; }).join('');
+  }
+  function areaOpts(cur){
+    return '<option selected>WSC1</option>';
+  }
+  function lenKey(p,m){ m=normTxt(m).toLowerCase(); return m ? normTxt(p).toLowerCase()+'|'+m : ''; }
+  function lenMem(){ try{ return JSON.parse(localStorage.getItem(LEN_KEY)||'{}')||{}; }catch(e){ return {}; } }
+  function rememberLen(k,v){
+    v=Math.round(+v); if(!k||!(v>0)) return;
+    try{ var m=lenMem(), a=(m[k]||[]).filter(function(e){return e.v!==v;}); a.unshift({v:v,t:nowLocal().replace('T',' ')}); m[k]=a.slice(0,8); localStorage.setItem(LEN_KEY,JSON.stringify(m)); }catch(e){}
+  }
+  function knownLens(k){
+    var map={};
+    function add(v,t){ v=Math.round(+v); if(!(v>0)) return; var o=map[v]||(map[v]={v:v,n:0,t:''}); o.n++; if((t||'')>o.t) o.t=t||''; }
+    allRecords().forEach(function(x){ if(lenKey(x.p,x.m)===k) add(x.l,x.t); });
+    (lenMem()[k]||[]).forEach(function(e){ add(e.v,e.t); });
+    return Object.keys(map).map(function(a){return map[a];}).sort(function(a,b){ return a.t<b.t?1:-1; });
+  }
+  function toggleOut(id){ if(window.QCOut&&window.QCOut.toggle) window.QCOut.toggle(id); render(); }
+  function outView(rows){
+    var fil=UI.ofil||'open', items=wiOutItems(rows), g={};
+    var nOpen=items.filter(function(x){return x.it.st!=='CLOSE';}).length;
+    var chips=[['open','Open ('+nOpen+')'],['done','Selesai ('+(items.length-nOpen)+')'],['all','Semua ('+items.length+')']].map(function(c){
+      return '<button type="button" class="wi-btn sm'+(fil===c[0]?' pri':'')+'" data-ofil="'+c[0]+'">'+c[1]+'</button>'; }).join(' ');
+    items.filter(function(x){ var d=x.it.st==='CLOSE'; return fil==='all' || (fil==='open' ? !d : d); }).forEach(function(x){ var a=x.m||'—'; (g[a]=g[a]||[]).push(x); });
+    var areas=Object.keys(g).sort();
+    function age(it){ var a=Math.round((Date.now()-new Date(it.od))/864e5); return isNaN(a)||a<0?'—':a+' hr'; }
+    var body = areas.length ? areas.map(function(a){
+      var L=g[a].sort(function(p,q){ return ((p.it.st==='CLOSE'?1:0)-(q.it.st==='CLOSE'?1:0)) || (String(q.it.od)<String(p.it.od)?-1:1); });
+      var op=L.filter(function(x){return x.it.st!=='CLOSE';}).length;
+      return '<div class="wi-panel c12"><h3>📐 '+esc(a)+' · '+op+' open · '+(L.length-op)+' selesai</h3><div style="overflow-x:auto"><table class="wi-data"><thead><tr><th>Marking ID</th><th>Project</th><th>Outstanding</th><th>Process / Kategori</th><th>PIC</th><th>Foto</th><th>Tgl Temuan</th><th>Umur</th><th></th></tr></thead><tbody>'+
+        L.map(function(x){ var it=x.it, d=it.st==='CLOSE';
+          return '<tr><td data-l="Marking ID"><b data-oopen="'+esc(x.rid)+'" style="cursor:pointer;text-decoration:underline">'+esc(x.m)+'</b></td><td data-l="Project">'+esc(x.p)+'</td>'+
+            '<td data-l="Outstanding" style="'+(d?'text-decoration:line-through;opacity:.6':'')+'">'+esc(it.cm||it.lbl||'')+'</td><td data-l="Process / Kategori">'+esc([it.prc,it.cat].filter(Boolean).join(' · '))+'</td>'+
+            '<td data-l="PIC">'+esc(it.pic||'')+'</td><td data-l="Foto">'+(it.pb?'📷 B ':'')+(it.pa?'📷 A':'')+'</td>'+
+            '<td data-l="Tgl Temuan">'+(it.od?fmtD(it.od):'')+'</td><td data-l="Umur">'+(d?'✓ '+(it.cd?fmtD(it.cd):''):age(it))+'</td>'+
+            '<td><button type="button" class="wi-btn sm'+(d?'':' grn')+'" data-otg="'+esc(it.id)+'">'+(d?'↺ Buka lagi':'✓ Selesai')+'</button></td></tr>'; }).join('')+
+        '</tbody></table></div></div>';
+    }).join('') : '<div class="wi-panel c12" style="text-align:center;color:#7f9bbd">Belum ada outstanding'+(fil==='open'?' yang open':'')+'. Tambahkan lewat ＋ Tambah Record → bagian Outstanding.</div>';
+    return '<div class="wi-grid"><div class="wi-panel c12" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b style="font-size:.78rem">Outstanding per Marking ID:</b> '+chips+
+      ' <button type="button" class="wi-btn sm" data-oall="1" style="margin-left:auto">📌 Buka tampilan lengkap (Before/After, Export)</button></div>'+body+'</div>';
+  }
+
   /* ---------- form tambah / edit ---------- */
   function nowLocal(){ var d=new Date(); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes()); }
   function formModal(id){
@@ -16554,8 +16648,8 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
       '<div class="wi-form">'+
         '<label>Tanggal &amp; Waktu<input type="datetime-local" id="wf_t" value="'+(r? r.t.replace(' ','T') : nowLocal())+'"></label>'+
         '<label>Nama Inspektor<input list="wl_i" id="wf_i" value="'+val('i')+'" placeholder="Nama inspektor"></label>'+
-        '<label class="full">Kode Project<input list="wl_p" id="wf_p" value="'+val('p')+'" placeholder="mis. 25-EM10014 - Salak 7"></label>'+
-        '<label>Shop Area<input id="wf_s" value="'+(r?esc(r.s):'Shop A')+'"></label>'+
+        '<label class="full">Kode Project<select id="wf_p">'+projOpts(r?r.p:'')+'</select></label>'+
+        '<label>Shop Area<select id="wf_s">'+areaOpts(r?r.s:'WSC1')+'</select></label>'+
         '<label>Qty<input type="number" min="0" id="wf_q" value="'+(r?r.q:1)+'"></label>'+
         '<div class="wi-fld full">Marking ID'+
           '<div class="wi-mkrow"><input id="wf_m" autocomplete="off" value="'+val('m')+'" placeholder="'+(hasPD()?'Cari kode drawing / nama part dari FAT &amp; Fab…':'Marking ID')+'">'+
@@ -16564,12 +16658,14 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
         '<label>Subkon + Line Produksi<input list="wl_u" id="wf_u" value="'+val('u')+'" placeholder="mis. SLN W, B"></label>'+
         '<label>Welder ID<input list="wl_w" id="wf_w" value="'+val('w')+'" placeholder="mis. W-A017"></label>'+
         '<label class="full">Kegiatan Inspeksi<div class="chk">'+ACTS.map(function(a){ return '<label><input type="checkbox" name="wf_a" value="'+a+'"'+((r&&r.a.indexOf(a)>=0)?' checked':'')+'> '+(a==='Visual'?'Visual (WI)':a+' (NDT)')+'</label>'; }).join('')+'</div></label>'+
-        '<label>Panjang Pengelasan Diinspeksi (mm)<input type="number" min="0" id="wf_l" value="'+(r?r.l:'')+'"><span class="wi-lnote" id="wfLnote"></span></label>'+
+        '<label>Panjang Pengelasan Diinspeksi (mm)<select id="wf_lsel" style="display:none"></select><input type="number" min="0" id="wf_l" value="'+(r?r.l:'')+'"><span class="wi-lnote" id="wfLnote"></span></label>'+
         '<label>Panjang Total Repair (mm)<input type="number" min="0" id="wf_r" value="'+(r?r.r:0)+'"></label>'+
         '<label>Status Inspeksi<select id="wf_x">'+STATUSES.map(function(s){ return '<option'+((r?r.x:'ACC')===s?' selected':'')+'>'+s+'</option>'; }).join('')+'</select></label>'+
         '<div class="wi-phbox"><div style="font-size:.66rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#9db8d8;margin-bottom:8px">Foto Dokumentasi <span id="wfPhCount" style="color:#fbbf24"></span></div>'+
           '<div class="wi-phbtns"><button type="button" id="wfCam">📷 Buka Kamera</button><button type="button" id="wfGal">🖼️ Buka Galeri</button></div>'+
           '<div class="wi-phgrid" id="wfPhGrid"></div></div>'+
+        '<div class="wi-fld full wi-ost"><div class="wi-osth">⚠️ Outstanding · Marking ID <span id="woArea"></span> · Project <span id="woProj"></span> <span id="woCnt" style="color:#fff"></span></div>'+
+          '<div id="woHost"></div></div>'+
         '<label class="full">Keterangan Lainnya<textarea id="wf_n" rows="2">'+(r?esc(r.n):'')+'</textarea></label>'+
       '</div>'+
       dl('wl_i',uniq(rows,'i'))+dl('wl_p',uniq(rows,'p'))+dl('wl_u',uniq(rows,'u'))+dl('wl_w',uniq(rows,'w'))+
@@ -16663,11 +16759,11 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
       var d = sgRes[i]; if(!d) return;
       if(dw && dw.wm && dw.wm.welds && dw.wm.welds.length && dw.code!==d.code && !confirm('Hasil ukur las untuk '+dw.code+' akan dibuang. Ganti drawing?')) return;
       mIn.value = d.code;
-      dw = {pj:d.pj, code:d.code, name:d.name, parent:d.parent, link:d.link, main:d.main, mat:d.mat, wm:null};
+      dw = {pj:d.pj, code:d.code, name:d.name, pnum:d.pnum, no:d.no, parent:d.parent, link:d.link, main:d.main, mat:d.mat, qty:d.qty, wm:null};
       var qn = parseInt(d.qty,10), qf = $('wf_q');
       if(qn>0 && (!qf.value || qf.value==='1')) qf.value = qn;
       $('wfLnote').textContent = '';
-      sgHide(); drawDwg();
+      sgHide(); drawDwg(); refreshL();
     }
     function drawDwg(){
       if(!dw){
@@ -16675,8 +16771,10 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
         return;
       }
       var sm = wdSummary(dw.wm);
-      dwEl.innerHTML = '<div class="wi-dwc"><div><div class="t">📐 '+esc(dw.code)+(dw.name&&dw.name!==dw.code?' — '+esc(dw.name):'')+'</div>'+
-        '<div class="s">'+esc(dw.pj||'')+(dw.parent?' · induk: '+esc(dw.parent):'')+(sm.n?' · <b style="color:#fbbf24">'+sm.n+' las terukur = '+nf(sm.tot)+' mm/unit</b>':'')+'</div></div>'+
+      dwEl.innerHTML = '<div class="wi-dwc"><div><div class="t">📐 '+esc(dw.code)+'</div>'+
+        '<div style="font-size:.84rem;font-weight:700;color:#fbbf24;margin-top:2px">'+esc(dw.name||'(tanpa deskripsi)')+'</div>'+
+        '<div class="s" style="margin-top:3px">'+[dw.main?'MAIN ASSY':'KOMPONEN', dw.no?'Item '+esc(dw.no):'', (dw.pnum&&dw.pnum!==dw.code)?'Part No '+esc(dw.pnum):'', dw.mat?'Material '+esc(dw.mat):'', dw.qty?'Qty BOM '+esc(dw.qty):'', dw.parent?'Induk: '+esc(dw.parent):'', dw.pj?esc(dw.pj):''].filter(Boolean).join(' · ')+
+        (sm.n?' · <b style="color:#fbbf24">'+sm.n+' las terukur = '+nf(sm.tot)+' mm/unit</b>':'')+'</div></div>'+
         '<div class="b">'+(hasLink(dw.link)?'<a href="'+esc(dw.link)+'" target="_blank" rel="noopener">📄 Buka Drawing ↗</a>':'<span class="s">tanpa link drawing</span>')+
         '<button type="button" class="pri" data-d="weld">📏 Hitung Panjang Las</button><button type="button" data-d="clear">✕ Lepas</button></div></div>';
     }
@@ -16686,6 +16784,7 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
         dw.wm = res.wm;
         var n = Math.round(res.total*(res.mul?res.qty:1));
         $('wf_l').value = n;
+        try{ rememberLen(curKey(), n); refreshL(); }catch(e){}
         $('wfLnote').textContent = '📏 Dari drawing: '+nf(Math.round(res.total))+' mm/unit'+(res.mul&&res.qty>1?' × Qty '+res.qty:'')+' — boleh diubah manual.';
         drawDwg();
       }});
@@ -16710,6 +16809,58 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
     $('wf_q').addEventListener('input', function(){ /* qty berubah: pengguna menghitung ulang lewat tombol Hitung Panjang Las */ });
     if(dw && dw.wm){ var sm0 = wdSummary(dw.wm); if(sm0.n) $('wfLnote').textContent = '📏 Hasil ukur drawing tersimpan: '+sm0.n+' las.'; }
     drawDwg();
+    /* --- Project master, Shop Area, panjang las tersimpan (dropdown), Outstanding per area --- */
+    var pnl = null, pT = 0;
+    function curKey(){ return lenKey($('wf_p').value, mIn.value); }
+    function refreshL(){
+      areaLbl();
+      var sel=$('wf_lsel'), inp=$('wf_l'), k=curKey(), list=k?knownLens(k):[], cur=String(inp.value||'').trim();
+      if(!list.length){ sel.style.display='none'; inp.style.display=''; return; }
+      sel.innerHTML = list.map(function(x){ return '<option value="'+x.v+'">'+nf(x.v)+' mm'+(x.n>1?' · dipakai '+x.n+'×':'')+'</option>'; }).join('')+'<option value="__m">✏️ Input manual…</option>';
+      var known = list.some(function(x){ return String(x.v)===cur; });
+      if(!cur){ cur=String(list[0].v); inp.value=cur; known=true; }
+      sel.value = known ? cur : '__m'; sel.style.display=''; inp.style.display = known ? 'none' : '';
+      if(known) $('wfLnote').textContent = '📌 Panjang tersimpan untuk komponen ini — pilih “Input manual” untuk nilai baru.';
+    }
+    $('wf_lsel').addEventListener('change', function(){
+      var inp=$('wf_l'); if(this.value==='__m'){ inp.value=''; inp.style.display=''; inp.focus(); $('wfLnote').textContent=''; } else { inp.value=this.value; inp.style.display='none'; }
+    });
+    $('wf_l').addEventListener('change', function(){ var k=curKey(), v=parseInt(this.value,10); if(k && v>0){ rememberLen(k,v); refreshL(); } });
+    mIn.addEventListener('change', refreshL);
+    $('wf_p').addEventListener('change', function(){
+      var v=this.value, ks=hasPD()?Object.keys(projectData).filter(function(n){return n.replace(/ - Unit \d+$/,'')===v;}):[], mp=$('wf_mp');
+      if(mp) mp.value = ks.length===1 ? ks[0] : '';
+      refreshL();
+    });
+    function areaLbl(){
+      $('woArea').textContent = mIn.value.trim() || '—';
+      var pe=$('woProj'); if(pe) pe.textContent = $('wf_p').value || '—';
+      if(pnl){ clearTimeout(pT); pT=setTimeout(function(){ if(pnl && pnl.host.isConnected) pnl.draw(); },120); }
+    }
+    mIn.addEventListener('input', areaLbl);
+    $('wf_s').addEventListener('change', function(){
+      if(this.value==='__new'){
+        var n = normTxt(prompt('Nama Shop / Area baru:')||'').toUpperCase();
+        if(n){ var o=document.createElement('option'); o.textContent=n; this.insertBefore(o, this.lastChild); this.value=n; } else this.value='WSC1';
+      }
+      areaLbl();
+    });
+    function descFor(){
+      var m=normTxt(mIn.value).toLowerCase(); if(!m) return '';
+      if(dw && dw.name && normTxt(dw.code).toLowerCase()===m) return normTxt(dw.name);
+      try{ var h=(dIdx||[]).filter(function(d){ return d.name && normTxt(d.code).toLowerCase()===m; })[0]; if(h) return normTxt(h.name); }catch(e){}
+      return '';
+    }
+    function recIds(){
+      var p=normTxt($('wf_p').value).toLowerCase(), m=normTxt(mIn.value).toLowerCase();
+      return allRecords().filter(function(x){ return normTxt(x.p).toLowerCase()===p && normTxt(x.m).toLowerCase()===m; }).map(function(x){ return x.id; });
+    }
+    if(window.QCOut && window.QCOut.mountPanel){
+      pnl = window.QCOut.mountPanel($('woHost'), function(){ return {proj:$('wf_p').value, ref:mIn.value, extra:recIds(), desc:descFor()}; });
+    } else {
+      $('woHost').innerHTML = '<div style="font-size:.76rem;color:#fca5a5">Modul Outstanding belum siap, muat ulang halaman.</div>';
+    }
+    refreshL();
     /* bila form ditutup tanpa simpan: buang foto baru yang belum dipakai */
     var mo = new MutationObserver(function(){
       if(!document.body.contains(ov)){ mo.disconnect(); if(!fs.saved) fs.added.forEach(delPhoto); }
@@ -16720,14 +16871,15 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
       var err = $('wfErr');
       function fail(m){ err.textContent = '⚠️ '+m; err.style.display='block'; }
       var t = $('wf_t').value; if(!t) return fail('Tanggal & waktu wajib diisi.');
+      if(pnl) pnl.flush();
       var acts = Array.prototype.map.call(ov.querySelectorAll('input[name="wf_a"]:checked'), function(c){return c.value;});
       var o = {
         id: r? r.id : 'u_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),
         t: t.replace('T',' ').slice(0,16),
-        i: normInsp($('wf_i').value), p: normTxt($('wf_p').value), s: normTxt($('wf_s').value)||'Shop A',
+        i: normInsp($('wf_i').value), p: normTxt($('wf_p').value), s: 'WSC1',
         m: normTxt($('wf_m').value), q: parseInt($('wf_q').value,10)||0, u: normSub($('wf_u').value), w: normTxt($('wf_w').value),
         a: acts, l: parseInt($('wf_l').value,10), r: parseInt($('wf_r').value,10)||0, x: $('wf_x').value,
-        f1: fs.links.slice(), f2: [], ph: fs.ph.slice(), n: normTxt($('wf_n').value)
+        f1: fs.links.slice(), f2: [], ph: fs.ph.slice(), n: normTxt($('wf_n').value), o: []
       };
       if(dw) o.dw = dw;
       if(!o.i) return fail('Nama inspektor wajib diisi.');
@@ -16737,7 +16889,7 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
       if(isNaN(o.l) || o.l<=0) return fail('Panjang pengelasan yang diinspeksi harus lebih dari 0.');
       if(o.r<0) return fail('Panjang repair tidak boleh negatif.');
       if(o.r>o.l) return fail('Panjang repair tidak boleh melebihi panjang yang diinspeksi.');
-      saveRec(o, !!r);
+      rememberLen(lenKey(o.p,o.m), o.l); saveRec(o, !!r);
       fs.saved = true; fs.removed.forEach(delPhoto);
       ov.remove(); try{render();}catch(er){console.error(er);} toast(r?'✅ Record diperbarui.':'✅ Record ditambahkan.');
     });
@@ -16767,7 +16919,7 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
         }
         var c = (row.drawing_no && row.drawing_no!=='-') ? row.drawing_no : (row.part_num||'');
         if(!c && !row.part_name) return;
-        out.push({pj:pn, main:false, code:c||row.part_name, pnum:row.part_num||'', name:row.part_name||'', parent:parent, qty:row.qty||'', mat:row.material||'', link:row.link||''});
+        out.push({pj:pn, main:false, code:c||row.part_name, pnum:row.part_num||'', no:row.no||'', name:row.part_name||'', parent:parent, qty:row.qty||'', mat:row.material||'', link:row.link||''});
       });
     });
     return out;
@@ -16792,7 +16944,7 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
 
   function polyLen(p){ var s=0; for(var i=1;i<p.length;i++) s += Math.hypot(p[i][0]-p[i-1][0], p[i][1]-p[i-1][1]); return s; }
   function wdSummary(wm){
-    var n=0, tot=0; ((wm&&wm.welds)||[]).forEach(function(w){ var k=(wm.kp||{})[w.pg||1]; var mm = w.mm!=null ? w.mm : (w.pts&&k ? polyLen(w.pts)*k : null); if(mm!=null){ n++; tot += mm*(w.sd||1); } });
+    var n=0, tot=0; ((wm&&wm.welds)||[]).forEach(function(w){ var k=(wm.kp||{})[w.pg||1]; var mm = w.mm!=null ? w.mm : (w.pts&&k ? polyLen(w.pts)*k : null); if(mm!=null){ n++; tot += mm*(w.sd||1)*(w.ct||1); } });
     return {n:n, tot:Math.round(tot)};
   }
 
@@ -16804,7 +16956,7 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
              kp:Object.assign({}, (opt.wm&&opt.wm.kp)||{}), welds:JSON.parse(JSON.stringify((opt.wm&&opt.wm.welds)||[])), mul:true, ai:[]};
     var el = document.createElement('div'); el.className='wd-ov'; el.id='wiWeld';
     el.innerHTML =
-      '<div class="wd-h"><span>📏 Hitung Panjang Las — '+esc(dw.code||'Drawing')+(dw.name?' · '+esc(dw.name):'')+'</span><button class="wi-x" type="button" data-w="close">✕</button></div>'+
+      '<div class="wd-h"><span>📏 Hitung Panjang Las — '+esc(dw.code||'Drawing')+(dw.name?' · '+esc(dw.name):'')+(dw.no?' · Item '+esc(dw.no):'')+'</span><button class="wi-x" type="button" data-w="close">✕</button></div>'+
       '<div class="wd-tb">'+
         '<button type="button" data-tool="pan" class="on">✋ Geser</button>'+
         '<button type="button" data-tool="cal">📐 Kalibrasi</button>'+
@@ -16842,7 +16994,7 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
     function hide(){ msg.style.display='none'; }
     function curK(){ return W.kind==='img' && !W.kp[W.pg] ? null : (W.kp[W.pg]||null); }
     function wMm(w){ if(w.mm!=null) return w.mm; var k = W.kp[w.pg||1]; return (w.pts && k) ? polyLen(w.pts)*k : null; }
-    function total(){ var t=0; W.welds.forEach(function(w){ var m=wMm(w); if(m!=null) t += m*(w.sd||1); }); return t; }
+    function total(){ var t=0; W.welds.forEach(function(w){ var m=wMm(w); if(m!=null) t += m*(w.sd||1)*(w.ct||1); }); return t; }
 
     /* ----- muat sumber ----- */
     function pickPrompt(err){
@@ -16936,9 +17088,10 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
         h += '<div class="wd-w'+(i===W.sel?' sel':'')+'" data-i="'+i+'">'+
           '<b data-w="sel" style="color:'+(w.pts?c:'#a78bfa')+'">'+(i+1)+'</b>'+
           '<input type="number" min="0" step="0.1" data-w="mm" value="'+(m!=null?(Math.round(m*10)/10):'')+'" placeholder="mm">'+
-          '<select data-w="sd"><option value="1"'+((w.sd||1)===1?' selected':'')+'>×1</option><option value="2"'+(w.sd===2?' selected':'')+'>×2</option></select>'+
+          '<select data-w="sd" title="1 sisi / 2 sisi"><option value="1"'+((w.sd||1)===1?' selected':'')+'>1 sisi</option><option value="2"'+(w.sd===2?' selected':'')+'>2 sisi</option></select>'+
+          '<input type="number" min="1" step="1" data-w="ct" value="'+(w.ct||1)+'" title="Jumlah titik las sejenis (TYP)" style="width:52px">'+
           '<button type="button" data-w="del" title="Hapus">✕</button>'+
-          '<div class="m">'+(w.pts?'✍️ diukur di gambar':(w.src==='ai'?'🤖 saran AI':'⌨️ manual'))+(w.n?' · '+esc(w.n):'')+((w.mm!=null&&w.pts)?' · <a href="#" data-w="reset" style="color:#fbbf24">↺ pakai hasil ukur</a>':'')+((w.sd||1)===2?' · dihitung 2 sisi':'')+'</div></div>';
+          '<div class="m">'+(w.pts?'✍️ diukur di gambar':(w.src==='ai'?'🤖 saran AI':'⌨️ manual'))+(w.n?' · '+esc(w.n):'')+((w.mm!=null&&w.pts)?' · <a href="#" data-w="reset" style="color:#fbbf24">↺ pakai hasil ukur</a>':'')+((w.sd||1)===2?' · 2 sisi':'')+((w.ct||1)>1?' · ×'+w.ct+' (TYP)':'')+'</div></div>';
       });
       q('#wdList').innerHTML = h || '<div style="color:#8fb0d3">Belum ada las. Pakai <b>Ukur Las</b> (klik titik-titik sepanjang las), lalu <b>Selesai</b>.</div>';
       var t = total(), qn = opt.qty(), mul = q('#wdMul').checked;
@@ -16947,8 +17100,9 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
     }
     function commit(){
       if(W.cur.length<2){ return; }
-      W.welds.push({n:'', pts:W.cur.slice(), pg:W.pg, mm:null, sd:1, src:'draw'});
-      W.cur=[]; W.sel=W.welds.length-1; drawOv(); drawList();
+      var tgt = W.sel>=0 ? W.welds[W.sel] : null;
+      if(tgt && !tgt.pts && tgt.mm==null){ tgt.pts = W.cur.slice(); tgt.pg = W.pg; W.cur=[]; }
+      else { W.welds.push({n:'', pts:W.cur.slice(), pg:W.pg, mm:null, sd:1, src:'draw'}); W.cur=[]; W.sel=W.welds.length-1; } drawOv(); drawList();
       if(!W.kp[W.pg]) flash('Belum dikalibrasi: panjang baru terhitung setelah skala diisi.');
     }
     function flash(m){ var b=q('#wdTot2'); b.innerHTML='<span class="wd-warn">'+esc(m)+'</span>'; setTimeout(drawList,3500); }
@@ -16992,11 +17146,22 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
 
     /* ----- AI ----- */
     async function pageImage(){
-      var mx = 2000, s = Math.min(mx/Math.max(W.w,W.h), 6), c = document.createElement('canvas');
-      c.width = Math.round(W.w*s); c.height = Math.round(W.h*s);
-      var x = c.getContext('2d'); x.fillStyle='#fff'; x.fillRect(0,0,c.width,c.height);
-      if(W.kind==='pdf'){ await W.page.render({canvasContext:x, viewport:W.page.getViewport({scale:s})}).promise; } else { x.drawImage(W.img,0,0,c.width,c.height); }
-      return c.toDataURL('image/jpeg',0.88).split(',')[1];
+      /* gambar 1 = keseluruhan halaman; lalu potongan (tile) beresolusi tinggi supaya simbol las kecil terbaca */
+      var imgs = [], land = W.w>=W.h, cols = land?3:2, rows = land?2:3;
+      async function shot(x0,y0,x1,y1,maxPx){
+        var tw = x1-x0, th = y1-y0, sc = Math.min(maxPx/Math.max(tw,th), 8);
+        var c = document.createElement('canvas'); c.width = Math.max(1,Math.round(tw*sc)); c.height = Math.max(1,Math.round(th*sc));
+        var x = c.getContext('2d'); x.fillStyle='#fff'; x.fillRect(0,0,c.width,c.height);
+        if(W.kind==='pdf'){ await W.page.render({canvasContext:x, viewport:W.page.getViewport({scale:sc}), transform:[1,0,0,1,-x0*sc,-y0*sc]}).promise; }
+        else { var f = W.img.naturalWidth/W.w; x.drawImage(W.img, x0*f, y0*f, tw*f, th*f, 0, 0, c.width, c.height); }
+        return c.toDataURL('image/jpeg',0.9).split(',')[1];
+      }
+      imgs.push(await shot(0,0,W.w,W.h,2000));
+      var cw = W.w/cols, ch = W.h/rows, ov = 0.12;
+      for(var ry=0; ry<rows; ry++) for(var cx=0; cx<cols; cx++){
+        imgs.push(await shot(Math.max(0,cx*cw-cw*ov), Math.max(0,ry*ch-ch*ov), Math.min(W.w,(cx+1)*cw+cw*ov), Math.min(W.h,(ry+1)*ch+ch*ov), 2400));
+      }
+      return imgs;
     }
     async function pageText(){
       if(W.kind!=='pdf') return '';
@@ -17008,19 +17173,23 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
       if(!W.w){ out.innerHTML='<div class="wd-warn" style="margin-top:6px">Drawing belum dimuat.</div>'; return; }
       out.innerHTML = '<div style="margin-top:6px;color:#c4b5fd">⏳ AI sedang membaca halaman '+W.pg+'… (bisa 20–60 detik)</div>';
       try{
-        var b64 = await pageImage(), txt = await pageText();
+        var imgs = await pageImage(), txt = await pageText();
         var prompt =
           'You are assisting a welding quality inspector who reads a fabrication drawing.\n'+
           'Drawing: '+(dw.code||'')+' '+(dw.name||'')+(dw.parent?(' (assembly: '+dw.parent+')'):'')+(dw.mat?(', material '+dw.mat):'')+'. Page '+W.pg+' of '+W.np+'.\n'+
-          'TASK: find every weld shown on this page and determine its length in mm for ONE unit of this part/assembly. Use weld symbols (fillet size, length, pitch, "all around", both sides), dimension text and notes.\n'+
-          (txt?('Text extracted from the PDF (use it to read dimensions exactly):\n'+txt+'\n'):'')+
-          'RULES: never invent numbers. If a length cannot be derived from what is drawn, set length_mm to null and explain in basis. For all-around welds compute the perimeter only if the dimensions are legible. For intermittent welds (e.g. 50-150) total = count x length. length_mm is per side; sides = 2 when the same weld is on both sides. Do not include bolts or non-weld items.\n'+
-          'Answer with ONLY JSON: {"scale":string|null,"welds":[{"label":string,"joint":string,"symbol":string,"size_mm":number|null,"length_mm":number|null,"sides":1|2,"confidence":"high"|"medium"|"low","basis":string}],"notes":string}';
+          'You receive IMAGE 1 = the whole page, followed by '+(imgs.length-1)+' zoomed, overlapping crops of the same page (left-to-right, top-to-bottom) so that small symbols are legible. Study every crop carefully.\n'+
+          'TASK: make an INVENTORY of every weld symbol/note on this page, then give a length in mm only when it is really derivable.\n'+
+          'This kind of drawing (AWS style) usually has NO written weld length. Weld info is: a leader arrow to a reference line; a small triangle = fillet weld, with the SIZE number beside it (e.g. "3", "6"); two numbers stacked ("5 over 5") = fillet on both sides; a number above/below the line says which side; "TYP" = typical (the same weld repeats on other similar joints); a circle at the junction = weld all around; a flag = field weld; "V/bevel" shapes with e.g. "10" = groove/penetration weld; "G"/"C" = finish letters. Read these small symbols from the zoomed crops.\n'+
+          'For each symbol give: label (which part/joint, include the balloon item numbers like 3-4 if visible and the view name such as A-VIEW, D-DETAIL), joint type, symbol text, size_mm (the number next to the triangle, null if unreadable), sides (2 if stacked numbers/both sides), typ (true if TYP), all_around (true if circle), count (how many identical joints are visible in that view, 1 if unsure), and length_mm ONLY if a dimension on the drawing gives it (otherwise null — never estimate from pixel sizes).\n'+
+          'The same symbol often appears on several views of the same joint; list each distinct joint once and mention the other views in basis. Do NOT answer "no welds" when any weld triangle/symbol is visible; if truly none, say what the page contains in notes.\n'+
+          (txt?('Text extracted from the PDF (use it to read dimensions and notes exactly):\n'+txt+'\n'):'')+
+          'RULES: never invent numbers. length_mm is per side and per single joint. Ignore bolts and non-weld items.\n'+
+          'Answer with ONLY JSON: {"scale":string|null,"welds":[{"label":string,"joint":string,"symbol":string,"size_mm":number|null,"length_mm":number|null,"sides":1|2,"typ":boolean,"all_around":boolean,"count":number,"confidence":"high"|"medium"|"low","basis":string}],"notes":string}';
         var ac = new AbortController(), to = setTimeout(function(){ ac.abort(); }, 120000);
         var mdl = c.model||'gemini-3.8-flash';
         var res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(mdl)+':generateContent?key='+encodeURIComponent(c.key), {method:'POST', signal:ac.signal,
           headers:{'content-type':'application/json'},
-          body:JSON.stringify({contents:[{role:'user', parts:[{text:prompt},{inline_data:{mime_type:'image/jpeg', data:b64}}]}], generationConfig:{temperature:0, responseMimeType:'application/json', maxOutputTokens:8000}})});
+          body:JSON.stringify({contents:[{role:'user', parts:[{text:prompt}].concat(imgs.map(function(d){return {inline_data:{mime_type:'image/jpeg', data:d}};}))}], generationConfig:{temperature:0, responseMimeType:'application/json', maxOutputTokens:8000}})});
         clearTimeout(to);
         var js = await res.json();
         if(!res.ok) throw new Error((js&&js.error&&js.error.message)||('HTTP '+res.status));
@@ -17029,14 +17198,14 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
         var a = t.indexOf('{'), b = t.lastIndexOf('}'); if(a<0||b<a) throw new Error('Jawaban AI bukan JSON');
         var o = JSON.parse(t.slice(a,b+1)); W.ai = (o.welds||[]).filter(function(x){return x;});
         var h = '<div style="margin-top:8px"><b>Saran AI</b>'+(o.scale?' · skala terbaca: '+esc(o.scale):'')+' <span class="wd-warn">— verifikasi dulu!</span></div>';
-        if(!W.ai.length) h += '<div style="color:#8fb0d3;margin-top:4px">AI tidak menemukan las yang bisa dihitung di halaman ini.'+(o.notes?' '+esc(o.notes):'')+'</div>';
+        if(!W.ai.length) h += '<div style="color:#8fb0d3;margin-top:4px">AI tidak menemukan las yang bisa dihitung di halaman ini — coba halaman lain (‹ ›) atau drawing detail/section.'+(o.notes?' '+esc(o.notes):'')+'</div>';
         W.ai.forEach(function(x,i){
           var ok = typeof x.length_mm==='number' && x.length_mm>0;
-          h += '<div class="wd-ai"><label><input type="checkbox" data-ai="'+i+'"'+(ok?' checked':' disabled')+'><span><b>'+esc(x.label||('Las '+(i+1)))+'</b> — '+(ok? nf(x.length_mm,1)+' mm'+((x.sides===2)?' ×2 sisi':''):'<i>panjang tidak bisa ditentukan</i>')+
+          h += '<div class="wd-ai"><label><input type="checkbox" data-ai="'+i+'"'+' checked'+'><span><b>'+esc(x.label||('Las '+(i+1)))+'</b> — '+(ok? nf(x.length_mm,1)+' mm'+((x.sides===2)?' ×2 sisi':''):'<i>panjang tidak tertulis — akan jadi baris kosong untuk Anda ukur</i>')+
             '<br><span style="color:#bcd4f0">'+esc([x.joint,x.symbol,x.size_mm?('size '+x.size_mm+' mm'):''].filter(Boolean).join(' · '))+'</span>'+
             '<br><span style="color:#8fb0d3">'+esc(x.confidence||'')+' · '+esc(x.basis||'')+'</span></span></label></div>';
         });
-        if(W.ai.some(function(x){return typeof x.length_mm==='number'&&x.length_mm>0;})) h += '<div class="wd-row"><button class="wd-btn" type="button" data-w="aiadd" style="flex:1">＋ Masukkan yang dicentang ke daftar</button></div>';
+        if(W.ai.length) h += '<div class="wd-row"><button class="wd-btn" type="button" data-w="aiadd" style="flex:1">＋ Masukkan yang dicentang ke daftar</button></div>';
         if(o.notes) h += '<div style="margin-top:6px;color:#8fb0d3;font-size:.7rem">'+esc(o.notes)+'</div>';
         out.innerHTML = h;
       }catch(e){
@@ -17073,8 +17242,9 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
       else if(a==='aisave'){ aiSet({key:q('#wdKey').value.trim(), model:q('#wdModel').value.trim()||'gemini-3.8-flash'}); q('#wdAiCfg').style.display='none'; flash('API key tersimpan di browser ini.'); }
       else if(a==='ai') runAI();
       else if(a==='aiadd'){ el.querySelectorAll('[data-ai]:checked').forEach(function(cb){ var x = W.ai[+cb.dataset.ai]; if(!x) return;
-          W.welds.push({n:(x.label||'')+(x.confidence?' ['+x.confidence+']':''), pts:null, pg:W.pg, mm:Math.round(x.length_mm*10)/10, sd:x.sides===2?2:1, src:'ai'}); });
-        q('#wdAiOut').innerHTML='<div class="wd-ok" style="margin-top:6px">Saran AI dimasukkan ke daftar — cek angkanya satu per satu.</div>'; drawList(); }
+          var okl = typeof x.length_mm==='number' && x.length_mm>0;
+          W.welds.push({n:[x.label,x.symbol,x.size_mm?('size '+x.size_mm):''].filter(Boolean).join(' · ')+(x.confidence?' ['+x.confidence+']':''), pts:null, pg:W.pg, mm:okl?Math.round(x.length_mm*10)/10:null, sd:x.sides===2?2:1, ct:(x.count>1?Math.round(x.count):1), src:'ai'}); });
+        q('#wdAiOut').innerHTML='<div class="wd-ok" style="margin-top:6px">Masuk ke daftar. Baris tanpa panjang: pilih barisnya (klik nomornya), lalu pakai <b>Ukur Las</b> untuk mengisi panjangnya.</div>'; drawList(); }
       else if(a==='apply'){
         var t = total(), qn = opt.qty(), mul = q('#wdMul').checked;
         if(!W.welds.length){ flash('Belum ada las yang diukur.'); return; }
@@ -17089,6 +17259,7 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
       if(i<0) return;
       if(t.dataset.w==='mm'){ var v = parseFloat(t.value); W.welds[i].mm = isNaN(v)?null:v; drawList(); }
       else if(t.dataset.w==='sd'){ W.welds[i].sd = +t.value; drawList(); }
+      else if(t.dataset.w==='ct'){ W.welds[i].ct = Math.max(1, parseInt(t.value,10)||1); drawList(); }
     });
     window.addEventListener('resize', function(){ if(document.body.contains(el)){ fit(); render(); } });
     setTool('pan'); drawList();
@@ -17130,6 +17301,15 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
     toast('✅ '+rows.length+' record diexport.');
   }
 
+  /* outstanding berubah (dari form / modul 📌): perbarui badge & tab Outstanding */
+  document.addEventListener('qo-changed', function(){
+    try{
+      if(!root || !root.getClientRects().length) return;
+      if($('wiForm')){ updOutCnt(filtered()); return; }
+      render();
+    }catch(e){}
+  });
+
   /* ---------- events ---------- */
   root.addEventListener('click', function(e){
     var t;
@@ -17139,6 +17319,10 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
     if(e.target.closest('#wiReset')){ F = {tab:F.tab, month:'', proj:'', insp:'', sub:'', st:'', act:'', from:'', to:'', q:''}; UI.page=1; render(); return; }
     if((t=e.target.closest('#wiTabs [data-tab]'))){ F.tab=t.dataset.tab; UI.page=1; render(); return; }
     if((t=e.target.closest('#wiSubs [data-sub]'))){ UI.sub=t.dataset.sub; render(); return; }
+    if((t=e.target.closest('[data-ofil]'))){ UI.ofil=t.dataset.ofil; render(); return; }
+    if((t=e.target.closest('[data-otg]'))){ toggleOut(t.dataset.otg); return; }
+    if((t=e.target.closest('[data-oopen]'))){ detailModal(t.dataset.oopen); return; }
+    if(e.target.closest('[data-oall]')){ if(window.QCOut&&window.QCOut.open) window.QCOut.open({mod:'wi',proj:null}); return; }
     if((t=e.target.closest('[data-rb]'))){ UI.rankBy=t.dataset.rb; UI.rankAll=false; render(); return; }
     if((t=e.target.closest('[data-rs]'))){ UI.rankSort=t.dataset.rs; render(); return; }
     if(e.target.closest('#wiRankMore')){ UI.rankAll=!UI.rankAll; render(); return; }
@@ -19397,14 +19581,15 @@ body.is-wi #qoBtn{display:none}
         '<p class="qo-note">Tgl Temuan terisi otomatis hari ini. Saat status diubah ke CLOSE, Tgl Close terisi otomatis dan lama penyelesaian (hari) dihitung. Semua perubahan tersimpan otomatis.</p>'+
       '</div>';
   }
-  function hydrate(){
-    ov.querySelectorAll('img[data-ph]').forEach(function(im){
+  function hydrate(root){
+    (root||ov).querySelectorAll('img[data-ph]').forEach(function(im){
       var k=im.getAttribute('data-ph');
       if(PH[k]){im.src=PH[k];return;}
       pget(k).then(function(v){PH[k]=v;if(v)im.src=v;});
     });
   }
   function render(){
+    PNL=PNL.filter(function(p){return p.host.isConnected;}); PNL.forEach(function(p){p.draw();});
     if(!ov)return;
     var st=ov.scrollTop, md=ov.querySelector('.qo-md');
     md.innerHTML=html(); hydrate(); ov.scrollTop=st;
@@ -19436,7 +19621,7 @@ body.is-wi #qoBtn{display:none}
       var b=e.target.closest('[data-a]'); if(!b)return;
       var a=b.getAttribute('data-a'), i=b.getAttribute('data-id'), ss=b.getAttribute('data-s');
       if(a==='lbclose')d.remove();
-      else if(a==='lbrep'){pend={id:i,s:ss};ov.querySelector('#qoFile').click();}
+      else if(a==='lbrep'){pend={id:i,s:ss};fileEl().click();}
       else if(a==='lbdel'){pput(i+'_'+ss,'').then(function(){delete PH[i+'_'+ss];var it=find(i);if(it)it['p'+ss]=0;saveItem(it);mark('f:'+i+'_'+ss);d.remove();render();});}
     });
     document.body.appendChild(d);
@@ -19450,7 +19635,7 @@ body.is-wi #qoBtn{display:none}
   }
   function onChange(e){
     var t=e.target; if(!t.getAttribute)return;
-    if(t.id==='qoFile'){
+    if(t.id==='qoFile'||t.id==='qopFile'){
       var f=t.files&&t.files[0]; t.value=''; if(!f||!pend)return;
       var P=pend;
       shrink(f).then(function(u){return pput(P.id+'_'+P.s,u).then(function(){
@@ -19709,14 +19894,16 @@ body.is-wi #qoBtn{display:none}
   function refresh(){decorateFab();decorateWi();
     // perbarui tombol per-baris yang sudah ada (jumlah open/closed berubah)
     document.querySelectorAll('.qo-mini').forEach(function(b){b.remove();});
-    decorateFab();decorateWi();}
+    decorateFab();decorateWi();
+    try{document.dispatchEvent(new Event('qo-changed'));}catch(e){}}
   document.addEventListener('keydown',function(e){if(e.key==='Escape'&&ov){var lb=document.getElementById('qoLb');if(lb)lb.remove();else close();}});
   /* ---------- hook untuk QCSync ---------- */
   function softRender(){
-    if(!ov)return;
+    PNL=PNL.filter(function(p){return p.host.isConnected;});
+    if(!ov&&!PNL.length)return;
     var a=document.activeElement;
-    if(a&&ov.contains(a)&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)){ // sedang mengetik: tunda agar fokus tidak hilang
-      a.addEventListener('blur',function f(){a.removeEventListener('blur',f);setTimeout(function(){if(ov){DB=load();render();}},60);});
+    if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&((ov&&ov.contains(a))||PNL.some(function(p){return p.host.contains(a);}))){ // sedang mengetik: tunda agar fokus tidak hilang
+      a.addEventListener('blur',function f(){a.removeEventListener('blur',f);setTimeout(function(){DB=load();render();},60);});
       return;
     }
     render();
@@ -19747,7 +19934,163 @@ body.is-wi #qoBtn{display:none}
     if(pa)jobs.push(pput(id+'_a',pa).then(function(){mark('f:'+id+'_a');}));
     return Promise.all(jobs).then(function(){return true;});
   }
-  window.QCOut={importCoat:importCoat,syncInc:syncIncRefresh,open:open,refresh:refresh,count:count,reload:reload,photoGet:photoGet,applyPhoto:applyPhoto,optsGet:optGet,optsApply:optApply};
+
+  /* ============================================================
+     PANEL INLINE — dipakai di form Tambah/Edit Record WI & NDT.
+     Format & data SAMA dengan 📌 Outstanding (qcout_*, foto Before/After, PIC, status, 5M, dst.)
+     tetapi dikunci per Marking ID + Project yang sedang diinspeksi (mod 'wi').
+     ============================================================ */
+  var PNL=[], pFile=null;
+  function nrm(v){return String(v==null?'':v).replace(/\s+/g,' ').trim().toLowerCase();}
+  function scopeWi(proj,ref,extra){
+    var p=nrm(proj), r=nrm(ref), ex=extra||[];
+    if(!p||!r)return [];
+    return items().filter(function(x){return x.mod==='wi'&&nrm(x.proj)===p&&(nrm(x.ref)===r||ex.indexOf(x.ref)>=0);});
+  }
+  function pfile(){
+    if(pFile&&pFile.isConnected)return pFile;
+    pFile=document.createElement('input'); pFile.type='file'; pFile.accept='image/*'; pFile.hidden=true; pFile.id='qopFile';
+    pFile.addEventListener('change',onChange); document.body.appendChild(pFile); return pFile;
+  }
+  function fileEl(){return (ov&&ov.querySelector('#qoFile'))||pfile();}
+  function delItem(id){
+    DB=items().filter(function(x){return x.id!==id;});
+    try{localStorage.removeItem(PFX+id);}catch(e){}
+    ['b','a'].forEach(function(s){pput(id+'_'+s,'').then(function(){mark('f:'+id+'_'+s);}).catch(function(){});delete PH[id+'_'+s];});
+  }
+  function toggleItem(id){
+    var x=find(id); if(!x)return;
+    x.st=x.st==='CLOSE'?'OPEN':'CLOSE'; x.cd=x.st==='CLOSE'?today():'';
+    saveItem(x); render(); refresh();
+  }
+  /* outstanding lama (tersimpan di dalam record WI & NDT) -> item Outstanding standar */
+  function importWi(proj,ref,list,rid){
+    var cur=items(),have={},n=0; cur.forEach(function(x){have[x.id]=1;});
+    (list||[]).forEach(function(o){
+      var id='ow_'+o.id; if(have[id])return; n++;
+      var od=String(o.t||'').slice(0,10), cd=String(o.ct||'').slice(0,10), re=/^\d{4}-\d{2}-\d{2}$/;
+      var x={id:id,c:Date.now()+n,mod:'wi',proj:proj,ref:ref,lbl:ref,od:re.test(od)?od:today(),pic:'',cat:'',m5:'',prc:o.c||'',comp:'',cm:o.d||'',
+             st:o.x?'CLOSE':'OPEN',cd:o.x?(re.test(cd)?cd:today()):'',pb:0,pa:0};
+      cur.push(x); saveItem(x);
+    });
+    return true;
+  }
+  function mountPanel(host,getCtx){
+    var P={host:host,draft:'',pc:'Welding',filt:'all',arm:null};
+    function cx(){var c=getCtx()||{};return {proj:String(c.proj||'').replace(/\s+/g,' ').trim(),ref:String(c.ref||'').replace(/\s+/g,' ').trim(),extra:c.extra||[],desc:String(c.desc||'').replace(/\s+/g,' ').trim()};}
+    function lblOf(c){return c.ref+(c.desc?' — '+c.desc:'');}
+    function procList(){var l=optList('prc'); if(l.indexOf('NDT (MPI/UT)')<0)l=l.concat(['NDT (MPI/UT)']); return l;}
+    function field(l,h,cls){return '<div class="qop-f'+(cls?' '+cls:'')+'"><span>'+l+'</span>'+h+'</div>';}
+    function card(x,n){
+      var cl=x.st==='CLOSE', id=x.id;
+      return '<div class="qop-i '+(cl?'qo-c':'qo-o')+'">'+
+        '<div class="qop-h"><b>'+n+'</b><span class="qop-auto" title="'+esc(x.lbl||x.ref)+'">'+esc(x.lbl||x.ref)+' · '+esc(x.proj)+' · '+(fmtD(x.od)||'')+'</span>'+
+          '<span class="qop-stb '+(cl?'c':'o')+'">'+(cl?'CLOSE':'OPEN')+'</span>'+
+          '<span style="flex:1"></span><button class="qo-x" type="button" data-a="del" data-id="'+id+'" aria-label="Hapus">×</button></div>'+
+        '<div class="qop-ph"><div><span>Before</span>'+phCell(x,'b')+'</div><div><span>After</span>'+phCell(x,'a')+'</div>'+
+          '<div class="qop-cm"><span>Komentar Temuan</span><textarea data-id="'+id+'" data-f="cm" placeholder="Tulis komentar / temuan…">'+esc(x.cm)+'</textarea></div></div>'+
+      '</div>';
+    }
+    P.draw=function(){
+      if(!host.isConnected)return;
+      var ta=host.querySelector('#qopD'); if(ta)P.draft=ta.value;
+      var ae=document.activeElement, fk=null;
+      if(ae&&host.contains(ae)&&ae.getAttribute&&ae.getAttribute('data-id')&&ae.getAttribute('data-f')) fk={id:ae.getAttribute('data-id'),f:ae.getAttribute('data-f'),s:ae.selectionStart,e:ae.selectionEnd};
+      var sc=host.closest('.wi-modal'), st=sc?sc.scrollTop:0;
+      var c=cx(), ready=!!(c.proj&&c.ref), all=ready?scopeWi(c.proj,c.ref,c.extra):[];
+      if(c.desc) all.forEach(function(x){ if(!x.lbl||nrm(x.lbl)===nrm(c.ref)){ x.lbl=lblOf(c); saveItem(x); } });
+      var o=all.filter(function(x){return x.st!=='CLOSE';}).length, cl=all.length-o;
+      var shown=all.filter(function(x){return P.filt==='all'||(P.filt==='open'?x.st!=='CLOSE':x.st==='CLOSE');});
+      var pl=procList(), pics={}; items().forEach(function(x){if(x.pic)pics[x.pic]=1;});
+      var cnt=host.parentNode&&host.parentNode.querySelector('#woCnt'); if(cnt)cnt.textContent=all.length?'· '+o+' open / '+all.length+' total':'';
+      host.innerHTML='<div class="qop">'+
+        '<div class="qop-add"><button type="button" data-a="padd">＋ Tambah Outstanding</button></div>'+
+        (ready?'':'<div class="qop-hint">⚠ Pilih Kode Project dan isi Marking ID dulu — outstanding disimpan per Project + Marking ID.</div>')+
+        (all.length?'<div class="qo-seg qop-seg">'+[['all','Semua',all.length],['open','Open',o],['close','Closed',cl]].map(function(p){return '<button type="button" data-a="pfilt" data-v="'+p[0]+'" class="'+(P.filt===p[0]?'on':'')+'">'+p[1]+' <em>'+p[2]+'</em></button>';}).join('')+'</div>':'')+
+        (shown.length?shown.map(function(x){return card(x,all.indexOf(x)+1);}).join(''):
+          '<div class="qop-empty">'+(ready?(all.length?'Tidak ada outstanding dengan status ini.':'Belum ada outstanding untuk Marking ID '+esc(c.ref)+' · '+esc(c.proj)+'.'):'')+'</div>')+
+        '<datalist id="qopCats">'+dl(CATS,'cat')+'</datalist><datalist id="qopProcs">'+pl.map(function(p){return '<option value="'+esc(p)+'">';}).join('')+'</datalist><datalist id="qopComps">'+dl(COMPS,'comp')+'</datalist>'+
+        '<datalist id="qopPics">'+Object.keys(pics).map(function(p){return '<option value="'+esc(p)+'">';}).join('')+'</datalist>'+
+        '<div class="qop-note">Marking ID, Project &amp; tanggal terisi otomatis. Klik ＋ lalu isi foto &amp; komentar — tersimpan otomatis. Penutupan (CLOSE), PIC, 5M dll. diatur di 📌 Outstanding WI &amp; NDT.</div></div>';
+      var nta=host.querySelector('#qopD'); if(nta)nta.value=P.draft;
+      hydrate(host); if(sc)sc.scrollTop=st;
+      if(fk){ var re=host.querySelector('[data-id="'+fk.id+'"][data-f="'+fk.f+'"]'); if(re){ re.focus(); try{re.setSelectionRange(fk.s,fk.e);}catch(e){} } }
+    };
+    function addTxt(blankOk){
+      var c=cx(); if(!c.proj||!c.ref){toast('Pilih Kode Project dan isi Marking ID dulu');return 0;}
+      var ta=host.querySelector('#qopD'); if(ta)P.draft=ta.value;
+      var lines=String(P.draft||'').split(/\n+/).map(function(s){return s.replace(/\s+/g,' ').trim();}).filter(Boolean);
+      if(!lines.length){ if(!blankOk)return 0; lines=['']; }
+      lines.forEach(function(t,i){
+        var x={id:uid(),c:Date.now()+i,mod:'wi',proj:c.proj,ref:c.ref,lbl:lblOf(c),od:today(),pic:'',cat:'',m5:'',prc:P.pc,comp:'',cm:t,st:'OPEN',cd:'',pb:0,pa:0};
+        items().push(x); saveItem(x);
+      });
+      P.draft=''; P.filt='all'; render(); refresh();
+      setTimeout(function(){var tas=host.querySelectorAll('.qop-cm textarea'); if(tas.length)tas[tas.length-1].focus();},60);
+      return lines.length;
+    }
+    P.flush=function(){return addTxt(false);};
+    host.addEventListener('input',function(e){
+      if(e.target.id==='qopD'){P.draft=e.target.value;return;}
+      if(e.target.id==='qopC')return; onInput(e);
+    });
+    host.addEventListener('change',function(e){
+      if(e.target.id==='qopC'){P.pc=e.target.value;return;}
+      onChange(e); if(e.target.getAttribute&&e.target.getAttribute('data-f'))refresh();
+    });
+    host.addEventListener('keydown',function(e){
+      if(e.target.id==='qopD'&&e.key==='Enter'&&!e.shiftKey){e.preventDefault();addTxt(false);}
+    });
+    host.addEventListener('click',function(e){
+      var b=e.target.closest('[data-a]'); if(!b||!host.contains(b))return;
+      var a=b.getAttribute('data-a'), id=b.getAttribute('data-id'), s=b.getAttribute('data-s');
+      if(a==='padd')addTxt(true);
+      else if(a==='pfilt'){P.filt=b.getAttribute('data-v');P.draw();}
+      else if(a==='del'){
+        if(b.getAttribute('data-arm')!=='1'){b.setAttribute('data-arm','1');b.textContent='Yakin?';b.style.fontSize='12px';setTimeout(function(){if(b.isConnected){b.removeAttribute('data-arm');b.textContent='×';b.style.fontSize='';}},3000);return;}
+        delItem(id); render(); refresh();
+      }
+      else if(a==='photo'){pend={id:id,s:s};pfile().click();}
+      else if(a==='view')lightbox(id,s);
+      else if(a==='opts')openOpts(b.getAttribute('data-f'));
+    });
+    PNL.push(P); P.draw(); return P;
+  }
+  (function(){
+    if(document.getElementById('qop-style'))return;
+    var st=document.createElement('style'); st.id='qop-style';
+    st.textContent=
+    '.qop{display:block;text-transform:none;letter-spacing:0;font-weight:600;color:#e6f0ff}'+
+    '.qop-add{display:grid;display:block}'+
+    '.qop-add button{padding:8px 12px;border-radius:8px;border:0;background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff;font-weight:700;cursor:pointer;white-space:nowrap}'+
+    '.qop-hint{margin-top:8px;font-size:.76rem;color:#fbbf24;font-weight:700}'+
+    '.qop-seg{margin-top:10px}'+
+    '.qop-empty{font-size:.76rem;color:#7f9bbd;padding-top:8px}'+
+    '.qop-i{border:1px solid rgba(110,170,235,.28);border-left:4px solid #ef4444;border-radius:12px;padding:10px;margin-top:10px;background:rgba(10,26,50,.7)}'+
+    '.qop-i.qo-c{border-left-color:#22c55e}.qop-i.qo-c .qop-g{opacity:.9}'+
+    '.qop-h{display:flex;align-items:center;gap:8px;margin-bottom:8px}'+
+    '.qop-h>b{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;background:rgba(56,189,248,.16);color:#7dd3fc;font-size:.78rem}'+
+    '.qop-h select.qo-st{width:auto!important;border-radius:99px!important;font-weight:900!important;text-align:center;padding:4px 10px!important}'+
+    '.qop-i.qo-o select.qo-st{background:rgba(239,68,68,.16)!important;color:#fca5a5!important;-webkit-text-fill-color:#fca5a5!important}'+
+    '.qop-i.qo-c select.qo-st{background:rgba(34,197,94,.16)!important;color:#86efac!important;-webkit-text-fill-color:#86efac!important}'+
+    '.qop-auto{font-size:.74rem;color:#bcd6f5;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.qop-stb{font-size:.66rem;font-weight:900;padding:3px 10px;border-radius:99px}.qop-stb.o{background:rgba(239,68,68,.16);color:#fca5a5}.qop-stb.c{background:rgba(34,197,94,.16);color:#86efac}.qop-cm{flex:1 1 220px;min-width:0}'+
+    '.qop-ph{display:flex;gap:12px;margin-bottom:0;flex-wrap:wrap}.qop-ph>div{display:flex;flex-direction:column;gap:3px}'+
+    '.qop-ph>div>span,.qop-f>span{font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#8fb0d3}'+
+    '.qop-g{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}'+
+    '.qop-f{display:flex;flex-direction:column;gap:3px;min-width:0}.qop-f.full{grid-column:1/-1}'+
+    '.qop-na{padding:8px 2px;color:#7f9bbd}'+
+    '.qop input,.qop select,.qop textarea{width:100%;background:rgba(5,14,28,.85)!important;border:1px solid rgba(110,170,235,.35)!important;color:#e6f0ff!important;-webkit-text-fill-color:#e6f0ff!important;caret-color:#fff;border-radius:8px;padding:7px 8px;font:500 12.5px inherit;color-scheme:dark;min-height:0}'+
+    '.qop textarea{font-family:inherit;line-height:1.4;resize:vertical}.qop select option{background:#0b1f3a;color:#e6f0ff}'+
+    '.qop ::placeholder{color:#6f8fb3!important;-webkit-text-fill-color:#6f8fb3!important;opacity:1}'+
+    '.qop input:focus,.qop select:focus,.qop textarea:focus{outline:2px solid #38bdf8;outline-offset:0}'+
+    '.qop .qo-ph,.qop .qo-add-ph{width:104px!important;height:78px!important;padding:0;border-radius:10px!important}'+
+    '.qop .qo-add-ph{display:flex!important;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:rgba(14,40,74,.5)!important;color:#9db8d8!important;border:1.5px dashed rgba(110,170,235,.5)!important;font:700 11px inherit;cursor:pointer}'+
+    '.qop .qo-add-ph:hover{background:rgba(14,40,74,.9)!important;color:#fff!important}'+
+    '.qop-note{font-size:.7rem;color:#7f9bbd;margin-top:10px;font-weight:500}'+
+    '@media(max-width:700px){.qop-add{grid-template-columns:1fr}.qop-g{grid-template-columns:1fr}}';
+    document.head.appendChild(st);
+  })();
+  window.QCOut={mountPanel:mountPanel,scopeWi:scopeWi,toggle:toggleItem,importWi:importWi,importCoat:importCoat,syncInc:syncIncRefresh,open:open,refresh:refresh,count:count,reload:reload,photoGet:photoGet,applyPhoto:applyPhoto,optsGet:optGet,optsApply:optApply};
   decorateFab();decorateWi();
 })();
 </script>
@@ -21659,6 +22002,10 @@ body.is-bir #birView{display:block}
 .bir-sc .bi{padding:12px 14px 14px}
 .bir-sc h4{margin:0 0 4px;font-size:.98rem;font-weight:800;color:#002060}
 .bir-sc p{margin:0 0 10px;font-size:.78rem;color:#44546a;line-height:1.45;min-height:3.2em}
+.bir-ncr{text-decoration:none;color:inherit;border-top-color:#dc2626}
+.bir-ncr .bi{display:flex;flex-direction:column;flex:1}
+.bir-ncr .ncr-ico{display:flex;align-items:center;justify-content:center;height:150px;font-size:4rem;background:linear-gradient(135deg,#fee2e2,#fff1f2);border-bottom:1px solid #d3dae6}
+.bir-ncr .go{margin-top:auto;font-weight:800;color:#b91c1c;font-size:.82rem}
 .bir-sc .go{display:inline-block;background:#002060;color:#fff;font-weight:700;font-size:.78rem;padding:7px 14px;border-radius:8px}
 .bir-tools{display:flex;gap:8px;flex-wrap:wrap}
 .bir-tools input,.bir-tools select{border:1px solid #b8c2d4;border-radius:8px;padding:7px 10px;font:600 12px inherit;font-family:inherit;background:#fff;color:#0f1b2d}
@@ -21943,7 +22290,10 @@ function renderList(){
     if(!q)return true;
     return [m.docno,m.customer,m.part,m.proj,m.inspector,m.date].join(' ').toLowerCase().indexOf(q)>-1;
   });
-  var h='<div class="bir-sec"><h3>Buat IR baru — pilih style</h3></div><div class="bir-styles">';
+  var h='<div class="bir-sec"><h3>Menu Report Lainnya</h3></div><div class="bir-styles">'+
+   '<a class="bir-sc bir-ncr" href="https://apps.bukaka.id:7705/proqc/public/login/login" target="_blank" rel="noopener noreferrer">'+
+   '<div class="ncr-ico">🚨</div><div class="bi"><h4>NCR — Non-Conformance Report</h4><p>Buat &amp; pantau Non-Conformance Report (NCR) di sistem ProQC. Perlu login ProQC; terbuka di tab baru.</p><span class="go">Buka ProQC ↗</span></div></a></div>'+
+   '<div class="bir-sec"><h3>Buat IR baru — pilih style</h3></div><div class="bir-styles">';
   ['ori','s2','s3'].forEach(function(k){
     h+='<button type="button" class="bir-sc" data-new="'+k+'">'+previewHtml(k)+'<div class="bi"><h4>'+STY[k].n+'</h4><p>'+STY[k].d+'</p><span class="go">＋ Buat IR baru</span></div></button>';
   });
