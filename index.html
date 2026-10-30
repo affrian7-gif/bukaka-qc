@@ -6884,7 +6884,7 @@ function stampGeom(c,p){
 const BLN=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
 function todayISO(){const d=new Date(),z=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate());}
 function fmtDate(iso){const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(iso||'');return m?(+m[3])+' '+BLN[+m[2]-1]+' '+m[1]:'';}
-function lastBy(){try{return localStorage.getItem('insp_by_last')||'';}catch(e){return '';}}
+function lastBy(){try{var _u=window.QCUser&&QCUser.name();if(_u)return _u;return localStorage.getItem('insp_by_last')||'';}catch(e){return '';}}
 function stampInfo(){
   const by=(S.by||(S.approved?'':lastBy())||'').trim().slice(0,32),dt=S.date||(S.approved?'':todayISO());
   const lines=[];const parts=[];if(by)parts.push('By '+by);if(dt)parts.push(fmtDate(dt));if(parts.length)lines.push(parts.join(', '));
@@ -7581,7 +7581,7 @@ function save(){
     '<div class="row" style="flex-direction:column;margin-top:6px">'+sb('accept')+sb('special')+sb('reject')+sb('hold')+'</div>'+
     '<div style="margin-top:12px">2. Isi data stempel:</div>'+
     '<div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">'+
-    '<label style="font-size:.78rem">Inspected By (nama inspector)<input id="iqBy" type="text" maxlength="32" placeholder="Nama inspector" value="'+escA(S.by||lastBy())+'" style="width:100%;box-sizing:border-box;margin-top:3px;padding:10px;border-radius:8px;border:1px solid #28466d;background:#0b1b33;color:#fff;font-size:.9rem"></label>'+
+    '<label style="font-size:.78rem">Inspected By (nama inspector)<input id="iqBy" type="text" maxlength="32" placeholder="Nama inspector" value="'+escA((window.QCUser&&QCUser.name())||S.by||lastBy())+'" style="width:100%;box-sizing:border-box;margin-top:3px;padding:10px;border-radius:8px;border:1px solid #28466d;background:#0b1b33;color:#fff;font-size:.9rem"></label>'+
     '<label style="font-size:.78rem">Tanggal<input id="iqDate" type="date" value="'+(S.date||todayISO())+'" style="width:100%;box-sizing:border-box;margin-top:3px;padding:10px;border-radius:8px;border:1px solid #28466d;background:#0b1b33;color:#fff;font-size:.9rem;color-scheme:dark"></label></div>'+
     '<div style="margin-top:12px">3. Additional <span style="color:#7f9fc2">(opsional) — tambah gambar/foto; ikut tersimpan &amp; tersinkron ke semua inspector:</span></div><div id="iqXBox" style="margin-top:6px"></div>'+
     '<div style="margin-top:12px">4. Simpan (stempel <b>Inspected</b> berwarna sesuai status; atur posisinya dengan tool 🔖):</div>'+
@@ -8419,7 +8419,7 @@ Storage.prototype.setItem = function(k, v){
     k = String(k);
     if (k === CHK) diffChecks();
     else if (k === UK) diffUnits();
-    else if (k.indexOf('insp_') === 0) markDirty('i:' + k.slice(5)); else if (k.indexOf('boqdwg_') === 0) markDirty('d:' + k.slice(7)); else if (k.indexOf('qcadd_') === 0) markDirty('a:' + k.slice(6)); else if (k.indexOf('qcout_') === 0) markDirty('o:' + k.slice(6));
+    else if (k.indexOf('insp_') === 0) markDirty('i:' + k.slice(5)); else if (k.indexOf('boqdwg_') === 0) markDirty('d:' + k.slice(7)); else if (k.indexOf('qcadd_') === 0) markDirty('a:' + k.slice(6)); else if (k.indexOf('qcout_') === 0) markDirty('o:' + k.slice(6)); else if (k.indexOf('qcusr_') === 0) markDirty('w:' + k.slice(6));
   }
   return r;
 };
@@ -8427,7 +8427,7 @@ Storage.prototype.removeItem = function(k){
   const r = _rem.apply(this, arguments);
   if (this === LS && getUrl()) {
     k = String(k);
-    if (k.indexOf('insp_') === 0) markDirty('i:' + k.slice(5)); else if (k.indexOf('boqdwg_') === 0) markDirty('d:' + k.slice(7)); else if (k.indexOf('qcadd_') === 0) markDirty('a:' + k.slice(6)); else if (k.indexOf('qcout_') === 0) markDirty('o:' + k.slice(6));
+    if (k.indexOf('insp_') === 0) markDirty('i:' + k.slice(5)); else if (k.indexOf('boqdwg_') === 0) markDirty('d:' + k.slice(7)); else if (k.indexOf('qcadd_') === 0) markDirty('a:' + k.slice(6)); else if (k.indexOf('qcout_') === 0) markDirty('o:' + k.slice(6)); else if (k.indexOf('qcusr_') === 0) markDirty('w:' + k.slice(6));
   }
   return r;
 };
@@ -8471,7 +8471,7 @@ async function push(){
           if (pv === undefined) { drop.push(id); continue; }
           if (pv && pv.wait) { deferred.add(id); continue; }   // foto belum selesai tersimpan: coba lagi nanti
           v = pv;
-        } else if (kind === 'k') { const ck = coatPiece(key); v = (ck === undefined) ? null : ck; } else if (kind === 'm') { const pv = await coatPhotoGet(key); if (pv === undefined) { drop.push(id); continue; } v = pv || null; } else if (kind === 'd') { v = raw('boqdwg_' + key); } else if (kind === 'a') { v = raw('qcadd_' + key); } else if (kind === 'c') {
+        } else if (kind === 'k') { const ck = coatPiece(key); v = (ck === undefined) ? null : ck; } else if (kind === 'm') { const pv = await coatPhotoGet(key); if (pv === undefined) { drop.push(id); continue; } v = pv || null; } else if (kind === 'd') { v = raw('boqdwg_' + key); } else if (kind === 'a') { v = raw('qcadd_' + key); } else if (kind === 'w') { v = raw('qcusr_' + key); } else if (kind === 'c') {
           v = (key in chk) ? String(!!chk[key]) : null;
         } else if (kind === 'u') {
           v = (key in uc) ? String(uc[key]) : null;
@@ -8549,6 +8549,7 @@ function applyRecords(recs){
     if (kind === 'p') { pendP.push(r); return; }
     if (kind === 'u') { pendU.push(r); return; }
     if (kind === 'r') { pendR.push(r); return; }
+    if (kind === 'w') { try { if (r.v === null) { if (raw('qcusr_' + key) != null) _rem.call(LS, 'qcusr_' + key); } else if (raw('qcusr_' + key) !== r.v) _set.call(LS, 'qcusr_' + key, r.v); } catch(e) {} return; }
     if (kind === 'o') { try { if (r.v === null) { if (raw('qcout_' + key) != null) { _rem.call(LS, 'qcout_' + key); window.__qoCh = true; } } else if (raw('qcout_' + key) !== r.v) { _set.call(LS, 'qcout_' + key, r.v); window.__qoCh = true; } } catch(e) { console.warn('QCSync: penyimpanan penuh, lewati', key); } return; }
     if (kind === 'n' || kind === 'g') { try { if (window.QCInc && window.QCInc.apply(kind, key, r.v)) window.__qcIncCh = true; } catch(e) { console.warn('QCSync: gagal menerapkan record Incoming', key, e); } return; }
     if (kind === 'f') { try { if (window.QCOut) window.QCOut.applyPhoto(key, r.v); } catch(e) {} return; }
@@ -9515,7 +9516,7 @@ function rowOf(key){var i=key.lastIndexOf('_'),P=key.slice(0,i),ix=+key.slice(i+
 function baseOf(P){var m=/^(.*\S)\s+\d+$/.exec(P);return(m&&projectData[m[1]]&&projectData[m[1]]===projectData[P])?m[1]:P}
 function ctx(key){var r=rowOf(key);ensureSigs(r.P);if(!r.row||!r.row._sig)return null;var B=baseOf(r.P);return{P:r.P,base:B,row:r.row,kid:B+'|'+r.row._sig}}
 function idxOfSig(P,sig){ensureSigs(P);var rows=projectData[P]||[];for(var i=0;i<rows.length;i++)if(rows[i]._sig===sig)return i;return-1}
-function who(ask){var n=localStorage.getItem('boq_inspector')||'';if(!n&&ask){n=(prompt('Nama kamu (dicatat pada update drawing):')||'').trim();if(n)localStorage.setItem('boq_inspector',n)}return n||(ask?'inspector':'')}
+function who(ask){var n=(window.QCUser&&QCUser.name())||localStorage.getItem('boq_inspector')||'';if(!n&&ask){n=(prompt('Nama kamu (dicatat pada update drawing):')||'').trim();if(n)localStorage.setItem('boq_inspector',n)}return n||(ask?'inspector':'')}
 
 /* ---- link drawing manual (tersimpan per item; ikut sinkron antar inspector lewat QCSync) ---- */
 function ovrAll(){var o={};try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf(OP)===0){try{o[k.slice(OP.length)]=JSON.parse(localStorage.getItem(k))}catch(e){}}}}catch(e){}return o}
@@ -19586,6 +19587,15 @@ table.qo-t{width:100%;border-collapse:collapse;font-size:12.5px;min-width:1020px
 .qo-lb p{margin:0 0 10px;font-size:.76rem;color:#9db8d8}
 .qo-lb img{width:100%;max-height:68vh;object-fit:contain;border-radius:8px;background:#050e1c}
 .qo-lb .qo-act{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap}
+.qo-fd h4{margin:0 0 4px;font-size:.95rem}
+.qo-fd .fg{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 12px;margin:8px 0}
+.qo-fd label{display:flex;flex-direction:column;gap:3px;font-size:.72rem;font-weight:600;color:#9db8d8}
+.qo-fd label.full{margin:8px 0}
+.qo-fd select,.qo-fd input,.qo-fd textarea{background:#0f2a4d;color:#e6f0ff;border:1px solid rgba(110,170,235,.35);border-radius:8px;padding:7px 9px;font:inherit;font-size:.8rem;width:100%;box-sizing:border-box}
+.qo-fd textarea{resize:vertical;line-height:1.4}
+.qo-fdb{margin-top:6px;font-size:.72rem!important;padding:5px 10px!important;max-width:100%;white-space:normal;text-align:left;line-height:1.3}
+body.bk-light .qo-fd label{color:#44546a}
+body.bk-light .qo-fd select,body.bk-light .qo-fd input,body.bk-light .qo-fd textarea{background:#fff;color:#000;border:1px solid #8c8c8c}
 /* tombol pemicu */
 .qo-mini{display:inline-flex;align-items:center;gap:4px;border:1px solid rgba(245,158,11,.55);background:rgba(245,158,11,.14);color:#fcd34d;border-radius:8px;padding:3px 8px;font:700 11px/1.2 inherit;cursor:pointer;white-space:nowrap;min-height:0;margin:2px 0 0}
 .qo-mini:hover{background:rgba(245,158,11,.3);color:#fff}
@@ -19729,7 +19739,7 @@ body.is-wi #qoBtn{display:none}
       '<td data-l="Item"><input type="text" data-id="'+x.id+'" data-f="lbl" value="'+esc(x.lbl)+'" placeholder="Item / komponen" maxlength="160" aria-label="Item"></td>'+
       '<td data-l="Tgl Temuan"><input type="date" data-id="'+x.id+'" data-f="od" data-c="1" value="'+esc(x.od)+'" aria-label="Tanggal temuan"></td>'+
       '<td data-l="PIC"><input type="text" list="qoPics" data-id="'+x.id+'" data-f="pic" value="'+esc(x.pic)+'" placeholder="Nama PIC" maxlength="80" aria-label="PIC"></td>'+
-      '<td data-l="Komentar Temuan"><textarea data-id="'+x.id+'" data-f="cm" placeholder="Tulis komentar / temuan…" aria-label="Komentar temuan">'+esc(x.cm)+'</textarea></td>'+
+      '<td data-l="Komentar Temuan"><textarea data-id="'+x.id+'" data-f="cm" placeholder="Tulis komentar / temuan…" aria-label="Komentar temuan">'+esc(x.cm)+'</textarea>'+fdBtn(x)+'</td>'+
       '<td data-l="Status"><select class="qo-st" data-id="'+x.id+'" data-f="st" data-c="1" aria-label="Status"><option'+(cl?'':' selected')+'>OPEN</option><option'+(cl?' selected':'')+'>CLOSE</option></select></td>'+
       '<td data-l="Tgl Close">'+(cl?'<input type="date" data-id="'+x.id+'" data-f="cd" data-c="1" value="'+esc(x.cd)+'" aria-label="Tanggal close">':'<span style="color:#7f9bbd">—</span>')+'</td>'+
       '<td data-l="Durasi">'+ageBadge(x,d)+'</td>'+
@@ -19897,6 +19907,67 @@ body.is-wi #qoBtn{display:none}
     document.body.appendChild(d);
   }
 
+  /* ---------- Detail temuan Coating: defect / kriteria / tindakan (master dari Boarding Bridge) ---------- */
+  var FD={"PROC":["Pemeriksaan Awal","Blasting / Surface Preparation","Pensealanan Welding Intermiten","Pendempulan (Putty)","Pengamplasan / Sanding","Painting / Recoating","Final Inspection"],"SEV":["Critical","Major","Minor","Observation"],"MD":[{"p":"Pemeriksaan Awal","d":"Kontaminasi Minyak","k":"Permukaan bebas minyak, grease, dan kontaminan sebelum blasting/coating.","t":"Degreasing sesuai prosedur yang disetujui; verifikasi ulang sebelum blasting.","r":"ISO 8504 series; spesifikasi proyek/prosedur kerja","s":"Major"},{"p":"Pemeriksaan Awal","d":"Karat Awal","k":"Kondisi awal dicatat; tingkat persiapan akhir harus memenuhi grade yang disyaratkan proyek.","t":"Lakukan surface preparation sesuai spesifikasi dan inspeksi ulang.","r":"ISO 8501-1; spesifikasi proyek","s":"Major"},{"p":"Pemeriksaan Awal","d":"Cacat Material","k":"Cacat material tidak boleh mengganggu fungsi, ketebalan, atau hasil coating; batas penerimaan mengikuti gambar/spec.","t":"Evaluasi QC/Engineering; grinding/repair hanya setelah persetujuan bila diperlukan.","r":"Gambar teknik; ITP; spesifikasi proyek","s":"Major"},{"p":"Blasting / Surface Preparation","d":"Sisa Karat / Mill Scale","k":"Kebersihan visual mencapai grade yang ditentukan, misalnya Sa 2½ jika dipersyaratkan.","t":"Ulangi blasting pada area tidak memenuhi lalu inspeksi ulang.","r":"ISO 8501-1; ISO 12944-4; project specification","s":"Major"},{"p":"Blasting / Surface Preparation","d":"Debu Blasting","k":"Debu/partikel lepas dibersihkan sebelum coating; hasil pemeriksaan sesuai batas spesifikasi.","t":"Vacuum/clean dry air/brush yang sesuai; periksa kembali sebelum painting.","r":"ISO 8502-3; project specification","s":"Major"},{"p":"Blasting / Surface Preparation","d":"Profil Tidak Sesuai","k":"Profil permukaan berada dalam rentang yang disyaratkan paint system/TDS.","t":"Sesuaikan media/parameter blasting dan lakukan pengukuran ulang.","r":"ISO 8503 series; coating TDS/project specification","s":"Major"},{"p":"Blasting / Surface Preparation","d":"Kontaminasi Garam","k":"Kadar garam tidak melebihi batas pada spesifikasi proyek/coating manufacturer.","t":"Cuci dengan metode yang disetujui, keringkan, lalu uji ulang.","r":"ISO 8502-6; ISO 8502-9; project specification","s":"Major"},{"p":"Blasting / Surface Preparation","d":"Flash Rust","k":"Tidak ada flash rust melebihi kondisi yang diizinkan spesifikasi sebelum aplikasi coating.","t":"Bersihkan/siapkan ulang sesuai prosedur, kemudian inspeksi ulang.","r":"ISO 8501-4 (bila relevan); project specification","s":"Major"},{"p":"Blasting / Surface Preparation","d":"Abrasive Tertinggal","k":"Tidak ada abrasive lepas/tertanam yang mengganggu adhesi atau penampilan coating.","t":"Bersihkan; bila tertanam dan mengganggu, lakukan persiapan ulang sesuai prosedur.","r":"ISO 8504 series; project specification","s":"Minor"},{"p":"Blasting / Surface Preparation","d":"Cacat Tepi / Las","k":"Weld, tepi, dan cacat permukaan disiapkan sesuai grade yang ditetapkan sebelum coating.","t":"Grinding/dressing dan bersihkan; jangan menutupi cacat las struktural dengan dempul.","r":"ISO 8501-3; gambar/WPS dan spesifikasi proyek","s":"Major"},{"p":"Pensealanan Welding Intermiten","d":"Sealant Terputus","k":"Sealant kontinu pada area yang ditentukan gambar/prosedur; tidak ada celah terbuka yang dapat menahan air/kotoran.","t":"Buang sealant yang gagal, siapkan permukaan, aplikasikan ulang sesuai TDS dan curing.","r":"Gambar/prosedur proyek; sealant TDS","s":"Major"},{"p":"Pensealanan Welding Intermiten","d":"Sealant Salah Area","k":"Sealant hanya pada lokasi yang ditentukan; tidak menutupi area inspeksi atau detail yang harus tetap terbuka.","t":"Hapus sealant dari area yang tidak sesuai dan aplikasikan ulang sesuai gambar.","r":"Gambar teknik; prosedur proyek; sealant TDS","s":"Major"},{"p":"Pensealanan Welding Intermiten","d":"Adhesi Sealant Buruk","k":"Sealant melekat pada substrat yang telah disiapkan sesuai rekomendasi produsen.","t":"Hapus bagian lepas, bersihkan/primer bila disyaratkan, aplikasikan ulang dan curing.","r":"Sealant TDS; prosedur proyek","s":"Major"},{"p":"Pensealanan Welding Intermiten","d":"Rongga Sealant","k":"Sealant terisi baik tanpa rongga terbuka yang berpotensi menahan air; kriteria sesuai gambar/TDS.","t":"Buang bagian cacat, isi ulang dengan teknik aplikasi yang sesuai.","r":"Sealant TDS; gambar/prosedur proyek","s":"Major"},{"p":"Pensealanan Welding Intermiten","d":"Sealant Belum Curing","k":"Curing sesuai waktu dan kondisi lingkungan TDS; permukaan bersih sebelum dilapisi.","t":"Tunggu curing atau buang dan aplikasikan ulang bila terkontaminasi/bermasalah.","r":"Sealant TDS; coating TDS","s":"Major"},{"p":"Pendempulan (Putty)","d":"Dempul Retak","k":"Permukaan dempul stabil, tidak retak/menyusut dan sesuai batas penggunaan produk.","t":"Buang dempul gagal, evaluasi penyebab, aplikasikan ulang sesuai TDS.","r":"Putty/filler TDS; prosedur proyek","s":"Major"},{"p":"Pendempulan (Putty)","d":"Dempul Terangkat","k":"Dempul melekat pada substrat yang sesuai dan telah disiapkan; tidak ada lifting.","t":"Hapus seluruh bagian tidak melekat; siapkan permukaan dan ulangi sesuai TDS.","r":"Putty/filler TDS; prosedur proyek","s":"Major"},{"p":"Pendempulan (Putty)","d":"Dempul Terlalu Tebal","k":"Ketebalan dan area penggunaan tidak melebihi rekomendasi produsen serta tidak menggantikan perbaikan struktural.","t":"Kurangi/buang dan aplikasikan ulang; cacat material/las dirujuk ke Engineering.","r":"Putty/filler TDS; gambar teknik","s":"Major"},{"p":"Pendempulan (Putty)","d":"Dempul Tidak Rata / Berpori","k":"Permukaan rata, padat, dan tanpa pori terbuka yang terlihat setelah sanding.","t":"Isi/ratakan ulang sesuai TDS, curing, lalu sanding dan inspeksi.","r":"Putty/filler TDS; standar visual proyek","s":"Minor"},{"p":"Pengamplasan / Sanding","d":"Sanding Tidak Rata","k":"Transisi perbaikan halus; tidak ada step/edge yang tampak setelah topcoat sesuai standar visual proyek.","t":"Sanding ulang dan periksa dengan pencahayaan yang memadai.","r":"Coating TDS; prosedur repair proyek","s":"Minor"},{"p":"Pengamplasan / Sanding","d":"Sanding Kurang","k":"Area repair memiliki profil/feather edge yang sesuai sistem repaint dan TDS; tidak ada tepi cat mengelupas.","t":"Sanding/feather-edge ulang hingga lapisan stabil dan transisi halus.","r":"Coating TDS; prosedur repair proyek","s":"Major"},{"p":"Pengamplasan / Sanding","d":"Sanding Tembus Substrat","k":"Substrat terbuka ditangani sesuai sistem primer dan prosedur repair yang disetujui.","t":"Bersihkan, aplikasikan primer yang kompatibel sesuai prosedur; jangan langsung menutup tanpa persiapan.","r":"Coating TDS; project repair procedure","s":"Major"},{"p":"Pengamplasan / Sanding","d":"Debu Sanding","k":"Permukaan bersih dan bebas debu sebelum lapisan berikutnya.","t":"Vacuum/clean sesuai prosedur; inspeksi ulang sebelum recoating.","r":"ISO 8502-3 (bila relevan); coating TDS","s":"Major"},{"p":"Painting / Recoating","d":"Dry Spray","k":"Film coating rata sesuai standar visual dan TDS; tidak ada dry spray berlebihan.","t":"Sanding/abrasi dan recoating sesuai prosedur repair setelah curing yang diperlukan.","r":"ISO 12944-7; coating TDS","s":"Minor"},{"p":"Painting / Recoating","d":"Cat Melorot","k":"Tidak ada sagging yang melampaui standar visual/proyek; DFT tetap memenuhi persyaratan.","t":"Biarkan curing sesuai TDS, ratakan/sanding jika diizinkan, lalu recoating.","r":"ISO 12944-7; coating TDS","s":"Minor"},{"p":"Painting / Recoating","d":"Orange Peel","k":"Tekstur memenuhi standar visual yang disepakati dan tidak mengganggu fungsi/DFT.","t":"Sanding dan recoating sesuai prosedur jika di luar batas penerimaan.","r":"ISO 12944-7; coating TDS; visual standard proyek","s":"Minor"},{"p":"Painting / Recoating","d":"Pinhole Cat","k":"Tidak ada pori terbuka yang melanggar kriteria proyek atau sistem coating.","t":"Persiapan lokal dan recoating sesuai prosedur repair; investigasi kontaminasi/aplikasi.","r":"ISO 12944-7; coating TDS","s":"Major"},{"p":"Painting / Recoating","d":"Cat Menggelembung","k":"Tidak ada blister yang tidak dapat diterima; penyebab kelembapan/kontaminasi/solvent ditelusuri.","t":"Hapus coating gagal sampai lapisan sehat, siapkan ulang dan aplikasikan kembali.","r":"ISO 4628-2; ISO 12944-7; project specification","s":"Major"},{"p":"Painting / Recoating","d":"Cat Mengelupas","k":"Tidak ada pengelupasan atau kehilangan adhesi yang melanggar persyaratan.","t":"Hapus lapisan tidak melekat, siapkan permukaan dan repaint sesuai sistem.","r":"ISO 4628-5; ISO 12944-7","s":"Major"},{"p":"Painting / Recoating","d":"Cat Retak","k":"Tidak ada retak coating yang tidak dapat diterima menurut inspeksi visual/proyek.","t":"Evaluasi penyebab; buang lapisan gagal dan repaint sesuai prosedur.","r":"ISO 4628-4; coating TDS","s":"Major"},{"p":"Painting / Recoating","d":"Warna / Kilap Tidak Rata","k":"Warna dan tingkat kilap sesuai approved sample/spec; tidak ada perbedaan mencolok pada kondisi pemeriksaan yang disepakati.","t":"Pastikan batch, mixing, ketebalan, curing dan metode aplikasi; sanding/recoat bila disetujui.","r":"Project specification; coating TDS; approved sample","s":"Minor"},{"p":"Painting / Recoating","d":"DFT Kurang","k":"DFT memenuhi ketentuan per coat/system dalam spesifikasi; evaluasi berdasarkan metode dan sampling yang ditetapkan.","t":"Aplikasikan lapisan tambahan atau repair sesuai TDS setelah memastikan kompatibilitas/recoat window.","r":"ISO 19840; ISO 12944-5; project specification","s":"Major"},{"p":"Painting / Recoating","d":"DFT Berlebih","k":"DFT tidak melampaui batas maksimum dari spesifikasi/TDS bila batas tersebut ditetapkan.","t":"Evaluasi dengan QC/paint manufacturer; sanding/removal dan repair sesuai instruksi yang disetujui.","r":"ISO 19840; coating TDS; project specification","s":"Major"},{"p":"Painting / Recoating","d":"Kontaminasi Cat","k":"Film coating memenuhi standar visual proyek; tidak ada kontaminan yang mengganggu proteksi/penampilan.","t":"Setelah curing yang sesuai, perbaiki lokal atau sanding/recoat sesuai prosedur.","r":"ISO 12944-7; coating TDS","s":"Minor"},{"p":"Painting / Recoating","d":"Solvent Popping","k":"Tidak ada pori/letupan yang tidak dapat diterima; ketebalan dan waktu flash-off sesuai TDS.","t":"Buang/perbaiki lapisan terdampak sesuai prosedur dan koreksi metode aplikasi.","r":"Coating TDS; ISO 12944-7","s":"Major"},{"p":"Painting / Recoating","d":"Curing Tidak Sesuai","k":"Waktu dan kondisi curing memenuhi TDS sebelum handling, inspeksi atau recoating.","t":"Tunda proses sampai curing terpenuhi; bila film gagal, ikuti prosedur repair produsen.","r":"Coating TDS; project specification","s":"Major"},{"p":"Final Inspection","d":"Adhesi Coating Gagal","k":"Hasil uji memenuhi metode dan nilai penerimaan yang disyaratkan proyek.","t":"Tentukan batas coating gagal, lakukan surface preparation dan recoating sesuai prosedur.","r":"ISO 2409 atau ASTM D3359 bila ditentukan; project specification","s":"Major"},{"p":"Final Inspection","d":"Coating Tidak Menutup","k":"Tidak ada area tidak tertutup yang gagal terhadap kriteria proyek dan metode uji yang ditentukan.","t":"Repair lokal sesuai prosedur, lalu uji ulang bila dipersyaratkan.","r":"NACE/AMPP atau standar uji yang ditentukan proyek; project specification","s":"Major"},{"p":"Final Inspection","d":"Coating Rusak saat Handling","k":"Tidak ada kerusakan yang tidak diperbaiki sebelum serah terima.","t":"Masking/abrasi lokal, surface preparation, primer/topcoat ulang sesuai sistem dan TDS.","r":"ISO 12944-7; project repair procedure","s":"Major"},{"p":"Painting / Recoating","d":"Overspray","k":"Permukaan dan area di sekitarnya bebas dari overspray yang tidak diizinkan; tekstur, penampilan, fungsi, dan ketebalan coating tetap memenuhi spesifikasi proyek.","t":"Hilangkan overspray dengan metode yang disetujui dan kompatibel dengan substrat/coating. Bila diperlukan lakukan sanding terkendali dan recoating sesuai TDS/prosedur repair; inspeksi ulang visual dan DFT bila relevan.","r":"Project Painting Specification; Approved ITP; coating TDS; ISO 12944-7:2017; PPG Common Paint Defects Guide","s":"Minor"}]};
+  var FDM={crit:'k',tind:'t',ref:'r',sev:'s'};
+  function fdMd(px,d){return FD.MD.find(function(m){return m.d===d&&(!px||m.p===px);})||FD.MD.find(function(m){return m.d===d;})||null;}
+  function fdBtn(x){
+    if(!ctx||ctx.mod!=='coat')return '';
+    return '<button type="button" class="qo-b qo-fdb" data-a="fdet" data-id="'+x.id+'" title="Isi defect, kriteria penerimaan, dan tindakan perbaikan">'+
+      (x.df?esc(x.df)+(x.sev?' · '+esc(x.sev):'')+((x.crit&&x.tind)?' ✓':' …'):'＋ Defect / kriteria / tindakan')+'</button>';
+  }
+  function fdOpt(v,cur,lab){return '<option value="'+esc(v)+'"'+(v===cur?' selected':'')+'>'+esc(lab||v)+'</option>';}
+  function fdFields(x){
+    var ms=FD.MD.filter(function(m){return !x.px||m.p===x.px;});
+    var dfo=ms.map(function(m){return fdOpt(m.d,x.df,x.px?m.d:m.d+' — '+m.p);});
+    if(x.df&&!ms.some(function(m){return m.d===x.df;}))dfo.unshift(fdOpt(x.df,x.df));
+    return '<div class="fg">'+
+      '<label>Proses<select data-fd="px"><option value=""></option>'+FD.PROC.map(function(p){return fdOpt(p,x.px);}).join('')+'</select></label>'+
+      '<label>Defect<select data-fd="df"><option value=""></option>'+dfo.join('')+'</select></label>'+
+      '<label>Severity<select data-fd="sev"><option value=""></option>'+FD.SEV.map(function(p){return fdOpt(p,x.sev);}).join('')+'</select></label></div>'+
+      '<label class="full">Lokasi Temuan<input type="text" data-fd="lok" maxlength="120" value="'+esc(x.lok||'')+'"></label>'+
+      '<label class="full">Acceptance Criteria / Kriteria Penerimaan<textarea data-fd="crit" rows="3">'+esc(x.crit||'')+'</textarea></label>'+
+      '<label class="full">Tindakan Perbaikan<textarea data-fd="tind" rows="3">'+esc(x.tind||'')+'</textarea></label>'+
+      '<label class="full">Referensi Standar / Dokumen<input type="text" data-fd="ref" maxlength="200" value="'+esc(x.ref||'')+'"></label>';
+  }
+  function fdSync(x){   // perbarui tombol + kolom Kategori Defect di tabel tanpa render ulang
+    if(!ov)return;
+    var b=ov.querySelector('[data-a="fdet"][data-id="'+x.id+'"]'); if(b)b.outerHTML=fdBtn(x);
+    var c=ov.querySelector('input[data-f="cat"][data-id="'+x.id+'"]'); if(c&&c!==document.activeElement)c.value=x.cat||'';
+  }
+  function fdApply(x,prev,m){   // isi otomatis hanya field yang kosong / masih sama dengan isi master sebelumnya (edit manual tidak tertimpa)
+    Object.keys(FDM).forEach(function(k){
+      var mk=FDM[k], cur=x[k]||'';
+      if(!cur||(prev&&cur===prev[mk]))x[k]=m?m[mk]:'';
+    });
+    if(!x.cat||(prev&&x.cat===prev.d))x.cat=m?m.d:'';
+  }
+  function openDetail(id){
+    var x=find(id); if(!x)return;
+    var old=document.getElementById('qoLb'); if(old)old.remove();
+    var d=document.createElement('div'); d.id='qoLb'; d.className='qo-lb';
+    d.innerHTML='<div class="qo-fd" style="width:min(720px,100%)"><h4>Detail temuan · '+esc(x.lbl||'—')+'</h4><p>Pilih proses dan defect: kriteria, tindakan, referensi, dan severity terisi otomatis dari master defect. Isian yang sudah Anda ubah manual tidak ditimpa.</p><div id="qoFdBody">'+fdFields(x)+'</div><div class="qo-act"><button class="qo-b pri" type="button" data-a="fdclose">Selesai</button></div></div>';
+    d.addEventListener('click',function(e){
+      if(e.target===d||e.target.closest('[data-a="fdclose"]'))d.remove();
+    });
+    d.addEventListener('change',function(e){
+      var t=e.target, k=t.getAttribute&&t.getAttribute('data-fd'); if(!k||t.tagName!=='SELECT')return;
+      if(k==='px'){
+        var prev=x.df?fdMd(x.px,x.df):null; x.px=t.value;
+        if(prev&&prev.p!==x.px){fdApply(x,prev,null);x.df='';}
+      }else if(k==='df'){
+        var pv=x.df?fdMd(x.px,x.df):null, m=t.value?fdMd(x.px,t.value):null;
+        x.df=t.value; if(m&&!x.px)x.px=m.p; fdApply(x,pv,m);
+      }else x[k]=t.value;
+      saveItem(x); d.querySelector('#qoFdBody').innerHTML=fdFields(x); fdSync(x);
+    });
+    d.addEventListener('input',function(e){
+      var t=e.target, k=t.getAttribute&&t.getAttribute('data-fd'); if(!k||t.tagName==='SELECT')return;
+      x[k]=t.value; saveItem(x); fdSync(x);
+    });
+    document.body.appendChild(d);
+  }
+
   /* ---------- events ---------- */
   function onInput(e){
     var t=e.target; if(!t.getAttribute||t.getAttribute('data-c'))return;
@@ -19943,15 +20014,16 @@ body.is-wi #qoBtn{display:none}
     }
     else if(a==='photo'){pend={id:id,s:s};ov.querySelector('#qoFile').click();}
     else if(a==='view'){lightbox(id,s);}
+    else if(a==='fdet'){openDetail(id);}
     else if(a==='opts'){openOpts(b.getAttribute('data-f'));}
     else if(a==='csv'){exportCsv();}
     else if(a==='pdf'){exportPdf(b);}
   }
   function exportCsv(){
     var list=items().filter(function(x){return inScope(x,ctx,true);});
-    var H=['No','Modul','Project','Item','Tgl Temuan','PIC','Komentar Temuan','Status','Tgl Close','Closure (Hari)','Kategori Defect','Foto Before','Foto After'];
+    var H=['No','Modul','Project','Item','Tgl Temuan','PIC','Komentar Temuan','Status','Tgl Close','Closure (Hari)','Kategori Defect','Foto Before','Foto After'].concat(ctx.mod==='coat'?['Proses','Defect','Severity','Lokasi Temuan','Kriteria Penerimaan','Tindakan Perbaikan','Referensi']:[]);
     var q=function(v){return '"'+String(v==null?'':v).replace(/"/g,'""')+'"';};
-    var rows=[H.map(q).join(',')].concat(list.map(function(x,i){var d=days(x);return [i+1,MODS[x.mod],x.proj,x.lbl,fmtD(x.od),x.pic,x.cm,x.st,fmtD(x.cd),d==null?'':d,x.cat||'',x.pb?'Ada':'-',x.pa?'Ada':'-'].map(q).join(',');}));
+    var rows=[H.map(q).join(',')].concat(list.map(function(x,i){var d=days(x);return [i+1,MODS[x.mod],x.proj,x.lbl,fmtD(x.od),x.pic,x.cm,x.st,fmtD(x.cd),d==null?'':d,x.cat||'',x.pb?'Ada':'-',x.pa?'Ada':'-'].concat(ctx.mod==='coat'?[x.px||'',x.df||'',x.sev||'',x.lok||'',x.crit||'',x.tind||'',x.ref||'']:[]).map(q).join(',');}));
     var blob=new Blob(['﻿'+rows.join('\r\n')],{type:'text/csv;charset=utf-8'});
     var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
     a.download='Outstanding_'+ctx.mod+'_'+today()+'.csv'; document.body.appendChild(a); a.click();
@@ -22620,7 +22692,7 @@ function newReport(k){
   var s=sheetEl();
   var dt=s.querySelector('td.dt');if(dt)dt.textContent=fmtDate(new Date());
   var y=s.querySelector('.dn [data-s=yr]');if(y)y.textContent=new Date().getFullYear();
-  var nm=s.querySelector('td.nm .v');var who='';try{who=LS.getItem(INSP)||'';}catch(e){}
+  var nm=s.querySelector('td.nm .v');var who='';try{who=(window.QCUser&&QCUser.name())||LS.getItem(INSP)||'';}catch(e){}
   if(nm&&who)nm.textContent=who;
   head();showEdit();
 }
@@ -24808,6 +24880,7 @@ function openOutstanding(id){
 
 /* ---------- 3. MASTER PROJECT ---------- */
 function syncInfo(){try{var s=window.QCSync&&QCSync.state&&QCSync.state();return s?{on:!!s.url,pend:s.pending||0}:{on:false,pend:0};}catch(e){return {on:false,pend:0};}}
+function inspBadge(){try{var n=window.QCUser&&QCUser.name();return n?'<span class="nv-r g">● '+esc(n)+'</span>':'<span class="nv-r x">○ Belum masuk</span>';}catch(e){return '';}}
 function masterHtml(D){
   var gs=grouped(),cur=curP(),sy=syncInfo();
   function mc(act,ico,c1,c2,t,d,go,extra){return '<div class="nv-card clk" data-nv-act="'+act+'" style="--c1:'+c1+';--c2:'+c2+'" tabindex="0" role="button"><div class="nv-ct"><div class="nv-ci">'+ico+'</div>'+(extra||'')+'</div><h4>'+t+'</h4><p>'+d+'</p><div class="nv-cf"><span></span><span class="nv-go">'+go+'</span></div></div>';}
@@ -24829,6 +24902,7 @@ function masterHtml(D){
     '<div class="nv-bayh"><span>Pengaturan</span><h3>Backup &amp; akses</h3></div><div class="nv-grid nv-g3">'+
       mc('pm-backup','💾','#3b82f6','#6366f1','Backup &amp; Project','Simpan backup, pulihkan, atau sembunyikan project. Data tersimpan di browser ini.','Buka →')+
       mc('guest','🌐','#6366f1','#06b6d4','Link Outstanding Tamu','Salin link Outstanding hanya-baca untuk dibagikan ke tamu.','Salin →')+
+      mc('inspector','👤','#0ea5e9','#8b5cf6','Akun Inspector','Daftar nama + PIN inspector (tambah, reset PIN, nonaktifkan). Nama login otomatis tercatat di hasil inspeksi.','Kelola →',inspBadge())+
     '</div>'+
     '<div class="nv-sec"><h3>Daftar Project &amp; Unit</h3><small>Klik baris untuk menjadikan project aktif</small></div><div class="nv-panel">'+table+'</div>';
 }
@@ -24903,6 +24977,7 @@ function act(a){
   if(a==='sync'){if(window.QCSync&&QCSync.open)QCSync.open();else toast('Modul sinkron belum tersedia');return;}
   if(a==='bell'){var b=$('bqBell');if(b)b.click();else toast('Belum ada pemberitahuan drawing');return;}
   if(a==='guest'){if(typeof window.gxOutLink==='function')window.gxOutLink();else toast('Link tamu belum tersedia');return;}
+  if(a==='inspector'){if(window.QCUser&&QCUser.admin)QCUser.admin();else toast('Modul akun inspector belum tersedia');return;}
 }
 var root0=$('homeView');
 if(root0){
@@ -25147,4 +25222,239 @@ window.QCStage={decorate:decorate,stage:stage,gate:function(p,i,s){return gate(p
 </script>
 
 <footer class="qc-foot">© 2026 QC WSC1 Bukaka Team</footer>
+<script id="qcUserMod">
+/* ===== AKUN INSPECTOR (tingkat 1): daftar nama + PIN, nama otomatis tercatat di semua isian "inspector" =====
+   Data : localStorage 'qcusr_<id>' = {id,n:nama,h:hash PIN,a:1|0,t}; 'qcusr_~admin' = {h}
+   Sinkron: lewat QCSync (kind 'w') → Google Sheet yang sama. Sesi: 'qc_cur_user' (per perangkat, berlaku sampai ganti hari / keluar).
+   Catatan: PIN di-hash (SHA-256 + garam), tetapi ini penanda identitas internal, bukan keamanan tingkat server. */
+(function(){
+'use strict';
+if(window.QCUser||window.__gxGuest)return;
+var PFX='qcusr_',ADM='~admin',SES='qc_cur_user',LS=window.localStorage;
+var KK=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+function sha256(s){
+  var b=unescape(encodeURIComponent(s)),l=b.length,w=[],i,j;
+  for(i=0;i<l;i++)w[i>>2]=(w[i>>2]||0)|(b.charCodeAt(i)<<(24-(i%4)*8));
+  w[l>>2]=(w[l>>2]||0)|(0x80<<(24-(l%4)*8));
+  var n=(((l+8)>>6)+1)*16; for(i=0;i<n;i++)if(w[i]===undefined)w[i]=0;
+  w[n-1]=l*8;
+  var H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19],W=new Array(64);
+  function R(x,k){return (x>>>k)|(x<<(32-k));}
+  for(j=0;j<n;j+=16){
+    for(i=0;i<64;i++){
+      if(i<16)W[i]=w[j+i]|0;
+      else{var s0=R(W[i-15],7)^R(W[i-15],18)^(W[i-15]>>>3),s1=R(W[i-2],17)^R(W[i-2],19)^(W[i-2]>>>10);W[i]=(W[i-16]+s0+W[i-7]+s1)|0;}
+    }
+    var a=H[0],bb=H[1],c=H[2],d=H[3],e=H[4],f=H[5],g=H[6],h=H[7];
+    for(i=0;i<64;i++){
+      var S1=R(e,6)^R(e,11)^R(e,25),ch=(e&f)^(~e&g),t1=(h+S1+ch+KK[i]+W[i])|0,S0=R(a,2)^R(a,13)^R(a,22),mj=(a&bb)^(a&c)^(bb&c),t2=(S0+mj)|0;
+      h=g;g=f;f=e;e=(d+t1)|0;d=c;c=bb;bb=a;a=(t1+t2)|0;
+    }
+    H[0]=(H[0]+a)|0;H[1]=(H[1]+bb)|0;H[2]=(H[2]+c)|0;H[3]=(H[3]+d)|0;H[4]=(H[4]+e)|0;H[5]=(H[5]+f)|0;H[6]=(H[6]+g)|0;H[7]=(H[7]+h)|0;
+  }
+  return H.map(function(x){return ('00000000'+(x>>>0).toString(16)).slice(-8);}).join('');
+}
+function hp(id,pin){return sha256('qcu|'+id+'|'+pin);}
+function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function raw(k){try{return LS.getItem(k);}catch(e){return null;}}
+function jp(k){try{return JSON.parse(raw(k)||'null');}catch(e){return null;}}
+function today(){var d=new Date(),z=function(n){return (n<10?'0':'')+n;};return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate());}
+function toast(m){if(typeof window.showToastMsg==='function')window.showToastMsg(m);}
+function pinOk(p){return /^\d{4,8}$/.test(p);}
+
+/* ---------- data ---------- */
+function roster(){
+  var a=[];
+  for(var i=0;i<LS.length;i++){
+    var k=LS.key(i); if(!k||k.indexOf(PFX)!==0||k===PFX+ADM)continue;
+    var u=jp(k); if(u&&u.id&&u.n)a.push(u);
+  }
+  return a.sort(function(x,y){return x.n.localeCompare(y.n);});
+}
+function actives(){return roster().filter(function(u){return u.a!==0;});}
+function getUser(id){return jp(PFX+id);}
+function put(rec){rec.t=Date.now();try{LS.setItem(PFX+rec.id,JSON.stringify(rec));}catch(e){toast('⚠ Gagal menyimpan (penyimpanan penuh?)');}}
+function del(id){try{LS.removeItem(PFX+id);}catch(e){}}
+function admRec(){return jp(PFX+ADM);}
+function ses(){
+  var s=jp(SES); if(!s||!s.id)return null;
+  var u=getUser(s.id);
+  if(!u||u.a===0||u.n!==s.n||u.h!==s.h||s.d!==today())return null;
+  return s;
+}
+function name(){var s=ses();return s?s.n:'';}
+function needGate(){return actives().length>0&&!ses();}
+
+/* ---------- gaya ---------- */
+var st=document.createElement('style');
+st.textContent='#qcuPill{position:fixed;left:10px;bottom:10px;z-index:99990;background:#0b1f3a;color:#e6f0ff;border:1px solid rgba(110,170,235,.45);border-radius:999px;padding:6px 12px;font:600 12px system-ui,sans-serif;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.35);max-width:70vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'+
+'#qcuPill.off{opacity:.75}body.guest-mode #qcuPill{display:none}'+
+'#qcuMenu{position:fixed;left:10px;bottom:48px;z-index:99991;background:#0b1f3a;color:#e6f0ff;border:1px solid rgba(110,170,235,.45);border-radius:10px;padding:6px;font:13px system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.45)}'+
+'#qcuMenu button{display:block;width:100%;text-align:left;background:none;border:0;color:inherit;padding:8px 12px;border-radius:6px;cursor:pointer;font:inherit}#qcuMenu button:hover{background:rgba(110,170,235,.18)}'+
+'.qcu-ov{position:fixed;inset:0;z-index:2147483000;background:rgba(2,8,16,.9);display:flex;align-items:center;justify-content:center;padding:16px;font-family:system-ui,sans-serif}'+
+'.qcu-box{width:min(420px,100%);max-height:100%;overflow:auto;background:#0b1f3a;color:#e6f0ff;border:1px solid rgba(110,170,235,.4);border-radius:14px;padding:18px}'+
+'.qcu-box.wide{width:min(640px,100%)}.qcu-box h3{margin:0 0 4px;font-size:1.05rem}.qcu-box p{margin:0 0 12px;font-size:.78rem;color:#9db8d8}'+
+'.qcu-box label{display:block;font-size:.74rem;font-weight:600;color:#9db8d8;margin:8px 0 3px}'+
+'.qcu-box input,.qcu-box select{width:100%;box-sizing:border-box;background:#0f2a4d;color:#e6f0ff;border:1px solid rgba(110,170,235,.35);border-radius:8px;padding:9px 10px;font:inherit;font-size:.9rem}'+
+'.qcu-btn{background:#0284c7;color:#fff;border:1px solid #0284c7;border-radius:8px;padding:9px 14px;font:600 .85rem system-ui;cursor:pointer}.qcu-btn.g{background:#1e3a5f;border-color:#2d5a8e}.qcu-btn.r{background:#b91c1c;border-color:#b91c1c}.qcu-btn.s{padding:5px 9px;font-size:.74rem}'+
+'.qcu-msg{min-height:18px;margin:8px 0;font-size:.78rem;color:#fca5a5}.qcu-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}'+
+'.qcu-tb{width:100%;border-collapse:collapse;font-size:.82rem;margin:8px 0}.qcu-tb td,.qcu-tb th{padding:6px 4px;border-bottom:1px solid rgba(110,170,235,.2);text-align:left}'+
+'.qcu-lock{background:rgba(148,163,184,.18)!important;cursor:not-allowed!important}';
+document.head.appendChild(st);
+
+/* ---------- komponen UI ---------- */
+function overlay(id,inner,wide){
+  var o=document.getElementById(id); if(o)o.remove();
+  o=document.createElement('div'); o.id=id; o.className='qcu-ov';
+  o.innerHTML='<div class="qcu-box'+(wide?' wide':'')+'">'+inner+'<\/div>';
+  o.addEventListener('keydown',function(e){e.stopPropagation();});
+  document.body.appendChild(o); return o;
+}
+var fails=0,lockUntil=0;
+function showGate(){
+  var us=actives();
+  var o=overlay('qcuGate','<h3>🔐 Masuk Inspector<\/h3><p>Pilih nama dan masukkan PIN. Nama Anda otomatis tercatat di semua hasil inspeksi.<\/p>'+
+   '<label>Nama inspector<\/label><select id="qcuSel">'+us.map(function(u){return '<option value="'+esc(u.id)+'">'+esc(u.n)+'<\/option>';}).join('')+'<\/select>'+
+   '<label>PIN<\/label><input id="qcuPin" type="password" inputmode="numeric" autocomplete="off" maxlength="8" placeholder="PIN 4–8 angka">'+
+   '<div class="qcu-msg" id="qcuMsg"><\/div><div class="qcu-row"><button class="qcu-btn" data-qa="login">Masuk<\/button><button class="qcu-btn g" data-qa="admin">Kelola inspector (admin)<\/button><\/div>');
+  var last=raw('qc_last_user'); if(last){var s=o.querySelector('#qcuSel'); if(s&&getUser(last))s.value=last;}
+  o.addEventListener('click',function(e){var b=e.target.closest('[data-qa]');if(!b)return;var a=b.getAttribute('data-qa');if(a==='login')doLogin();else if(a==='admin')openAdmin();});
+  o.addEventListener('keydown',function(e){if(e.key==='Enter'&&e.target.id==='qcuPin')doLogin();});
+  setTimeout(function(){var p=document.getElementById('qcuPin');if(p)p.focus();},50);
+}
+function doLogin(){
+  var m=document.getElementById('qcuMsg'),id=document.getElementById('qcuSel').value,pin=document.getElementById('qcuPin').value.trim();
+  if(Date.now()<lockUntil){m.textContent='Terlalu banyak percobaan. Coba lagi '+Math.ceil((lockUntil-Date.now())/1000)+' detik.';return;}
+  var u=getUser(id);
+  if(!u||u.a===0){m.textContent='Akun tidak ditemukan / nonaktif.';return;}
+  if(hp(id,pin)!==u.h){fails++;document.getElementById('qcuPin').value='';if(fails>=5){lockUntil=Date.now()+30000;fails=0;m.textContent='PIN salah 5 kali. Tunggu 30 detik.';}else m.textContent='PIN salah.';return;}
+  fails=0;
+  try{LS.setItem(SES,JSON.stringify({id:u.id,n:u.n,h:u.h,d:today()}));LS.setItem('qc_last_user',u.id);}catch(e){}
+  var g=document.getElementById('qcuGate'); if(g)g.remove();
+  toast('✅ Masuk sebagai '+u.n); tick();
+}
+function logout(){try{LS.removeItem(SES);}catch(e){}tick();}
+
+/* ---------- admin ---------- */
+var admOk=0;
+function openAdmin(){
+  if(!admRec()){return admSetup();}
+  if(Date.now()<admOk)return admPanel();
+  var o=overlay('qcuAdm','<h3>🛠 Admin Inspector<\/h3><p>Masukkan PIN admin.<\/p><label>PIN admin<\/label><input id="qcuAp" type="password" inputmode="numeric" maxlength="8" autocomplete="off"><div class="qcu-msg" id="qcuAm"><\/div><div class="qcu-row"><button class="qcu-btn" data-qa="aok">Buka<\/button><button class="qcu-btn g" data-qa="aclose">Batal<\/button><\/div>');
+  function go(){var a=admRec(),p=document.getElementById('qcuAp').value.trim();if(a&&hp(ADM,p)===a.h){admOk=Date.now()+10*60000;admPanel();}else{fails++;document.getElementById('qcuAm').textContent=fails>=5?'Terlalu banyak percobaan.':'PIN admin salah.';if(fails>=5){lockUntil=Date.now()+30000;fails=0;}document.getElementById('qcuAp').value='';}}
+  o.addEventListener('click',function(e){var b=e.target.closest('[data-qa]');if(!b)return;var a=b.getAttribute('data-qa');if(a==='aok'){if(Date.now()<lockUntil){document.getElementById('qcuAm').textContent='Tunggu sebentar.';return;}go();}else if(a==='aclose')o.remove();});
+  o.addEventListener('keydown',function(e){if(e.key==='Enter')go();});
+  setTimeout(function(){var p=document.getElementById('qcuAp');if(p)p.focus();},50);
+}
+function admSetup(){
+  var o=overlay('qcuAdm','<h3>🛠 Buat PIN Admin<\/h3><p>Admin mengelola daftar inspector (tambah, nonaktifkan, reset PIN). Simpan PIN ini baik-baik.<\/p><label>PIN admin (4–8 angka)<\/label><input id="qcuA1" type="password" inputmode="numeric" maxlength="8" autocomplete="off"><label>Ulangi PIN admin<\/label><input id="qcuA2" type="password" inputmode="numeric" maxlength="8" autocomplete="off"><div class="qcu-msg" id="qcuAm"><\/div><div class="qcu-row"><button class="qcu-btn" data-qa="asave">Simpan<\/button><button class="qcu-btn g" data-qa="aclose">Batal<\/button><\/div>');
+  o.addEventListener('click',function(e){var b=e.target.closest('[data-qa]');if(!b)return;var a=b.getAttribute('data-qa');
+    if(a==='aclose')o.remove();
+    else if(a==='asave'){var p1=document.getElementById('qcuA1').value.trim(),p2=document.getElementById('qcuA2').value.trim(),m=document.getElementById('qcuAm');
+      if(!pinOk(p1)){m.textContent='PIN harus 4–8 angka.';return;} if(p1!==p2){m.textContent='Kedua PIN tidak sama.';return;}
+      put({id:ADM,n:'admin',h:hp(ADM,p1),a:1}); admOk=Date.now()+10*60000; admPanel();}});
+}
+function admPanel(){
+  var us=roster(), cur=ses();
+  var o=overlay('qcuAdm','<h3>🛠 Kelola Inspector<\/h3><p>Nama yang dipilih saat masuk akan otomatis tercatat sebagai pemeriksa.<\/p>'+
+   '<table class="qcu-tb"><thead><tr><th>Nama<\/th><th>Status<\/th><th><\/th><\/tr><\/thead><tbody>'+
+   (us.length?us.map(function(u){return '<tr><td>'+esc(u.n)+(cur&&cur.id===u.id?' <small>(Anda)<\/small>':'')+'<\/td><td>'+(u.a===0?'Nonaktif':'Aktif')+'<\/td><td style="text-align:right;white-space:nowrap">'+
+     '<button class="qcu-btn g s" data-qa="reset" data-id="'+esc(u.id)+'">Reset PIN<\/button> '+
+     '<button class="qcu-btn g s" data-qa="tog" data-id="'+esc(u.id)+'">'+(u.a===0?'Aktifkan':'Nonaktifkan')+'<\/button> '+
+     '<button class="qcu-btn r s" data-qa="del" data-id="'+esc(u.id)+'">Hapus<\/button><\/td><\/tr>';}).join(''):'<tr><td colspan="3" style="color:#9db8d8">Belum ada inspector. Tambahkan di bawah.<\/td><\/tr>')+
+   '<\/tbody><\/table>'+
+   '<label>Tambah inspector<\/label><div class="qcu-row" style="margin-top:0"><input id="qcuNn" type="text" maxlength="32" placeholder="Nama (maks 32 huruf)" style="flex:2;min-width:140px"><input id="qcuNp" type="password" inputmode="numeric" maxlength="8" placeholder="PIN 4–8 angka" style="flex:1;min-width:110px"><button class="qcu-btn" data-qa="add">＋ Tambah<\/button><\/div>'+
+   '<div class="qcu-msg" id="qcuAm"><\/div>'+
+   '<div class="qcu-row"><button class="qcu-btn g s" data-qa="admpin">Ganti PIN admin<\/button><button class="qcu-btn g s" data-qa="resend">Kirim ulang ke server<\/button><span style="flex:1"><\/span><button class="qcu-btn" data-qa="aclose">Selesai<\/button><\/div>',1);
+  function msg(t){var m=document.getElementById('qcuAm');if(m)m.textContent=t||'';}
+  o.addEventListener('click',function(e){
+    var b=e.target.closest('[data-qa]'); if(!b)return; var a=b.getAttribute('data-qa'),id=b.getAttribute('data-id');
+    if(a==='aclose'){o.remove();tick();}
+    else if(a==='add'){
+      var n=document.getElementById('qcuNn').value.replace(/\s+/g,' ').trim(),p=document.getElementById('qcuNp').value.trim();
+      if(!n){msg('Isi nama dulu.');return;} if(!pinOk(p)){msg('PIN harus 4–8 angka.');return;}
+      if(roster().some(function(u){return u.n.toLowerCase()===n.toLowerCase();})){msg('Nama sudah ada.');return;}
+      var nid='u'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+      put({id:nid,n:n,h:hp(nid,p),a:1}); admPanel();
+    }
+    else if(a==='reset'){
+      var np=prompt('PIN baru untuk '+(getUser(id)||{}).n+' (4–8 angka):'); if(np===null)return; np=np.trim();
+      if(!pinOk(np)){msg('PIN harus 4–8 angka.');return;}
+      var u=getUser(id); if(u){u.h=hp(id,np);put(u);} admPanel(); toast('PIN direset');
+    }
+    else if(a==='tog'){var u2=getUser(id);if(u2){u2.a=u2.a===0?1:0;put(u2);}admPanel();}
+    else if(a==='del'){
+      if(b.getAttribute('data-arm')!=='1'){b.setAttribute('data-arm','1');b.textContent='Yakin?';setTimeout(function(){if(b.isConnected){b.removeAttribute('data-arm');b.textContent='Hapus';}},3000);return;}
+      del(id); admPanel();
+    }
+    else if(a==='admpin'){
+      var ap=prompt('PIN admin baru (4–8 angka):'); if(ap===null)return; ap=ap.trim();
+      if(!pinOk(ap)){msg('PIN harus 4–8 angka.');return;}
+      put({id:ADM,n:'admin',h:hp(ADM,ap),a:1}); toast('PIN admin diganti');
+    }
+    else if(a==='resend'){
+      if(window.QCSync&&QCSync.mark){roster().concat([admRec()||{}]).forEach(function(u){if(u.id)QCSync.mark('w:'+u.id);});toast('Daftar inspector dikirim ke server');}
+      else toast('Sinkron belum aktif');
+    }
+  });
+}
+
+/* ---------- pil nama + menu ---------- */
+function ensurePill(){
+  var p=document.getElementById('qcuPill');
+  if(!p){p=document.createElement('button');p.id='qcuPill';p.type='button';p.addEventListener('click',toggleMenu);document.body.appendChild(p);}
+  var n=name();
+  p.className=n?'':'off';
+  p.textContent=n?('👤 '+n):(actives().length?'👤 Belum masuk':'👤 Atur inspector');
+  p.title=n?'Login sebagai '+n+' — klik untuk menu':'Klik untuk mengatur / masuk';
+}
+function toggleMenu(){
+  var m=document.getElementById('qcuMenu'); if(m){m.remove();return;}
+  m=document.createElement('div'); m.id='qcuMenu';
+  var n=name();
+  m.innerHTML=(n?'<button data-qa="out">🚪 Keluar / ganti inspector<\/button>':(actives().length?'<button data-qa="in">🔐 Masuk<\/button>':''))+'<button data-qa="adm">🛠 Kelola inspector (admin)<\/button>';
+  m.addEventListener('click',function(e){var b=e.target.closest('[data-qa]');if(!b)return;var a=b.getAttribute('data-qa');m.remove();if(a==='out')logout();else if(a==='in')tick();else if(a==='adm')openAdmin();});
+  document.body.appendChild(m);
+  setTimeout(function(){document.addEventListener('click',function h(ev){if(!m.contains(ev.target)&&ev.target.id!=='qcuPill'){m.remove();}document.removeEventListener('click',h);},{once:false});},0);
+}
+
+/* ---------- isi & kunci nama otomatis di semua isian inspector ---------- */
+var TARGETS=[['#iqBy',1],['[data-inc-field="namaInspektor"]',0],['#wf_i',0],['#fIns',0],['#qcAddDlg [data-f="by"]',0]];
+function roots(){
+  var r=[document];
+  try{document.querySelectorAll('iframe').forEach(function(f){try{if(f.contentDocument&&f.contentDocument.body)r.push(f.contentDocument);}catch(e){}});}catch(e){}
+  return r;
+}
+function fire(el){var W=el.ownerDocument.defaultView||window;['input','change'].forEach(function(t){try{el.dispatchEvent(new W.Event(t,{bubbles:true}));}catch(e){}});}
+function applyFields(){
+  var n=name();
+  roots().forEach(function(d){
+    if(!n){d.querySelectorAll('.qcu-lock').forEach(function(el){el.readOnly=false;el.classList.remove('qcu-lock');el.removeAttribute('title');});return;}
+    TARGETS.forEach(function(t){
+      d.querySelectorAll(t[0]).forEach(function(el){
+        var cur=(el.value||'').trim();
+        if(t[1]||!cur){ if(cur!==n){el.value=n;fire(el);} }
+        if(el.value===n){ if(!el.readOnly){el.readOnly=true;el.classList.add('qcu-lock');el.title='Terkunci: login sebagai '+n;} }
+        else if(el.classList.contains('qcu-lock')){el.readOnly=false;el.classList.remove('qcu-lock');}
+      });
+    });
+  });
+}
+
+/* ---------- loop ringan ---------- */
+function tick(){
+  try{
+    var gate=document.getElementById('qcuGate');
+    if(needGate()){ if(!gate&&!document.getElementById('qcuAdm'))showGate(); }
+    else if(gate)gate.remove();
+    ensurePill(); applyFields();
+  }catch(e){try{console.warn('QCUser',e);}catch(_){}}
+}
+window.QCUser={name:name,id:function(){var s=ses();return s?s.id:'';},logout:logout,admin:openAdmin,refresh:tick};
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',tick);else tick();
+setInterval(tick,900);
+window.addEventListener('storage',function(e){if(e.key&&e.key.indexOf(PFX)===0)tick();});
+})();
+
+</script>
 </body></html>
