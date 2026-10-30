@@ -8171,7 +8171,7 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 
-<script src="./QC Inspection &amp; Drawing Checksheet_files/sync-config.js"></script>
+<script>window.QC_SYNC_URL='https://script.google.com/macros/s/AKfycbwA9d5Z_ktXNNFLSLcNog4vM8bDGilBARzi_F3JBT5uGg4DBwFbA31rpuKc4QHmTDdqrA/exec';</script>
 <script id="gx-boot">(function(){var m=/[#&]tamu(?:=([^&]*))?/.exec(location.hash||'');if(!m)return;window.__gxGuest=1;try{var u=m[1]?decodeURIComponent(m[1]):'',L=localStorage,S=Storage.prototype.setItem,R=Storage.prototype.removeItem;if(/^https:\/\/script\.google\.com\/macros\/s\/[^\s]+\/exec(\?.*)?$/.test(u)&&L.getItem('qc_sync_api_url')!==u){['qc_sync_cursor','qc_sync_inited','qc_sync_inited2','qc_sync_off'].forEach(function(k){R.call(L,k);});S.call(L,'qc_sync_src','manual');S.call(L,'qc_sync_api_url',u);}}catch(e){}document.documentElement.classList.add('gx-guest');})();</script><script id="qc-sync">
 /* ===== SINKRON ANTAR INSPECTOR (Google Apps Script + Google Sheet) =====
    - Centang  : localStorage 'qc_checked_state'  -> catatan 'c:<PROJECT_idx>'
@@ -8686,6 +8686,17 @@ function start(){
   lastChk = jget(CHK, {});
   if (!raw(K.inited)) initialUpload();
   if (!raw('qc_sync_inited3')) coatInitial();
+  if (!raw('qc_sync_inited4')) {   // sekali: kirim akun inspector (qcusr_*) yang dibuat sebelum sinkron tersambung
+    try {
+      const d = jget(K.dirty, {});
+      for (let i = 0; i < LS.length; i++) {
+        const k = LS.key(i); if (!k || k.indexOf('qcusr_') !== 0) continue;
+        let t = 0; try { t = (JSON.parse(raw(k) || 'null') || {}).t || 0; } catch(e) {}
+        if (!d['w:' + k.slice(6)]) d['w:' + k.slice(6)] = t || Date.now();
+      }
+      jset(K.dirty, d); _set.call(LS, 'qc_sync_inited4', '1'); schedulePush();
+    } catch(e) {}
+  }
   tick(true);
   pollTimer = setInterval(tick, getPoll());
 }
@@ -8725,13 +8736,13 @@ async function saveUrl(){
   setStatus('busy', 'Menguji koneksi…');
   try { await req(withQ(u, 'ping=1')); }
   catch(e) { setStatus('err', 'Tidak bisa terhubung: ' + (e.message || e) + '. Pastikan akses Web app = Anyone.'); return; }
-  if (u !== getUrl()) { _rem.call(LS, K.cursor); _rem.call(LS, K.inited); _rem.call(LS, K.inited2); _rem.call(LS, 'qc_sync_inited3'); }
+  if (u !== getUrl()) { _rem.call(LS, K.cursor); _rem.call(LS, K.inited); _rem.call(LS, K.inited2); _rem.call(LS, 'qc_sync_inited3'); _rem.call(LS, 'qc_sync_inited4'); }
   _rem.call(LS, K.off); _set.call(LS, K.src, 'manual'); _set.call(LS, K.url, u);
   start();
 }
 function disconnect(){
   if (!confirm('Putuskan sinkronisasi di perangkat ini? Data lokal tetap ada.')) return;
-  [K.url, K.cursor, K.dirty, K.inited, K.inited2, 'qc_sync_inited3', K.last, K.src].forEach(k => _rem.call(LS, k)); _set.call(LS, K.off, '1');
+  [K.url, K.cursor, K.dirty, K.inited, K.inited2, 'qc_sync_inited3', 'qc_sync_inited4', K.last, K.src].forEach(k => _rem.call(LS, k)); _set.call(LS, K.off, '1');
   clearInterval(pollTimer); $('qcsUrl').value = '';
   setStatus('off', 'Belum terhubung');
 }
