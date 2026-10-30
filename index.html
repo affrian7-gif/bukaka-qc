@@ -10737,7 +10737,7 @@ function blankIncomingRecord(){
     appearance: 'OK',    // Appearance / Visual
     functionPerf: 'Not Available / Tidak dilakukan', // Function/Performance
     mtcStatus: 'Not Available / Tidak Ada',           // Status MTC
-    namaInspektor: '',   // Nama Inspektor
+    namaInspektor: (window.QCUser&&QCUser.name&&QCUser.name())||'',   // Nama Inspektor (otomatis dari akun login)
     result: '',          // 'ACCEPT' | 'REJECT' | ''
     keterangan: '',
     // photos by category
@@ -11230,7 +11230,7 @@ function openIncAddModal(){
     if(window.incApplyItems) window.incApplyItems(rec, document.getElementById('_iaPartDesc').value, document.getElementById('_iaQty').value);
     if(window.incRejModalApply) window.incRejModalApply(rec);
     rec.qtyUnit      = document.getElementById('_iaQtyUnit').value.trim() || 'pcs';
-    rec.namaInspektor= document.getElementById('_iaInspektor').value.trim();
+    rec.namaInspektor= document.getElementById('_iaInspektor').value.trim() || ((window.QCUser&&QCUser.name())||'');
     rec.keterangan   = document.getElementById('_iaKet').value.trim();
     rec.result       = _iaSelectedResult;
 
@@ -25452,9 +25452,9 @@ function needGate(){return actives().length>0&&!ses();}
 
 /* ---------- gaya ---------- */
 var st=document.createElement('style');
-st.textContent='#qcuPill{position:fixed;left:10px;bottom:10px;z-index:99990;background:#0b1f3a;color:#e6f0ff;border:1px solid rgba(110,170,235,.45);border-radius:999px;padding:6px 12px;font:600 12px system-ui,sans-serif;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.35);max-width:70vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'+
+st.textContent='#qcuPill{position:fixed;right:10px;bottom:10px;z-index:99990;background:#0b1f3a;color:#e6f0ff;border:1px solid rgba(110,170,235,.45);border-radius:999px;padding:6px 12px;font:600 12px system-ui,sans-serif;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.35);max-width:70vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'+
 '#qcuPill.off{opacity:.75}body.guest-mode #qcuPill{display:none}'+
-'#qcuMenu{position:fixed;left:10px;bottom:48px;z-index:99991;background:#0b1f3a;color:#e6f0ff;border:1px solid rgba(110,170,235,.45);border-radius:10px;padding:6px;font:13px system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.45)}'+
+'#qcuMenu{position:fixed;right:10px;bottom:48px;z-index:99991;background:#0b1f3a;color:#e6f0ff;border:1px solid rgba(110,170,235,.45);border-radius:10px;padding:6px;font:13px system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.45)}'+
 '#qcuMenu button{display:block;width:100%;text-align:left;background:none;border:0;color:inherit;padding:8px 12px;border-radius:6px;cursor:pointer;font:inherit}#qcuMenu button:hover{background:rgba(110,170,235,.18)}'+
 '.qcu-ov{position:fixed;inset:0;z-index:2147483000;background:rgba(2,8,16,.9);display:flex;align-items:center;justify-content:center;padding:16px;font-family:system-ui,sans-serif}'+
 '.qcu-box{width:min(420px,100%);max-height:100%;overflow:auto;background:#0b1f3a;color:#e6f0ff;border:1px solid rgba(110,170,235,.4);border-radius:14px;padding:18px}'+
@@ -25584,7 +25584,7 @@ function toggleMenu(){
 }
 
 /* ---------- isi & kunci nama otomatis di semua isian inspector ---------- */
-var TARGETS=[['#iqBy',1],['[data-inc-field="namaInspektor"]',0],['#wf_i',0],['#fIns',0],['#qcAddDlg [data-f="by"]',0]];
+var TARGETS=[['#iqBy',1],['[data-inc-field="namaInspektor"]',0],['#wf_i',0],['#fIns',0],['#qcAddDlg [data-f="by"]',0],['#_iaInspektor',0]];
 function roots(){
   var r=[document];
   try{document.querySelectorAll('iframe').forEach(function(f){try{if(f.contentDocument&&f.contentDocument.body)r.push(f.contentDocument);}catch(e){}});}catch(e){}
