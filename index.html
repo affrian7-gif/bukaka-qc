@@ -16628,7 +16628,7 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
       (r.dw?'<dt>Drawing</dt><dd>'+(hasLink(r.dw.link)?'<a href="'+esc(r.dw.link)+'" target="_blank" rel="noopener" style="color:#93c5fd">'+esc(r.dw.code)+' ↗</a>':esc(r.dw.code))+(r.dw.name?' — <b>'+esc(r.dw.name)+'</b>':'')+[r.dw.no?'Item '+esc(r.dw.no):'', r.dw.mat?esc(r.dw.mat):'', r.dw.parent?'induk: '+esc(r.dw.parent):''].filter(Boolean).map(function(x){return '<br><span style="color:#8fb0d3;font-size:.74rem">'+x+'</span>';}).join('')+(wdSummary(r.dw.wm).n?' · '+wdSummary(r.dw.wm).n+' las terukur = '+nf(wdSummary(r.dw.wm).tot)+' mm/unit':'')+'</dd>':'')+
       '<dt>Subkon + Line</dt><dd>'+esc(r.u)+'</dd>'+
       '<dt>Welder ID</dt><dd>'+esc(r.w)+'</dd>'+
-      (function(){ var L=(window.QCOut&&window.QCOut.scopeWi)?window.QCOut.scopeWi(r.p,r.m,[r.id]):[]; return L.length?'<dt>Outstanding</dt><dd>'+L.map(function(i){return (i.st==='CLOSE'?'✅ ':'⏳ ')+esc(i.cm||i.lbl||'')+' <small>('+esc([i.prc,i.cat,i.pic].filter(Boolean).join(' · '))+')</small>';}).join('<br>')+'</dd>':''; })()+
+      (function(){ var L=(window.QCOut&&window.QCOut.scopeWi)?window.QCOut.scopeWi(r.p,r.m,[r.id]):[]; return L.length?'<dt>Outstanding</dt><dd>'+L.map(function(i){return (i.st==='CLOSE'?'✅ ':'⏳ ')+esc(i.cm||i.lbl||'')+' <small>('+esc([i.cat,i.pic].filter(Boolean).join(' · '))+')</small>';}).join('<br>')+'</dd>':''; })()+
       '<dt>Kegiatan</dt><dd>'+r.a.map(function(a){return '<span class="act '+esc(a)+'">'+esc(a)+'</span>';}).join('')+'</dd>'+
       '<dt>Panjang diinspeksi</dt><dd>'+nf(r.l)+' mm ('+nf(mm2m(r.l),2)+' m)</dd>'+
       '<dt>Panjang repair</dt><dd>'+nf(r.r)+' mm &nbsp;·&nbsp; repair rate <b style="color:#fbbf24">'+pc(rate,2)+'</b></dd>'+
@@ -16728,10 +16728,10 @@ setInterval(wiMerge,4000);setTimeout(wiMerge,1500);
     var body = areas.length ? areas.map(function(a){
       var L=g[a].sort(function(p,q){ return ((p.it.st==='CLOSE'?1:0)-(q.it.st==='CLOSE'?1:0)) || (String(q.it.od)<String(p.it.od)?-1:1); });
       var op=L.filter(function(x){return x.it.st!=='CLOSE';}).length;
-      return '<div class="wi-panel c12"><h3>📐 '+esc(a)+' · '+op+' open · '+(L.length-op)+' selesai</h3><div style="overflow-x:auto"><table class="wi-data"><thead><tr><th>Marking ID</th><th>Project</th><th>Outstanding</th><th>Process / Kategori</th><th>PIC</th><th>Foto</th><th>Tgl Temuan</th><th>Umur</th><th></th></tr></thead><tbody>'+
+      return '<div class="wi-panel c12"><h3>📐 '+esc(a)+' · '+op+' open · '+(L.length-op)+' selesai</h3><div style="overflow-x:auto"><table class="wi-data"><thead><tr><th>Marking ID</th><th>Project</th><th>Outstanding</th><th>Kategori</th><th>PIC</th><th>Foto</th><th>Tgl Temuan</th><th>Umur</th><th></th></tr></thead><tbody>'+
         L.map(function(x){ var it=x.it, d=it.st==='CLOSE';
           return '<tr><td data-l="Marking ID"><b data-oopen="'+esc(x.rid)+'" style="cursor:pointer;text-decoration:underline">'+esc(x.m)+'</b></td><td data-l="Project">'+esc(x.p)+'</td>'+
-            '<td data-l="Outstanding" style="'+(d?'text-decoration:line-through;opacity:.6':'')+'">'+esc(it.cm||it.lbl||'')+'</td><td data-l="Process / Kategori">'+esc([it.prc,it.cat].filter(Boolean).join(' · '))+'</td>'+
+            '<td data-l="Outstanding" style="'+(d?'text-decoration:line-through;opacity:.6':'')+'">'+esc(it.cm||it.lbl||'')+'</td><td data-l="Kategori">'+esc(it.cat||'')+'</td>'+
             '<td data-l="PIC">'+esc(it.pic||'')+'</td><td data-l="Foto">'+(it.pb?'📷 B ':'')+(it.pa?'📷 A':'')+'</td>'+
             '<td data-l="Tgl Temuan">'+(it.od?fmtD(it.od):'')+'</td><td data-l="Umur">'+(d?'✓ '+(it.cd?fmtD(it.cd):''):age(it))+'</td>'+
             '<td><button type="button" class="wi-btn sm'+(d?'':' grn')+'" data-otg="'+esc(it.id)+'">'+(d?'↺ Buka lagi':'✓ Selesai')+'</button></td></tr>'; }).join('')+
@@ -19734,9 +19734,7 @@ body.is-wi #qoBtn{display:none}
       '<td data-l="Tgl Close">'+(cl?'<input type="date" data-id="'+x.id+'" data-f="cd" data-c="1" value="'+esc(x.cd)+'" aria-label="Tanggal close">':'<span style="color:#7f9bbd">—</span>')+'</td>'+
       '<td data-l="Durasi">'+ageBadge(x,d)+'</td>'+
       '<td data-l="Kategori Defect"><input type="text" list="qoCats" data-id="'+x.id+'" data-f="cat" value="'+esc(x.cat)+'" placeholder="Kategori defect" maxlength="80" aria-label="Kategori defect"></td>'+
-      '<td data-l="5M"><select data-id="'+x.id+'" data-f="m5" aria-label="5M">'+m5Opts(x.m5||'')+'</select></td>'+
-      '<td data-l="Process"><input type="text" list="qoProcs" data-id="'+x.id+'" data-f="prc" value="'+esc(x.prc)+'" placeholder="Process" maxlength="60" aria-label="Process"></td>'+
-      '<td data-l="Component"><input type="text" list="qoComps" data-id="'+x.id+'" data-f="comp" value="'+esc(x.comp)+'" placeholder="Component" maxlength="60" aria-label="Component"></td>'+
+      (ctx.mod==='comp'?'<td data-l="Sumber"><select data-id="'+x.id+'" data-f="src" aria-label="Sumber temuan"><option'+(x.src==='Klien'?'':' selected')+'>Internal</option><option'+(x.src==='Klien'?' selected':'')+'>Klien</option></select></td>':'')+
       '<td><button class="qo-x" type="button" data-a="del" data-id="'+x.id+'" aria-label="Hapus baris">×</button></td></tr>';
   }
   var CATS=['Uneven Coverage','Improper Installation','Incomplete Installation','Surface Painting Scratch','Sealant Appreance','Incomplete Sealant','Incomplete Painting','Poor Weld Appreance','Contamination','Improper Torque','Dirty','Sagging','Surface damage','Height mismatch / Misalignment','Deformation','Incomplete Weld','Weld Finishing NG','Low DFT','Only Primer'];
@@ -19845,8 +19843,8 @@ body.is-wi #qoBtn{display:none}
         '</div><div style="display:flex;gap:8px;flex-wrap:wrap">'+
           '<button class="qo-b grn" type="button" data-a="csv">⬇ Export CSV</button>'+'<button class="qo-b" type="button" data-a="pdf" style="background:#dc2626;color:#fff;border-color:#dc2626">📄 Export PDF</button>'+
           '<button class="qo-b pri" type="button" data-a="add">＋ Tambah Outstanding</button></div></div>'+
-        '<div class="qo-wrap"><table class="qo-t"><thead><tr><th>No</th><th>Before</th><th>After</th><th style="width:15%">Item</th><th>Tgl Temuan</th><th style="width:11%">PIC</th><th style="width:22%">Komentar Temuan</th><th>Status</th><th>Tgl Close</th><th>Durasi</th><th>Kategori Defect <button type="button" class="qo-gear" data-a="opts" data-f="cat" title="Kelola pilihan Kategori Defect" aria-label="Kelola pilihan Kategori Defect">⚙</button></th><th>5M <button type="button" class="qo-gear" data-a="opts" data-f="m5" title="Kelola pilihan 5M" aria-label="Kelola pilihan 5M">⚙</button></th><th>Process <button type="button" class="qo-gear" data-a="opts" data-f="prc" title="Kelola pilihan Process" aria-label="Kelola pilihan Process">⚙</button></th><th>Component <button type="button" class="qo-gear" data-a="opts" data-f="comp" title="Kelola pilihan Component" aria-label="Kelola pilihan Component">⚙</button></th><th></th></tr></thead><tbody>'+
-          (list.length?list.map(rowHTML).join(''):'<tr><td colspan="11" class="qo-empty">'+(base.length?'Tidak ada outstanding dengan status ini.':'Belum ada outstanding. Klik “＋ Tambah Outstanding”.')+'</td></tr>')+
+        '<div class="qo-wrap"><table class="qo-t"><thead><tr><th>No</th><th>Before</th><th>After</th><th style="width:15%">Item</th><th>Tgl Temuan</th><th style="width:11%">PIC</th><th style="width:22%">Komentar Temuan</th><th>Status</th><th>Tgl Close</th><th>Durasi</th><th>Kategori Defect <button type="button" class="qo-gear" data-a="opts" data-f="cat" title="Kelola pilihan Kategori Defect" aria-label="Kelola pilihan Kategori Defect">⚙</button></th>'+(ctx.mod==='comp'?'<th>Sumber</th>':'')+'<th></th></tr></thead><tbody>'+
+          (list.length?list.map(rowHTML).join(''):'<tr><td colspan="'+(ctx.mod==='comp'?13:12)+'" class="qo-empty">'+(base.length?'Tidak ada outstanding dengan status ini.':'Belum ada outstanding. Klik “＋ Tambah Outstanding”.')+'</td></tr>')+
         '</tbody></table></div>'+
         '<datalist id="qoCats">'+dl(CATS,'cat')+'</datalist><datalist id="qoProcs">'+dl(PROCS,'prc')+'</datalist><datalist id="qoComps">'+dl(COMPS,'comp')+'</datalist>'+
         '<datalist id="qoPics">'+Object.keys(pics).map(function(p){return '<option value="'+esc(p)+'">';}).join('')+'</datalist>'+
@@ -19951,9 +19949,9 @@ body.is-wi #qoBtn{display:none}
   }
   function exportCsv(){
     var list=items().filter(function(x){return inScope(x,ctx,true);});
-    var H=['No','Modul','Project','Item','Tgl Temuan','PIC','Komentar Temuan','Status','Tgl Close','Closure (Hari)','Kategori Defect','5M','Process','Component','Foto Before','Foto After'];
+    var H=['No','Modul','Project','Item','Tgl Temuan','PIC','Komentar Temuan','Status','Tgl Close','Closure (Hari)','Kategori Defect','Foto Before','Foto After'];
     var q=function(v){return '"'+String(v==null?'':v).replace(/"/g,'""')+'"';};
-    var rows=[H.map(q).join(',')].concat(list.map(function(x,i){var d=days(x);return [i+1,MODS[x.mod],x.proj,x.lbl,fmtD(x.od),x.pic,x.cm,x.st,fmtD(x.cd),d==null?'':d,x.cat||'',x.m5||'',x.prc||'',x.comp||'',x.pb?'Ada':'-',x.pa?'Ada':'-'].map(q).join(',');}));
+    var rows=[H.map(q).join(',')].concat(list.map(function(x,i){var d=days(x);return [i+1,MODS[x.mod],x.proj,x.lbl,fmtD(x.od),x.pic,x.cm,x.st,fmtD(x.cd),d==null?'':d,x.cat||'',x.pb?'Ada':'-',x.pa?'Ada':'-'].map(q).join(',');}));
     var blob=new Blob(['﻿'+rows.join('\r\n')],{type:'text/csv;charset=utf-8'});
     var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
     a.download='Outstanding_'+ctx.mod+'_'+today()+'.csv'; document.body.appendChild(a); a.click();
@@ -20500,7 +20498,21 @@ body.cs-mode .stats-grid,body.cs-mode .main-layout,body.cs-mode #searchInput,bod
  const ov=window.openView;window.openView=function(v){const r=ov.apply(this,arguments);if(v=='complete'){show(true);select('list')}else show(false);return r};
  const sh=window.showHome;window.showHome=function(){show(false);return sh.apply(this,arguments)};
  const cp=window.changeProject;if(cp)window.changeProject=function(){const r=cp.apply(this,arguments);if(cur!='list')render();return r};
- window.QCSheets={edit(){ed=!ed;render()},std(){if(confirm('Kembalikan struktur form ke standar Excel? Isian (hasil) tetap tersimpan, tetapi butir yang ditambah/diubah akan hilang.')){delete st().s;save();render()}},select,print(){ed=false;render();let pg=document.getElementById('csPage');if(!pg){pg=document.createElement('style');pg.id='csPage';document.head.appendChild(pg)}pg.textContent='@page{size:A4 '+(cur=='eir'?'landscape':'portrait')+';margin:7mm}';document.body.classList.add('cs-print');setTimeout(()=>{window.print();document.body.classList.remove('cs-print')},50)},reset(){if(confirm('Hapus semua isian (hasil) checksheet ini untuk project '+proj()+'?')){{const o=st();o.m={};o.v={}}save();render()}}};
+ function csStats(p){ /* completeness per checksheet untuk 1 unit/project (dibaca langsung dari penyimpanan, tidak mengubah apa pun) */
+  var db={};try{db=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}
+  var out={};
+  ['fat','eir','ilbr','aptr','fft'].forEach(function(k){
+   var o=((db[p]||{})[k])||{},v=o.v||{},d=o.s||D[k],g=function(x){return v[x]||''},P=0,F=0,T=0,ty=SH[k].ty,
+   add=function(x){T++;if(x=='P')P++;else if(x=='F')F++;};
+   if(ty=='list')d.forEach(function(r){if(r.s)add(g(r.k+':p'))});
+   else if(ty=='eir')d.forEach(function(s){s.rows.forEach(function(r){add(g(r.k+':p'))})});
+   else if(ty=='lux')d.forEach(function(r){if(r.s)add(auto(g(r.k+':a'),r.s))});
+   else d.forEach(function(r){add(auto(g(r.k+':a'),g(r.k+':s')||r.s))});
+   out[k]={p:P,f:F,t:T,n:SH[k].n};
+  });
+  return out;
+ }
+ window.QCSheets={stats:csStats,edit(){ed=!ed;render()},std(){if(confirm('Kembalikan struktur form ke standar Excel? Isian (hasil) tetap tersimpan, tetapi butir yang ditambah/diubah akan hilang.')){delete st().s;save();render()}},select,print(){ed=false;render();let pg=document.getElementById('csPage');if(!pg){pg=document.createElement('style');pg.id='csPage';document.head.appendChild(pg)}pg.textContent='@page{size:A4 '+(cur=='eir'?'landscape':'portrait')+';margin:7mm}';document.body.classList.add('cs-print');setTimeout(()=>{window.print();document.body.classList.remove('cs-print')},50)},reset(){if(confirm('Hapus semua isian (hasil) checksheet ini untuk project '+proj()+'?')){{const o=st();o.m={};o.v={}}save();render()}}};
 }
 if(document.readyState=='complete')init();else window.addEventListener('load',()=>setTimeout(init,0));
 })();
@@ -21308,11 +21320,11 @@ function secDefect(){
   var head='<div class="so-card"><h3>Analisis Defect (dari temuan Outstanding)</h3><p class="so-def">Dihitung dari semua temuan Outstanding (semua kategori) pada periode '+PL()+(S.proj?' · project '+esc(S.proj):'')+'. Penulisan dirapikan otomatis (spasi dan huruf besar/kecil disamakan). Agar analisis ini terisi, lengkapi kolom <b>Kategori Defect, 5M, Process, Component, dan PIC</b> di tabel Outstanding.</p>';
   if(!N)return head+'<div class="so-empty">Belum ada temuan Outstanding pada periode ini.</div></div>';
   var closed=L.filter(function(x){return x.st==='CLOSE';}).length,open=N-closed;
-  var miss={cat:0,m5:0,prc:0,comp:0,pic:0};L.forEach(function(x){for(var k in miss)if(!clean(x[k]))miss[k]++;});
+  var miss={cat:0,pic:0};L.forEach(function(x){for(var k in miss)if(!clean(x[k]))miss[k]++;});
   var kp='<div class="so-kpis" style="margin-top:6px">'+
     '<div class="so-kpi" style="--c:#14703a"><small>Closed</small><b>'+nf(closed)+'</b><span>'+pf(rate(closed,N),1)+' dari '+nf(N)+' temuan</span></div>'+
     '<div class="so-kpi" style="--c:#c92a2a"><small>Open</small><b>'+nf(open)+'</b><span>'+pf(rate(open,N),1)+' dari '+nf(N)+' temuan</span></div>'+
-    '<div class="so-kpi" style="--c:#8a5a00"><small>Belum diisi lengkap</small><b>'+nf(Math.max(miss.cat,miss.m5,miss.prc,miss.comp,miss.pic))+'</b><span>Defect '+miss.cat+' · 5M '+miss.m5+' · Process '+miss.prc+' · Comp '+miss.comp+' · PIC '+miss.pic+'</span></div></div>';
+    '<div class="so-kpi" style="--c:#8a5a00"><small>Belum diisi lengkap</small><b>'+nf(Math.max(miss.cat,miss.pic))+'</b><span>Defect '+miss.cat+' · PIC '+miss.pic+'</span></div></div>';
   /* Open vs Closed per project */
   var pj=tally(L,function(x){return projOf(x.proj);}).sort(function(a,b){return b.n-a.n;});
   var h1='<h4>Open vs Closed per project</h4>'+simpleTable(pj,N,'Project','Open vs Closed per project',true);
@@ -21321,16 +21333,7 @@ function secDefect(){
   var top=named.slice(0,10),cum=0;
   var h2='<h4>Pareto — Top 10 Category Defect</h4>'+(tn?paretoChart(top,tn)+'<div class="so-scroll" style="margin-top:8px"><table data-lt="1" data-csv="Pareto Category Defect"><thead><tr><th>Category Defect</th><th class="n">Jumlah</th><th class="n">%</th><th class="n">% Kumulatif</th><th class="n">Open</th></tr></thead><tbody>'+
     top.map(function(r){cum+=r.n;return '<tr><td><b>'+esc(r.k)+'</b></td><td class="n">'+r.n+'</td><td class="n">'+pf(r.n/tn*100,1)+'</td><td class="n">'+pf(cum/tn*100,1)+'</td><td class="n">'+r.o+'</td></tr>';}).join('')+'</tbody></table></div>'+(miss.cat?'<p class="so-def">'+miss.cat+' temuan belum punya Category Defect dan tidak ikut dihitung di Pareto.</p>':''):'<div class="so-empty">Belum ada temuan dengan Category Defect terisi.</div>');
-  /* 5M */
-  var m5=tally(L,function(x){return x.m5;});
-  var h3='<h4>Analisis 5M</h4>'+simpleTable(m5,N,'5M','5M',true);
-  var h4=matrix('Category Defect × 5M','10 category defect teratas terhadap penyebab 5M.',L.filter(function(x){return clean(x.cat);}),function(x){return x.cat;},function(x){return x.m5;},10,6,'Category Defect x 5M','Category Defect');
-  /* PIC x Process */
-  var h5=matrix('PIC × Process','Jumlah temuan per PIC (departemen) menurut proses; 10 PIC teratas dan 8 proses teratas.',L,function(x){return x.pic;},function(x){return x.prc;},10,8,'PIC x Process','PIC');
-  /* Component */
-  var cp=tally(L,function(x){return x.comp;}).slice(0,15);
-  var h6='<h4>Temuan per Component (15 teratas)</h4>'+simpleTable(cp,N,'Component','Per Component',true);
-  return head+kp+h1+h2+'<div class="so-two"><div>'+h3+'</div><div>'+h6+'</div></div>'+h4+h5+'</div>';
+  return head+kp+h1+h2+'</div>';
 }
 
 /* ---------- render ---------- */
@@ -21349,7 +21352,7 @@ function render(){
   root.innerHTML=head+
     safe(secKpi,'KPI')+
     '<div class="so-sec">Umum</div>'+safe(secMonthly,'Bulanan WSC1')+safe(secRepeat,'Report berulang')+safe(secComplete,'Completeness')+safe(secTotals,'Total report')+
-    '<div class="so-sec">Analisis temuan (defect)</div>'+safe(secPareto,'Pareto')+safe(sec5M,'5M')+safe(secProjOC,'Open vs Closed')+safe(secPicProc,'PIC x Process')+safe(secComp,'Component')+
+    '<div class="so-sec">Analisis temuan (defect)</div>'+safe(secPareto,'Pareto')+safe(secProjOC,'Open vs Closed')+
     '<div class="so-sec">Per project</div>'+safe(secWeld,'Welding')+
     safe(function(){return secOutMod('comp','FAT → Outstanding Rate (per project)');},'FAT')+
     safe(function(){return secOutMod('ship','Pengiriman → Outstanding Rate (per project)','Belum ada temuan kategori Pengiriman. Tambahkan lewat Dashboard → Outstanding → Pengiriman.');},'Pengiriman')+
@@ -24074,6 +24077,20 @@ window.BankIR={open:window.showBir};
 .nv-jp strong{display:block;font-size:1.05rem;color:#002060;margin:2px 0}
 .nv-jp span{font-size:.74rem;color:#5a6b85}
 /* Poin Repair */
+.nv-par{display:grid;gap:0;margin:6px 0 4px}
+.nv-pr{display:grid;grid-template-columns:24px minmax(110px,1.4fr) minmax(50px,1fr) 78px 40px 40px;gap:10px;align-items:center;padding:7px 4px;border-bottom:1px solid #e3e9f3;font-size:.86rem}
+.nv-pr.h{font-size:.68rem;font-weight:800;color:#6b7a93;text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid #d5deec}
+.nv-pr .no{width:22px;height:22px;border-radius:50%;background:#e8eef9;color:#002060;font-weight:800;font-size:.7rem;display:grid;place-items:center}
+.nv-pr.vf .no{background:#dc2626;color:#fff}
+.nv-pr .nm{min-width:0;display:grid}.nv-pr .nm b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.nv-pr .nm small{color:#6b7a93;font-size:.72rem}
+.nv-pr .bw{height:10px;border-radius:6px;background:#e8eef9;overflow:hidden}.nv-pr .bw i{display:block;height:100%;background:#94a3b8}.nv-pr.vf .bw i{background:linear-gradient(90deg,#f59e0b,#dc2626)}.nv-pr.h .bw{background:none}
+.nv-pr .r{text-align:right;font-variant-numeric:tabular-nums}
+.nv-sub4{margin:16px 0 2px;font-size:.84rem;font-weight:800;color:#002060}
+.nv-kp{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:4px 0 6px}.nv-kp small{color:#6b7a93}
+.nv-pc{display:inline-block;margin:1px 4px 1px 0;padding:2px 9px;border-radius:99px;background:#eef2fb;font-size:.74rem;font-weight:700;color:#002060;cursor:default}
+.nv-pc.k{background:#fde8e8;color:#991b1b}.nv-pc.i{background:#fff3d6;color:#8a5a00}
+.nv-par-note{margin:6px 0 0;font-size:.72rem;color:#6b7a93}
+@media(max-width:640px){.nv-pr{grid-template-columns:22px minmax(0,1fr) 64px 36px 36px}.nv-pr .bw{display:none}}
 .nv-rk{list-style:none;margin:0;padding:0}
 .nv-rk li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid #e3e9f3}
 .nv-rk li:last-child{border:0}
@@ -24114,6 +24131,36 @@ window.BankIR={open:window.showBir};
 .nv-spark div{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;font-size:.62rem;color:#6a7a94}
 .nv-spark i{display:block;width:100%;max-width:34px;background:linear-gradient(180deg,#3b82f6,#22d3ee);border-radius:5px 5px 0 0;min-height:2px}
 .nv-spark div.on i{background:linear-gradient(180deg,#002060,#3b82f6)}
+
+/* completeness per project */
+.nv-cp{display:grid;gap:10px}
+.nv-cph,.nv-cpr{display:grid;grid-template-columns:minmax(120px,170px) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:center}
+.nv-cph{font-size:.68rem;font-weight:800;color:#6b7a93;text-transform:uppercase;letter-spacing:.04em;padding:0 16px}
+.nv-cph .sc{display:flex;justify-content:space-between}
+.nv-cph .sc i{font-style:normal;color:#9aa8bf;font-weight:700}
+.nv-cpi{background:#fff;border:1px solid #cfd8e8;border-radius:14px;overflow:hidden;transition:box-shadow .15s}
+.nv-cpi.open{box-shadow:0 10px 28px -20px #002060;border-color:#8fb3ea}
+.nv-cpr{padding:12px 16px;cursor:pointer}
+.nv-cpr:hover{background:#f3f7fd}
+.nv-cpr:focus-visible{outline:2px solid #1688f8;outline-offset:-2px}
+.nv-cpn{min-width:0}.nv-cpn b{display:block;color:#002060;font-size:.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nv-cpn b:before{content:"›";display:inline-block;margin-right:7px;color:#9aaac2;transition:transform .15s}
+.nv-cpi.open .nv-cpn b:before{transform:rotate(90deg);color:#1688f8}
+.nv-cpn small{color:#6a7a94;font-size:.72rem}
+.nv-cpb{display:flex;align-items:center;gap:10px;min-width:0}
+.nv-cpt{flex:1;height:14px;border-radius:8px;background:#e8eef9;overflow:hidden;position:relative;min-width:60px}
+.nv-cpt i{display:block;height:100%;border-radius:8px;background:var(--c);min-width:0}
+.nv-cpt:after{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:rgba(0,32,96,.12)}
+.nv-cpb b{width:46px;text-align:right;font-size:.82rem;font-variant-numeric:tabular-nums;color:#002060}
+.nv-cpd{border-top:1px solid #e3e9f3;background:#fafcff;padding:14px 16px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.nv-cpd .wide{grid-column:1/-1}
+@media(max-width:1000px){.nv-cpd{grid-template-columns:1fr}}
+.nv-cpd h4{margin:0 0 4px;font-size:.88rem;color:#002060}
+.nv-cpd .nv-def{margin:0 0 8px}
+.nv-cpd .nv-tbl td,.nv-cpd .nv-tbl th{padding:6px 8px}
+.nv-cpo{background:#e8eef9;color:#002060;border:0;border-radius:8px;padding:4px 10px;font:700 .72rem/1 inherit;cursor:pointer}
+.nv-cpo:hover{background:#002060;color:#fff}
+@media(max-width:760px){.nv-cph{display:none}.nv-cpr{grid-template-columns:1fr;gap:8px}}
 /* kartu bay / master */
 .nv-bay{position:relative;z-index:1}
 .nv-bays{grid-template-columns:repeat(4,minmax(0,1fr));align-items:start}
@@ -24379,6 +24426,76 @@ function goTab(tab){
 }
 
 /* ---------- 1. DASHBOARD ---------- */
+/* ---------- Completeness (centang tahap Fab & Prep) + FAT (dari checksheet) per project ---------- */
+function CS(){try{return checkedState||{};}catch(e){return {};}}
+var CSK=[['fat','FAT'],['eir','Electrical'],['ilbr','Lighting'],['aptr','AC'],['fft','Final Function']];
+function csStat(p){try{return (window.QCSheets&&QCSheets.stats)?QCSheets.stats(p):{};}catch(e){return {};}}
+function kAgg(K){var p=0,f=0,t=0;Object.keys(K).forEach(function(k){p+=K[k].p;f+=K[k].f;t+=K[k].t;});return {p:p,f:f,t:t,pct:t?(p+f)/t*100:null};}
+function coatMap(){
+  var o=lsJSON('dcs_bb_state'),ps=(o&&Array.isArray(o.projects))?o.projects:[],M={};
+  ps.forEach(function(p){var b=String(p.mid||p.name||'').trim().toLowerCase();if(!b)return;
+    var parts=p.parts||{},sum=0,done=0,ks=Object.keys(parts).filter(function(k){return k!=='other';}),den=Math.max(12,ks.length);
+    ks.forEach(function(k){var v=Math.max(0,Math.min(100,Math.round(+(parts[k]&&parts[k].pct)||0)));sum+=v;if(v>=100)done++;});
+    (M[b]=M[b]||[]).push({pct:sum/den,done:done,den:den});});
+  return M;
+}
+function cpData(){
+  var cs=CS(),pd=PD(),CM=coatMap();
+  return grouped().map(function(g){
+    var G={base:g.base,F:{m:0,mc:0,c:0,cc:0},K:{},units:[],cs:0,cn:0},CL=CM[String(g.base).trim().toLowerCase()]||[];
+    CSK.forEach(function(k){G.K[k[0]]={p:0,f:0,t:0};});
+    g.rows.forEach(function(u){
+      var rows=pd[u.name]||[],U={name:u.name,label:u.label,F:{m:0,mc:0,c:0,cc:0},K:{},C:CL[u.u>0?u.u-1:0]||null};
+      if(U.C){G.cs+=U.C.pct;G.cn++;}
+      rows.forEach(function(r,i){var k=u.name+'_'+i,o=U.F;if(isMain(r)){o.m++;if(cs[k+'~F'])o.mc++;}else{o.c++;if(cs[k+'~F'])o.cc++;}});
+      ['m','mc','c','cc'].forEach(function(f){G.F[f]+=U.F[f];});
+      var st=csStat(u.name);
+      CSK.forEach(function(k){var x=st[k[0]]||{p:0,f:0,t:0};U.K[k[0]]={p:x.p,f:x.f,t:x.t};G.K[k[0]].p+=x.p;G.K[k[0]].f+=x.f;G.K[k[0]].t+=x.t;});
+      G.units.push(U);
+    });
+    return G;
+  });
+}
+function cpPct(o){var t=o.m+o.c;return t?(o.mc+o.cc)/t*100:null;}
+function cpBar(p,c){var v=p==null?0:Math.max(0,Math.min(100,p));return '<div class="nv-cpb" style="--c:'+c+'"><span class="nv-cpt"><i style="width:'+v+'%"></i></span><b>'+(p==null?'–':nf(p,p>0&&p<10?1:0)+'%')+'</b></div>';}
+function cpReportC(G,color){
+  var tb=G.units.map(function(U){var o=U.F,p=cpPct(o);
+    return '<tr><td><b>'+esc(U.label)+'</b></td><td class="n">'+o.mc+' / '+o.m+'</td><td class="n">'+o.cc+' / '+o.c+'</td><td class="n">'+cpBar(p,color)+'</td><td class="n"><button type="button" class="nv-cpo" data-nv-pjopen="'+esc(U.name)+'|nontunnel">Buka</button></td></tr>';}).join('');
+  var o=G.F;tb+='<tr class="tot"><td>Total</td><td class="n">'+o.mc+' / '+o.m+'</td><td class="n">'+o.cc+' / '+o.c+'</td><td class="n">'+pctT(cpPct(o))+'</td><td></td></tr>';
+  return '<div><h4 style="color:'+color+'">Report Completeness</h4><p class="nv-def">Selesai = main assy &amp; komponen yang sudah dicentang. Dihitung per unit.</p>'+
+    '<div class="nv-scroll"><table class="nv-tbl"><thead><tr><th>Unit</th><th class="n">Main assy</th><th class="n">Komponen</th><th class="n">Completeness</th><th></th></tr></thead><tbody>'+tb+'</tbody></table></div></div>';
+}
+function cpReportCoat(G,color){
+  var tb=G.units.map(function(U){var c=U.C;
+    return '<tr><td><b>'+esc(U.label)+'</b></td><td class="n">'+(c?c.done+' / '+c.den:'–')+'</td><td class="n">'+(c?cpBar(c.pct,color):'<span style="color:#9aa8bf">Belum ada di Coating</span>')+'</td><td class="n"><button type="button" class="nv-cpo" data-nv-pjopen="'+esc(U.name)+'|coating">Buka</button></td></tr>';}).join('');
+  var p=G.cn?G.cs/G.cn:null;
+  tb+='<tr class="tot"><td>Total</td><td class="n"></td><td class="n">'+pctT(p)+'</td><td></td></tr>';
+  return '<div><h4 style="color:'+color+'">Report Coating</h4><p class="nv-def">Rata-rata progres 12 sub komponen coating per unit. Selesai = sub komponen yang sudah 100%.</p>'+
+    '<div class="nv-scroll"><table class="nv-tbl"><thead><tr><th>Unit</th><th class="n">Sub komp. 100%</th><th class="n">Progres</th><th></th></tr></thead><tbody>'+tb+'</tbody></table></div></div>';
+}
+function cpCell(x){return x.t?(x.p+x.f)+' / '+x.t:'–';}
+function cpReportFat(G,color){
+  var tb=G.units.map(function(U){var a=kAgg(U.K);
+    return '<tr><td><b>'+esc(U.label)+'</b></td>'+CSK.map(function(k){return '<td class="n">'+cpCell(U.K[k[0]])+'</td>';}).join('')+'<td class="n">'+(a.f?'<span class="nv-r r">'+a.f+'</span>':'0')+'</td><td class="n">'+cpBar(a.pct,color)+'</td><td class="n"><button type="button" class="nv-cpo" data-nv-pjopen="'+esc(U.name)+'|complete">Buka</button></td></tr>';}).join('');
+  var A=kAgg(G.K);
+  tb+='<tr class="tot"><td>Total</td>'+CSK.map(function(k){return '<td class="n">'+cpCell(G.K[k[0]])+'</td>';}).join('')+'<td class="n">'+A.f+'</td><td class="n">'+pctT(A.pct)+'</td><td></td></tr>';
+  return '<div><h4 style="color:'+color+'">Report FAT — Checksheet</h4><p class="nv-def">Diambil dari checksheet FAT, Electrical, Lighting, AC &amp; Final Function. Angka = butir yang sudah diisi (Pass/Fail) / total butir; Fail = butir yang gagal.</p>'+
+    '<div class="nv-scroll"><table class="nv-tbl"><thead><tr><th>Unit</th>'+CSK.map(function(k){return '<th class="n">'+k[1]+'</th>';}).join('')+'<th class="n">Fail</th><th class="n">Completeness</th><th></th></tr></thead><tbody>'+tb+'</tbody></table></div></div>';
+}
+function cpHtml(D){
+  var L=cpData().filter(function(g){return g.F.m+g.F.c>0||kAgg(g.K).t>0||g.cn>0;});
+  if(!L.length)return '<div class="nv-empty">Belum ada project.</div>';
+  if(!NV.pj)NV.pj={};
+  var h='<div class="nv-cp"><div class="nv-cph"><span>Project</span><span class="sc"><span>Completeness</span><i>0 — 100%</i></span><span class="sc"><span>FAT (checksheet)</span><i>0 — 100%</i></span><span class="sc"><span>Coating</span><i>0 — 100%</i></span></div>';
+  h+=L.map(function(g){var open=!!NV.pj[g.base],pc=cpPct(g.F),pt=kAgg(g.K).pct,pco=g.cn?g.cs/g.cn:null;
+    return '<div class="nv-cpi'+(open?' open':'')+'"><div class="nv-cpr" data-nv-pj="'+esc(g.base)+'" tabindex="0" role="button" aria-expanded="'+open+'" title="Klik untuk melihat report Completeness, FAT dan Coating"><div class="nv-cpn"><b>'+esc(g.base)+'</b><small>'+g.units.length+' unit · '+(g.F.m+g.F.c)+' item</small></div>'+cpBar(pc,'#e8590c')+cpBar(pt,'#7c5cd6')+cpBar(pco,'#0f9d74')+'</div>'+
+      (open?'<div class="nv-cpd">'+cpReportC(g,'#e8590c')+cpReportCoat(g,'#0f9d74')+'<div class="wide">'+cpReportFat(g,'#7c5cd6')+'</div></div>':'')+'</div>';}).join('');
+  return h+'</div>';
+}
+function cpTot(){var L=cpData(),F={m:0,mc:0,c:0,cc:0},K={};CSK.forEach(function(k){K[k[0]]={p:0,f:0,t:0};});
+  L.forEach(function(g){['m','mc','c','cc'].forEach(function(f){F[f]+=g.F[f];});CSK.forEach(function(k){['p','f','t'].forEach(function(f){K[k[0]][f]+=g.K[k[0]][f];});});});
+  return {F:cpPct(F),T:kAgg(K).pct};}
+
 var ACC=null;
 function accHtml(id){
   var o=ACC&&ACC[id];if(!o)return '';var open=!!NV.open[id];
@@ -24402,34 +24519,25 @@ function dashHtml(D){
     '<div class="hm-hero-r">'+ringHtml(overall,170,9,'#1688f8','#002060','<span data-count="'+overall+'" data-dec="1">'+nf(overall,1)+'</span>%','Komponen Dicek','gNvHero','1.9rem')+
     '<div class="hm-legend"><div style="--c:#1688f8"><span><em></em>Komponen dicek</span><b>'+nf(T.compC)+'<span style="font-size:.9rem;color:#7f9fc2;font-weight:600"> / '+nf(T.comp)+'</span></b></div></div></div></section>';
 
-  var incN=D.inc.length,incFin=0;D.inc.forEach(function(r){var s=incSplit(r);if(s.res==='ACCEPT'||s.res==='REJECT')incFin++;});
-  var wiN=D.wi.length,wiFin=0;D.wi.forEach(function(r){if(r.cat==='acc')wiFin++;});
-  var J=[
-    {t:'Fabrikasi & Preparation',c:'#e8590c',p:rate(T.mainC+T.compC,T.main+T.comp),a:nf(T.mainC+T.compC)+' / '+nf(T.main+T.comp),b:'main assy + komponen sudah dicek (Fab & Prep)'},
-    {t:'FAT · Bay 1',c:'#7c5cd6',p:rate(compInsp,T.comp),a:nf(compInsp)+' / '+nf(T.comp),b:'komponen sudah diinspeksi'},
-    {t:'Incoming',c:'#0284c7',p:rate(incFin,incN),a:nf(incFin)+' / '+nf(incN),b:'record sudah final (Accept/Reject)'},
-    {t:'WI & NDT',c:'#d98a0b',p:rate(wiFin,wiN),a:nf(wiFin)+' / '+nf(wiN),b:'record Accept tanpa repair'},
-    {t:'Coating · Bay 3',c:'#0f9d74',p:D.coat.projects?D.coat.pct:null,a:nf(D.coat.projects)+' unit',b:D.coat.projects?'rata-rata progres 12 sub komponen':'belum ada project coating'}
-  ];
-  var prog=J.map(function(j){return chip(j.t.split(' ·')[0],pctT(j.p),j.c,j.p);}).join('');
+  var CT=cpTot();
+  var coatP=D.coat.projects?Math.round(D.coat.pct*10)/10:0;
+  var coatCard='<div class="nv-grid nv-jg" style="margin-top:14px"><div class="nv-jp" style="--c:#0f9d74">'+ringHtml(coatP,84,10,'#0f9d74','#002060',pctT(coatP),'','gNvJc','1rem')+'<div><small>Coating · Bay 3</small><strong>'+nf(D.coat.projects)+' unit</strong><span>'+(D.coat.projects?'rata-rata progres 12 sub komponen':'belum ada project coating')+'</span></div></div></div>';
+  var prog=chip('Completeness',pctT(CT.F),'#e8590c',CT.F)+chip('FAT',pctT(CT.T),'#7c5cd6',CT.T)+chip('Coating',pctT(coatP),'#0f9d74',coatP);
   var todayR=dayRecords(D,iso(Date.now())),todayN=todayR.length,tk={};todayR.forEach(function(r){tk[r.kind]=(tk[r.kind]||0)+1;});
   var KL={FAB:['Fabrikasi & Prep','#e8590c'],FAT:['FAT','#7c5cd6'],INC:['Incoming','#0284c7'],WI:['WI & NDT','#d98a0b']};
   var dayC=chip('Hari ini',nf(todayN)+' kegiatan','#0f9d74')+['FAB','FAT','INC','WI'].filter(function(k){return tk[k];}).map(function(k){var m=KL[k];return chip(m[0],nf(tk[k]),m[1]);}).join('');
-  var rhtml=safe(function(){return repairHtml(D);},'Poin Repair');
   var T2=sumM(monthly(D,false,NV.proj));
   var pList=projsOf(D).filter(function(p){var t=sumM(monthly(D,false,p));return t.wL+t.fI+t.iq+t.oN>0;}),pcount=pList.length,pBase={};
   pList.forEach(function(p){var m=UNIT_RE.exec(p);pBase[m?m[1]:p]=1;});var pbCount=Object.keys(pBase).length;
   var monC=chip('Welding',pf(rate(T2.wR,T2.wL),1),rc(rate(T2.wR,T2.wL),RW,RB))+chip('Incoming',pf(rate(T2.ir,T2.iq),1),rc(rate(T2.ir,T2.iq),RW,RB))+chip('Outstanding',pf(rate(T2.oO,T2.oN),1),rc(rate(T2.oO,T2.oN),OW,OB))+chip('',PL(),'#94a3b8');
-  var prjC=chip('Project',nf(pbCount),'#d98a0b')+chip('Unit',nf(pcount),'#d98a0b')+chip('',PL(),'#94a3b8');
+  var FS=safe(function(){var r=fatSplit(D);return chip('Klien Open',nf(r.kO),'#dc2626')+chip('Klien Close',nf(r.kC),'#16a34a')+chip('Internal Open',nf(r.iO),'#d98a0b')+chip('Internal Close',nf(r.iC),'#16a34a')+chip('',PL(),'#94a3b8');},'FAT');var prjC=FS;
   ACC={
-    prog:{c:'#1688f8',chips:prog,ico:'📈',t:'Progress Inspeksi per Jenis',sub:prog,body:function(){return '<div class="nv-grid nv-jg">'+J.map(function(j,i){var p=j.p==null?0:Math.round(j.p*10)/10;
-      return '<div class="nv-jp" style="--c:'+j.c+'">'+ringHtml(p,84,10,j.c,'#002060',pctT(p),'','gNvJ'+i,'1rem')+'<div><small>'+j.t+'</small><strong>'+j.a+'</strong><span>'+j.b+'</span></div></div>';}).join('')+'</div>';}},
+    prog:{c:'#1688f8',chips:prog,ico:'📈',t:'Progress Inspeksi per Jenis',sub:prog,body:function(){return cpHtml(D)+coatCard;}},
     day:{c:'#0f9d74',chips:dayC,ico:'🗓️',t:'Resume Inspeksi Harian',sub:nf(todayN)+' kegiatan hari ini · bisa pilih tanggal & inspector',body:function(){return dayHtml(D);}},
-    rep:{c:'#e8590c',chips:TOPCHIPS,ico:'🛠️',t:'Poin Repair — Prioritas Terbesar',sub:TOPTXT||'Belum ada data repair pada '+PL(),body:function(){return periodBar(D)+rhtml;}},
     mon:{c:'#7c5cd6',chips:monC,ico:'📅',t:'Evaluasi Bulanan Workshop C1',sub:'Welding '+pf(rate(T2.wR,T2.wL),1)+' · Incoming '+pf(rate(T2.ir,T2.iq),1)+' · '+PL(),body:function(){return periodBar(D)+evalHtml(D,'mon');}},
-    prj:{c:'#d98a0b',chips:prjC,ico:'📁',t:'Evaluasi per Project',sub:nf(pcount)+' project dengan data · '+PL(),body:function(){return periodBar(D)+evalHtml(D,'proj');}}
+    prj:{c:'#d98a0b',chips:prjC,ico:'📁',t:'Evaluasi per Project',sub:'Outstanding FAT · Open & Close · Klien vs Internal · '+PL(),body:function(){return periodBar(D)+evalHtml(D,'proj');}}
   };
-  h+='<div class="nv-accs">'+['prog','day','rep','mon','prj'].map(accHtml).join('')+'</div>';
+  h+='<div class="nv-accs">'+['prog','day','mon','prj'].map(accHtml).join('')+'</div>';
   h+='<div class="nv-note">Summary Output sudah dilebur ke Dashboard. <a href="#" data-nv-act="summary">Buka Summary Output lengkap →</a></div>';
   return h;
 }
@@ -24486,7 +24594,7 @@ function dayHtml(D){
     '<div style="grid-column:1/-1">'+actHtml+'</div></div></div>';
 }
 
-/* --- filter periode (dipakai Poin Repair & Evaluasi) --- */
+/* --- filter periode (dipakai Evaluasi) --- */
 function yearsOf(D){var m={};m[new Date().getFullYear()]=1;function add(s){var d=ym(s);if(d)m[d.y]=1;}
   D.wi.forEach(function(r){add(r.t);});D.inc.forEach(function(r){add(r.date);});D.out.forEach(function(x){add(x.od);});D.insp.forEach(function(i){add(i.date);});
   return Object.keys(m).map(Number).sort();}
@@ -24500,35 +24608,6 @@ function periodBar(D){
     '<select data-nv="month"><option value="0">Semua bulan</option>'+MON.map(function(m,i){return '<option value="'+(i+1)+'"'+(NV.month===i+1?' selected':'')+'>'+m+'</option>';}).join('')+'</select>'+
     '<select data-nv="proj"><option value="">Semua project</option>'+pj.map(function(p){return '<option value="'+esc(p)+'"'+(NV.proj===p?' selected':'')+'>'+esc(p)+'</option>';}).join('')+'</select></div>';
 }
-/* --- Poin Repair: urut dari repair rate terbesar --- */
-function rankLi(i,name,sub,p,w,b){return '<li><span class="no">'+(i+1)+'</span><span><b title="'+esc(name)+'">'+esc(name)+'</b><small>'+sub+'</small></span><span>'+bar(p,Math.max(10,w*4))+badge(p,w,b)+'</span></li>';}
-function repairHtml(D){
-  /* Welding per project */
-  var wg={};D.wi.forEach(function(r){var d=ym(r.t);if(!inP(d))return;if(NV.proj&&r.p!==NV.proj)return;var k=r.p||'(tanpa project)';var o=wg[k]||(wg[k]={L:0,R:0,n:0});o.L+=num(r.l);o.R+=num(r.r);o.n++;});
-  var wr=Object.keys(wg).map(function(k){return {k:k,o:wg[k],p:rate(wg[k].R,wg[k].L)};}).sort(function(a,b){return (b.p||0)-(a.p||0)||b.o.L-a.o.L;});
-  /* Fabrikasi per project */
-  var fg={};D.insp.forEach(function(x){if(!x.main)return;var d=ym(x.date);if(!inP(d))return;if(NV.proj&&x.proj!==NV.proj)return;var o=fg[x.proj]||(fg[x.proj]={n:0,rej:0});o.n++;if(x.st==='reject')o.rej++;});
-  var fr=Object.keys(fg).map(function(k){return {k:k,o:fg[k],p:rate(fg[k].rej,fg[k].n)};}).sort(function(a,b){return (b.p||0)-(a.p||0)||b.o.n-a.o.n;});
-  /* Incoming reject per supplier */
-  var sg={};D.inc.forEach(function(r){var d=ym(r.date);if(!inP(d))return;if(NV.proj&&r.project!==NV.proj)return;var s=incSplit(r),k=r.supplier||'(tanpa supplier)';var o=sg[k]||(sg[k]={q:0,rej:0,n:0});o.q+=s.q;o.rej+=s.rej;o.n++;});
-  var ir=Object.keys(sg).map(function(k){return {k:k,o:sg[k],p:rate(sg[k].rej,sg[k].q)};}).sort(function(a,b){return (b.p||0)-(a.p||0)||b.o.q-a.o.q;});
-  /* prioritas terbesar: rasio terhadap batas merah (RB) */
-  var cand=[];
-  if(wr[0]&&wr[0].p)cand.push({s:wr[0].p/RB,t:'Welding',n:wr[0].k,p:wr[0].p,d:2});
-  if(ir[0]&&ir[0].p)cand.push({s:ir[0].p/RB,t:'Incoming (supplier)',n:ir[0].k,p:ir[0].p,d:1});
-  if(fr[0]&&fr[0].p)cand.push({s:fr[0].p/RB,t:'Fabrikasi (reject)',n:fr[0].k,p:fr[0].p,d:1});
-  cand.sort(function(a,b){return b.s-a.s;});
-  var tW=0,tQ=0,tF=0;wr.forEach(function(x){tW+=x.o.L;});ir.forEach(function(x){tQ+=x.o.q;});fr.forEach(function(x){tF+=x.o.n;});
-  TOPTXT=cand.length?(cand[0].t+' — '+cand[0].n+' · '+pf(cand[0].p,cand[0].d)):'';
-  TOPCHIPS=cand.length?chip('Prioritas',esc(cand[0].t+' — '+cand[0].n)+' · '+pf(cand[0].p,cand[0].d),'#dc2626')+chip('',PL(),'#94a3b8'):((tW+tQ+tF>0)?chip('Aman','Tidak ada repair / reject','#16a34a')+chip('Diinspeksi',nf(tW/1000,0)+' m welding · '+nf(tQ)+' qty incoming · '+nf(tF)+' fabrikasi','#94a3b8')+chip('',PL(),'#94a3b8'):chip('Belum ada data',PL(),'#94a3b8'));
-  var top=cand.length?'<div class="nv-top">🔴 <span>Prioritas terbesar: <b>'+esc(cand[0].t)+' — '+esc(cand[0].n)+'</b> dengan repair/reject rate <b>'+pf(cand[0].p,cand[0].d)+'</b> pada '+PL()+'.</span></div>':'';
-  function col(title,def,list,mk,w,b){return '<div class="nv-panel"><h3>'+title+'</h3><p class="nv-def">'+def+'</p>'+(list.length?'<ol class="nv-rk">'+list.slice(0,6).map(mk).join('')+'</ol>':'<div class="nv-empty">Belum ada data pada '+PL()+'.</div>')+'</div>';}
-  return top+'<div class="nv-grid nv-g2">'+
-    col('Welding','Repair rate = panjang repair ÷ panjang diinspeksi (WI &amp; NDT). Urut dari terbesar.',wr,function(x,i){return rankLi(i,x.k,nf(x.o.R/1000,1)+' m repair / '+nf(x.o.L/1000,0)+' m',x.p,RW,RB);})+
-    col('Incoming (per supplier)','Reject rate = qty reject ÷ qty masuk. Urut dari terbesar.',ir,function(x,i){return rankLi(i,x.k,nf(x.o.rej)+' reject / '+nf(x.o.q)+' qty',x.p,RW,RB);})+
-    col('Fabrikasi (main component)','Reject rate = hasil Reject ÷ total hasil inspeksi main component. Urut dari terbesar.',fr,function(x,i){return rankLi(i,x.k,nf(x.o.rej)+' reject / '+nf(x.o.n)+' inspeksi',x.p,RW,RB);})+'</div>';
-}
-
 /* --- Evaluasi bulanan C1 + per project --- */
 function monthly(D,full,proj){
   var M=[];for(var i=0;i<12;i++)M.push({wL:0,wR:0,fI:0,fR:0,iq:0,ir:0,io:0,oN:0,oO:0});
@@ -24556,6 +24635,81 @@ function chartLines(M){
     if(seg.length>1)pts='<polyline fill="none" stroke="'+se.c+'" stroke-width="2.2" points="'+seg.join(' ')+'"/>'+pts;s+=pts;});
   return s+'</svg><div class="nv-legend">'+S.map(function(se){return '<span><i style="background:'+se.c+'"></i>'+se.n+'</span>';}).join('')+'</div>';
 }
+/* --- Pareto: penyumbang terbanyak (merah = "vital few" sampai ±80% kumulatif) --- */
+function tally(arr,fn){var m={};arr.forEach(function(x){var k=fn(x);m[k]=(m[k]||0)+1;});return Object.keys(m).map(function(k){return {k:k,v:m[k]};}).sort(function(a,b){return b.v-a.v||a.k.localeCompare(b.k,'id');});}
+function pareto(list,unit,topn){
+  var tot=0;list.forEach(function(x){tot+=x.v;});
+  if(!tot)return '<div class="nv-empty">Belum ada data pada '+PL()+'.</div>';
+  var N=topn||6,head=list.slice(0,N),rest=list.slice(N);
+  if(rest.length){var rv=0;rest.forEach(function(x){rv+=x.v;});head.push({k:'Lainnya ('+rest.length+')',v:rv,d:list[0].d,sub:'',other:1});}
+  var mx=0;head.forEach(function(x){if(x.v>mx)mx=x.v;});var cum=0;
+  return '<div class="nv-par"><div class="nv-pr h"><span></span><span>Penyumbang</span><span class="bw"></span><span class="r">Jumlah</span><span class="r">%</span><span class="r">Kum.</span></div>'+
+    head.map(function(x,i){var prev=cum;cum+=x.v;var pc=x.v/tot*100,cp=cum/tot*100;
+      return '<div class="nv-pr'+(prev<80&&!x.other?' vf':'')+'"><span class="no">'+(x.other?'…':i+1)+'</span><span class="nm"><b title="'+esc(x.k)+'">'+esc(x.k)+'</b>'+(x.sub?'<small>'+x.sub+'</small>':'')+'</span><span class="bw"><i style="width:'+Math.max(3,x.v/mx*100)+'%"></i></span><span class="r">'+nf(x.v,x.d||0)+(unit?' '+unit:'')+'</span><span class="r">'+nf(pc,0)+'%</span><span class="r">'+nf(cp,0)+'%</span></div>';}).join('')+'</div>';
+}
+var OMN={comp:'FAT',fab:'Fabrikasi & Preparation',nt:'Fabrikasi & Preparation',wi:'WI & NDT',inc:'Incoming',ship:'Pengiriman',coat:'Coating Inspection'};
+function outP(D,onlyOpen){return D.out.filter(function(x){var d=ym(x.od);if(!inP(d))return false;if(NV.proj&&x.proj!==NV.proj)return false;return !onlyOpen||x.st!=='CLOSE';});}
+function kpHead(p,w,b,txt){return '<div class="nv-kp">'+badge(p,w,b)+'<small>'+txt+'</small></div>';}
+function scopeTxt(){return 'Periode '+PL()+(NV.proj?' · project <b>'+esc(NV.proj)+'</b>':' · semua project');}
+
+/* 1. Repair rate welding → penyumbang terbanyak: subkon & defect type */
+function weldPanel(D){
+  var sk={},TL=0,TR=0;
+  D.wi.forEach(function(r){var d=ym(r.t);if(!inP(d))return;if(NV.proj&&r.p!==NV.proj)return;var k=String(r.u||'').trim()||'(tanpa subkon)',o=sk[k]||(sk[k]={L:0,R:0}),l=num(r.l),rp=num(r.r);o.L+=l;o.R+=rp;TL+=l;TR+=rp;});
+  var sl=Object.keys(sk).map(function(k){var o=sk[k];return {k:k,v:o.R/1000,d:1,sub:'repair rate '+pf(rate(o.R,o.L),1)+' · '+nf(o.L/1000,0)+' m diinspeksi'};}).filter(function(x){return x.v>0;}).sort(function(a,b){return b.v-a.v;});
+  var dl=tally(outP(D,false).filter(function(x){return x.mod==='wi';}),function(x){return String(x.cat||'').trim()||'(Kategori defect belum diisi)';});
+  var miss=dl.length&&dl[0].k.charAt(0)==='('&&dl.length===1;
+  return '<div class="nv-panel"><h3>Repair Rate Welding</h3><p class="nv-def">'+scopeTxt()+'. Repair rate = panjang repair ÷ panjang diinspeksi (WI &amp; NDT).</p>'+
+    kpHead(rate(TR,TL),RW,RB,nf(TR/1000,1)+' m repair dari '+nf(TL/1000,0)+' m diinspeksi')+
+    '<h4 class="nv-sub4">Pareto subkon — penyumbang repair terbanyak</h4>'+pareto(sl,'m')+
+    '<h4 class="nv-sub4">Pareto defect type — temuan WI &amp; NDT</h4>'+pareto(dl,'temuan')+
+    (miss?'<p class="nv-par-note">Isi kolom <b>Kategori Defect</b> pada Outstanding WI &amp; NDT agar pareto defect type terbaca.</p>':'')+'</div>';
+}
+/* 2. Reject rate supplier → supplier dengan reject tertinggi */
+function suppPanel(D){
+  var sg={},TQ=0,TJ=0;
+  D.inc.forEach(function(r){var d=ym(r.date);if(!inP(d))return;if(NV.proj&&r.project!==NV.proj)return;var s=incSplit(r),k=String(r.supplier||'').trim()||'(tanpa supplier)',o=sg[k]||(sg[k]={q:0,j:0});o.q+=s.q;o.j+=s.rej;TQ+=s.q;TJ+=s.rej;});
+  var sl=Object.keys(sg).map(function(k){var o=sg[k];return {k:k,v:o.j,sub:'reject rate '+pf(rate(o.j,o.q),1)+' · '+nf(o.q)+' qty masuk'};}).filter(function(x){return x.v>0;}).sort(function(a,b){return b.v-a.v;});
+  return '<div class="nv-panel"><h3>Reject Rate Supplier</h3><p class="nv-def">'+scopeTxt()+'. Reject rate = qty reject ÷ qty masuk (Incoming).</p>'+
+    kpHead(rate(TJ,TQ),RW,RB,nf(TJ)+' qty reject dari '+nf(TQ)+' qty masuk')+
+    '<h4 class="nv-sub4">Pareto supplier — reject tertinggi</h4>'+pareto(sl,'qty')+'</div>';
+}
+/* 3. Outstanding semua proses → penyumbang terbanyak */
+function outPanel(D){
+  var all=outP(D,false),op=all.filter(function(x){return x.st!=='CLOSE';});
+  var byProc=tally(op,function(x){return OMN[x.mod]||String(x.mod||'Lainnya');}),byProj=tally(op,function(x){return String(x.proj||'').trim()||'(tanpa project)';});
+  return '<div class="nv-panel"><h3>Outstanding — Semua Proses</h3><p class="nv-def">'+scopeTxt()+'. Temuan yang masih Open dari seluruh proses (FAT, Fabrikasi &amp; Preparation, WI &amp; NDT, Incoming, Pengiriman, Coating).</p>'+
+    kpHead(rate(op.length,all.length),OW,OB,nf(op.length)+' Open dari '+nf(all.length)+' temuan')+
+    '<div class="nv-grid nv-g2"><div><h4 class="nv-sub4">Pareto per proses</h4>'+pareto(byProc,'temuan')+'</div><div><h4 class="nv-sub4">Pareto per project</h4>'+pareto(byProj,'temuan')+'</div></div></div>';
+}
+/* Evaluasi per project: outstanding FAT — Klien vs Internal + masalahnya */
+function isKlien(x){return String(x.src||'').toLowerCase()==='klien';}
+function fatSplit(D){
+  var A=outP(D,false).filter(function(x){return x.mod==='comp';}),R={kO:0,kC:0,kT:0,iO:0,iC:0,iT:0,P:{}};
+  A.forEach(function(x){var k=isKlien(x),o=x.st!=='CLOSE',p=String(x.proj||'').trim()||'(tanpa project)',e=R.P[p]||(R.P[p]={kO:0,kC:0,kT:0,iO:0,iC:0,iT:0,kc:{},ic:{}});
+    var pre=k?'k':'i';
+    R[pre+'T']++;e[pre+'T']++;
+    if(o){R[pre+'O']++;e[pre+'O']++;}else{R[pre+'C']++;e[pre+'C']++;}
+    var c=String(x.cat||'').trim()||'(belum diisi)',m=(k?e.kc:e.ic),z=m[c]||(m[c]={n:0,o:0,c:0,cm:[]});
+    z.n++;if(o)z.o++;else z.c++;
+    if(x.cm&&z.cm.length<3)z.cm.push(String(x.cm).replace(/\s+/g,' ').trim());});
+  return R;
+}
+function probChips(m,cls){var ks=Object.keys(m).sort(function(a,b){return m[b].n-m[a].n;});if(!ks.length)return '<span style="color:#9aa8bf">—</span>';
+  return ks.slice(0,4).map(function(k){var z=m[k];return '<span class="nv-pc '+(z.o?cls:'')+'" title="'+esc(z.cm.join(' | '))+'">'+esc(k)+' · '+z.o+' open · '+z.c+' close</span>';}).join('')+(ks.length>4?'<span class="nv-pc">+'+(ks.length-4)+' lainnya</span>':'');}
+function projFatPanel(D){
+  var R=fatSplit(D),ps=Object.keys(R.P).map(function(p){return {p:p,e:R.P[p],o:R.P[p].kO+R.P[p].iO};}).filter(function(x){return x.e.kT+x.e.iT>0;}).sort(function(a,b){return b.o-a.o||(b.e.kT+b.e.iT)-(a.e.kT+a.e.iT);});
+  var kc={},ic={};ps.forEach(function(x){['kc','ic'].forEach(function(f){var dst=f==='kc'?kc:ic;Object.keys(x.e[f]).forEach(function(c){var d=dst[c]||(dst[c]={n:0,o:0,c:0}),z=x.e[f][c];d.n+=z.n;d.o+=z.o;d.c+=z.c;});});});
+  function lst(m){return Object.keys(m).map(function(k){return {k:k,v:m[k].n,sub:m[k].o+' open · '+m[k].c+' close'};}).sort(function(a,b){return b.v-a.v;});}
+  var head='<div class="nv-panel"><h3>Evaluasi per Project — Outstanding FAT</h3><p class="nv-def">'+scopeTxt()+'. Temuan FAT berstatus <b>Open</b> maupun <b>Close</b>, dipisah berdasarkan sumbernya: <b>Klien</b> (temuan dari klien) dan <b>Internal</b> (temuan QC). Diurutkan dari Open terbanyak.</p>';
+  if(!ps.length)return head+'<div class="nv-empty">Belum ada outstanding FAT pada '+PL()+'.</div></div>';
+  var sum='<div class="nv-kp">'+chip('Klien — Open',nf(R.kO),'#dc2626')+chip('Klien — Close',nf(R.kC),'#16a34a')+chip('Internal — Open',nf(R.iO),'#d98a0b')+chip('Internal — Close',nf(R.iC),'#16a34a')+'<small>'+nf(R.kT+R.iT)+' temuan · '+nf(ps.length)+' project/unit</small></div>';
+  var par='<div class="nv-grid nv-g2"><div><h4 class="nv-sub4">Masalah temuan Klien</h4>'+pareto(lst(kc),'temuan')+'</div><div><h4 class="nv-sub4">Masalah temuan Internal</h4>'+pareto(lst(ic),'temuan')+'</div></div>';
+  var tb='<h4 class="nv-sub4">Per project</h4><div class="nv-scroll"><table class="nv-tbl"><thead><tr><th rowspan="2">Project</th><th colspan="3" class="n">Klien</th><th colspan="3" class="n">Internal</th><th rowspan="2">Masalah Klien</th><th rowspan="2">Masalah Internal</th></tr><tr><th class="n">Open</th><th class="n">Close</th><th class="n">Total</th><th class="n">Open</th><th class="n">Close</th><th class="n">Total</th></tr></thead><tbody>'+
+    ps.map(function(x){var e=x.e;return '<tr><td><b>'+esc(x.p)+'</b></td><td class="n">'+nf(e.kO)+'</td><td class="n">'+nf(e.kC)+'</td><td class="n">'+nf(e.kT)+'</td><td class="n">'+nf(e.iO)+'</td><td class="n">'+nf(e.iC)+'</td><td class="n">'+nf(e.iT)+'</td><td>'+probChips(e.kc,'k')+'</td><td>'+probChips(e.ic,'i')+'</td></tr>';}).join('')+
+    '<tr class="tot"><td>Total</td><td class="n">'+nf(R.kO)+'</td><td class="n">'+nf(R.kC)+'</td><td class="n">'+nf(R.kT)+'</td><td class="n">'+nf(R.iO)+'</td><td class="n">'+nf(R.iC)+'</td><td class="n">'+nf(R.iT)+'</td><td></td><td></td></tr></tbody></table></div>';
+  return head+sum+par+tb+'<p class="nv-par-note">Sumber diisi lewat kolom <b>Sumber</b> (Internal / Klien) di Outstanding FAT; yang belum diisi dihitung Internal. Arahkan kursor ke label masalah untuk melihat komentar temuannya.</p></div>';
+}
 function evalHtml(D,which){
   var M=monthly(D,true,NV.proj),T=sumM(monthly(D,false,NV.proj));
   function row(label,m,cls){var none=!m.wL&&!m.fI&&!m.iq&&!m.oN;
@@ -24564,7 +24718,7 @@ function evalHtml(D,which){
       '<td class="n">'+nf(m.iq)+'</td><td class="n">'+nf(m.ir)+'</td><td class="n">'+badge(rate(m.ir,m.iq),RW,RB)+'</td>'+
       '<td class="n">'+nf(m.oN)+'</td><td class="n">'+nf(m.oO)+'</td><td class="n">'+badge(rate(m.oO,m.oN),OW,OB)+'</td></tr>';}
   var body=NV.month?row(MON[NV.month-1]+' '+NV.year,M[NV.month-1]):(M.map(function(m,i){return row(MON[i]+' '+NV.year,m);}).join('')+row('Total '+NV.year,T,'tot'));
-  var mon='<div class="nv-panel"><h3>Evaluasi Bulanan Workshop C1</h3><p class="nv-def">Periode '+PL()+(NV.proj?' · project <b>'+esc(NV.proj)+'</b>':' · semua project')+'. Welding = repair ÷ panjang diinspeksi · Incoming = qty reject ÷ qty masuk · Outstanding = temuan Open ÷ total temuan.</p>'+
+  var mon='<div class="nv-panel"><h3>Tren Bulanan Workshop C1</h3><p class="nv-def">Periode '+PL()+(NV.proj?' · project <b>'+esc(NV.proj)+'</b>':' · semua project')+'. Welding = repair ÷ panjang diinspeksi · Incoming = qty reject ÷ qty masuk · Outstanding = temuan Open ÷ total temuan.</p>'+
     chartLines(M)+'<div class="nv-scroll" style="margin-top:10px"><table class="nv-tbl"><thead><tr><th rowspan="2">Bulan</th><th colspan="3">Welding (WI &amp; NDT)</th><th colspan="3">Incoming</th><th colspan="3">Outstanding</th></tr>'+
     '<tr><th class="n">Insp (m)</th><th class="n">Repair (m)</th><th class="n">Rate</th><th class="n">Qty masuk</th><th class="n">Reject</th><th class="n">Rate</th><th class="n">Temuan</th><th class="n">Open</th><th class="n">Rate</th></tr></thead><tbody>'+body+'</tbody></table></div></div>';
   /* per project */
@@ -24573,7 +24727,8 @@ function evalHtml(D,which){
   pr.sort(function(a,b){var sa=Math.max(rate(a.t.wR,a.t.wL)||0,rate(a.t.fR,a.t.fI)||0);var sb=Math.max(rate(b.t.wR,b.t.wL)||0,rate(b.t.fR,b.t.fI)||0);return sb-sa;});
   var pt='<div class="nv-panel"><h3>Evaluasi per Project</h3><p class="nv-def">Periode '+PL()+'. Diurutkan dari repair rate tertinggi (Welding).</p>'+(pr.length?'<div class="nv-scroll"><table class="nv-tbl"><thead><tr><th>Project</th><th class="n">Welding repair</th><th class="n">Incoming reject</th><th class="n">Temuan Open</th><th class="n">Outstanding rate</th></tr></thead><tbody>'+
     pr.map(function(x){var t=x.t;return '<tr><td><b>'+esc(x.p)+'</b></td><td class="n">'+badge(rate(t.wR,t.wL),RW,RB)+' <small>'+nf(t.wR/1000,1)+'/'+nf(t.wL/1000,0)+' m</small></td><td class="n">'+badge(rate(t.ir,t.iq),RW,RB)+'</td><td class="n">'+nf(t.oO)+' / '+nf(t.oN)+'</td><td class="n">'+badge(rate(t.oO,t.oN),OW,OB)+'</td></tr>';}).join('')+'</tbody></table></div>':'<div class="nv-empty">Belum ada data pada '+PL()+'.</div>')+'</div>';
-  return which==='proj'?pt:mon;
+  if(which==='proj')return safe(function(){return projFatPanel(D);},'Evaluasi per Project');
+  return '<div class="nv-grid nv-g2">'+safe(function(){return weldPanel(D);},'Repair Rate Welding')+safe(function(){return suppPanel(D);},'Reject Rate Supplier')+'</div>'+safe(function(){return outPanel(D);},'Outstanding')+mon;
 }
 
 /* ---------- 2. INSPEKSI & MONITORING PROJECT ---------- */
@@ -24757,6 +24912,8 @@ if(root0){
     var kr=t.closest('[data-nv-kind]');if(kr){e.preventDefault();var kv=kr.getAttribute('data-nv-kind');NV.kind=(kv&&NV.kind===kv)?'':kv;refreshAcc('day');return;}
     var tab=t.closest('[data-nv-tab]');if(tab){e.preventDefault();goTab(tab.getAttribute('data-nv-tab'));return;}
     var out=t.closest('[data-nv-out]');if(out){e.stopPropagation();openOutstanding(out.getAttribute('data-nv-out'));return;}
+    var po=t.closest('[data-nv-pjopen]');if(po){e.stopPropagation();var pp=po.getAttribute('data-nv-pjopen').split('|');NV.from='monitor';showBack();if(pp[1]==='coating'){if(typeof window.showCoating==='function')window.showCoating();else toast('Modul Coating belum tersedia');return;}setP(pp[0]);window.openView(pp[1]);return;}
+    var pj=t.closest('[data-nv-pj]');if(pj){e.preventDefault();var pk=pj.getAttribute('data-nv-pj');if(!NV.pj)NV.pj={};NV.pj[pk]=!NV.pj[pk];refreshAcc('prog');return;}
     var op=t.closest('[data-nv-open]');if(op){openInspection(op.getAttribute('data-nv-open'));return;}
     var ac=t.closest('[data-nv-acc]');if(ac){toggleAcc(ac.getAttribute('data-nv-acc'));return;}
     var a=t.closest('[data-nv-act]');if(a){e.preventDefault();act(a.getAttribute('data-nv-act'));return;}
@@ -24766,7 +24923,7 @@ if(root0){
     var pr=t.closest('[data-nv-proj]');if(pr){setP(pr.getAttribute('data-nv-proj'));build(false);toast('Project aktif: '+curP());return;}
   });
   root0.addEventListener('keydown',function(e){if((e.key==='Enter'||e.key===' ')&&e.target.matches&&e.target.matches('.nv-tbl tr.nvr')){e.preventDefault();e.target.click();return;}
-    if((e.key==='Enter'||e.key===' ')&&e.target.matches&&e.target.matches('.nv-card.clk')){e.preventDefault();e.target.click();}});
+    if((e.key==='Enter'||e.key===' ')&&e.target.matches&&e.target.matches('.nv-card.clk,.nv-cpr')){e.preventDefault();e.target.click();}});
   root0.addEventListener('change',function(e){
     var f=e.target.getAttribute&&e.target.getAttribute('data-nv');if(!f)return;
     var v=e.target.value;
