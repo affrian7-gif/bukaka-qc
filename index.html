@@ -15109,6 +15109,108 @@ input::placeholder, textarea::placeholder {
     }
   }
 
+
+  /* ---------- PDF NATIVE (foto ditempel langsung, tanpa raster ulang) ----------
+     Sebelumnya tiap halaman (teks + foto) digambar ulang oleh html2canvas menjadi satu gambar A4 besar:
+     semua foto harus terdekode sekaligus di DOM (memori jebol di HP -> halaman putih), foto dikompres dua kali,
+     dan PDF membengkak (lambat dibuat & lambat diunggah). Sekarang:
+       - hanya satu halaman yang ada di DOM pada satu waktu,
+       - header/judul/footer saja yang digambar (ringan), foto disisipkan langsung lewat jsPDF.addImage. */
+  function normalizePhoto(src, boxW, boxH){
+    return new Promise(function(ok){
+      var im = new Image();
+      im.onload = function(){
+        try{
+          var w = im.naturalWidth, h = im.naturalHeight;
+          if(!w || !h) return ok(null);
+          var rr = Math.min((boxW*2)/w, (boxH*2)/h, 1);              // piksel maks 2x kotak (±190 dpi)
+          var tw = Math.max(1, Math.round(w*rr)), th = Math.max(1, Math.round(h*rr));
+          var cv = document.createElement('canvas'); cv.width = tw; cv.height = th;
+          var cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0,0,tw,th); cx.drawImage(im,0,0,tw,th);
+          var out = cv.toDataURL('image/jpeg', 0.86); cv.width = cv.height = 0;   // selalu JPEG; orientasi EXIF ikut dinormalkan
+          var r2 = Math.min(boxW/w, boxH/h, 1);
+          ok(out && out.length > 100 ? {data:out, w:Math.max(1,Math.round(w*r2)), h:Math.max(1,Math.round(h*r2))} : null);
+        }catch(e){ ok(null); }
+        im.src = '';
+      };
+      im.onerror = function(){ ok(null); };
+      im.src = src;
+    });
+  }
+  function photoChromePage(rec, dims, label, shNo, shTotal, isLast, itemTitle, bad){
+    return pageShell(
+      header(rec, shNo, shTotal)+
+      titleBar(E(itemTitle || label))+
+      (itemTitle ? '<div style="margin-top:5px;text-align:center;font-size:9px;color:#64748b;font-weight:700;letter-spacing:.5px;">'+E(label)+'</div>' : '')+
+      '<div style="height:'+(PAGE_H-(itemTitle?272:250))+'px;text-align:center;padding-top:10px;">'+
+        '<div style="display:table;width:100%;height:100%;"><div style="display:table-cell;vertical-align:middle;text-align:center;">'+
+          '<div class="incdoc-ph" style="display:inline-block;width:'+dims.w+'px;height:'+dims.h+'px;border:1px solid '+LINE+';box-sizing:content-box;'+(bad?'line-height:'+dims.h+'px;font-size:10px;color:#94a3b8;':'')+'">'+(bad?'Foto tidak dapat dimuat':'')+'</div>'+
+        '</div></div>'+
+      '</div>'+
+      footer(), isLast);
+  }
+  async function pageToCanvas(host, html){
+    host.innerHTML = html;
+    var el = host.querySelector('.incdoc-pg');
+    var imgs = Array.prototype.slice.call(el.querySelectorAll('img'));
+    await Promise.all(imgs.map(function(im){
+      return im.complete && im.naturalWidth ? 0 : new Promise(function(r){ im.onload = im.onerror = r; });
+    }));
+    var ph = el.querySelector('.incdoc-ph'), pos = null;
+    if(ph){
+      var pr = el.getBoundingClientRect(), qr = ph.getBoundingClientRect();
+      pos = {x: qr.left - pr.left + 1, y: qr.top - pr.top + 1};      // +1 = garis tepi placeholder
+    }
+    var cv = null, scales = [2, 1.5, 1];
+    for(var si=0; si<scales.length; si++){
+      try{
+        cv = await window.html2pdf().set({margin:0, html2canvas:{scale:scales[si], useCORS:true, allowTaint:true, logging:false, backgroundColor:'#ffffff', windowWidth:PAGE_W, scrollX:0, scrollY:0}})
+               .from(el).toContainer().toCanvas().get('canvas');
+      }catch(e){ cv = null; }
+      if(cv && !canvasBlank(cv)) return {cv:cv, pos:pos};
+      await new Promise(function(r){ setTimeout(r, 120); });
+    }
+    throw new Error('Halaman PDF gagal dirender (hasil kosong). Tutup tab lain / coba lagi.');
+  }
+  async function makeRecordPdf(rec, opts){
+    opts = opts || {};
+    var ok = await ensurePdfLib();
+    if(!ok) throw new Error('Library PDF (html2pdf) tidak dapat dimuat. Periksa koneksi internet lalu coba lagi.');
+    var JP = (window.jspdf && window.jspdf.jsPDF) || null;
+    if(!JP){ var fb = await buildRecordPages(rec); return {blob: await renderPdfBlob(fb.html), count: fb.count}; }   // cadangan: cara lama
+    var items = [];
+    for(var c=0;c<CATS.length;c++){
+      var list = rec[CATS[c]] || [];
+      for(var i=0;i<list.length;i++){ if(await loadPhoto(list[i])) items.push({cat:CATS[c], pid:list[i]}); }
+    }
+    var total = 1 + items.length, kx = 210/PAGE_W, ky = 297/PAGE_H;
+    var wrapper = document.createElement('div');
+    wrapper.style.cssText = 'position:fixed;left:-12000px;top:0;width:'+PAGE_W+'px;z-index:-1;pointer-events:none;';
+    var host = document.createElement('div'); host.style.cssText = 'width:'+PAGE_W+'px;background:#fff;';
+    wrapper.appendChild(host); document.body.appendChild(wrapper);
+    try{
+      if(document.fonts && document.fonts.ready){ try{ await document.fonts.ready; }catch(e){} }
+      var pdf = new JP({unit:'mm', format:'a4', orientation:'portrait', compress:true});
+      var say = function(n){ if(!opts.quiet) busy('Membuat PDF… halaman '+n+' / '+total); };
+      say(1);
+      var r1 = await pageToCanvas(host, detailPage(rec, 1, total, total===1));
+      pdf.addImage(r1.cv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 210, 297, undefined, 'FAST'); r1.cv.width = r1.cv.height = 0;
+      for(var p=0;p<items.length;p++){
+        say(p+2);
+        var data = await loadPhoto(items[p].pid);
+        var np = data ? await normalizePhoto(data, PAGE_W-80, PAGE_H-290) : null;
+        var dims = np ? {w:np.w, h:np.h} : {w:PAGE_W-80, h:200};
+        var pg = await pageToCanvas(host, photoChromePage(rec, dims, CAT_LABEL[items[p].cat]||items[p].cat, p+2, total, p===items.length-1, photoItemTitle(rec, items[p].pid), !np));
+        pdf.addPage();
+        pdf.addImage(pg.cv.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, 210, 297, undefined, 'FAST'); pg.cv.width = pg.cv.height = 0;
+        if(np && pg.pos) pdf.addImage(np.data, 'JPEG', pg.pos.x*kx, pg.pos.y*ky, np.w*kx, np.h*ky, undefined, 'FAST');
+        np = null; data = null;
+        await new Promise(function(r){ setTimeout(r, 0); });          // beri napas ke browser / GC
+      }
+      return {blob: pdf.output('blob'), count: total};
+    } finally { wrapper.remove(); }
+  }
+
   function safeName(s){ return String(s||'').replace(/[\\\/:*?"<>|\s]+/g,'_').replace(/^_+|_+$/g,''); }
   // Nama file: "No II_Nama Suplier" (karakter terlarang di nama file diganti "-", spasi dipertahankan)
   function fileSafe(s){ return String(s||'').replace(/[\\\/:*?"<>|]+/g,'-').replace(/\s+/g,' ').replace(/^[\s.\-]+|[\s.\-]+$/g,''); }
@@ -15331,25 +15433,29 @@ input::placeholder, textarea::placeholder {
   async function odExists(h, name){ try{ await h.getFileHandle(name); return true; }catch(e){ return false; } }
   var _srvBusy = false;
   async function srvTick(){
-    if(_srvBusy || !srvOn() || navigator.onLine === false) return;
+    if(_srvBusy || _regenBusy || !srvOn() || navigator.onLine === false) return;
     _srvBusy = true;
     try{
       var h = await odReady(false); if(!h) return;       // butuh folder + izin aktif
       var since = srvSince(), done = srvDone(), made = 0;
       var todo = (typeof incStoreAll === 'function' ? incStoreAll() : []).filter(function(r){
-        return r && r.id && idTs(r.id) >= since && !done[r.id] && !(r.docPdf && r.docPdf.od);
+        return r && r.id && idTs(r.id) >= since && (done[r.id] ? true : !(r.docPdf && r.docPdf.od));
       });
       for(var i=0;i<todo.length;i++){
-        var r = todo[i], name = pdfFileName(r);
-        if(await odExists(h, name)){ done[r.id] = 1; continue; }          // sudah ada di folder (dibuat inspector lain)
+        var r = todo[i], name = pdfFileName(r), curRes = r.result || '';
+        if(done[r.id]){
+          if(done['r:'+r.id] === undefined){ done['r:'+r.id] = curRes; continue; }   // pengamatan pertama: catat status saat ini
+          if(done['r:'+r.id] === curRes) continue;                                    // status tidak berubah
+          // status berubah (Accept/Hold/Reject) → buat ulang & timpa file di folder
+        } else if(await odExists(h, name)){ done[r.id] = 1; done['r:'+r.id] = curRes; continue; }   // sudah ada di folder (dibuat inspector lain)
         var miss = 0;
         for(var c=0;c<CATS.length;c++){ var l = r[CATS[c]] || []; for(var k=0;k<l.length;k++){ if(!(await loadPhoto(l[k]))) miss++; } }
         if(miss && Date.now() - idTs(r.id) < 30*60000) continue;           // foto belum selesai tersinkron, coba lagi nanti
-        var fresh = await buildRecordPages(r), blob = await renderPdfBlob(fresh.html);
+        var fresh = await makeRecordPdf(r, {quiet:true}), blob = fresh.blob;
         await odWriteTo(h, name, blob);
         try{ await putPdf(r.id, blob, name); }catch(e){}
         r.docPdf = {name:name, savedAt:Date.now(), size:blob.size, pages:fresh.count, od:true};
-        done[r.id] = 1; srvSaveDone(done); made++;
+        done[r.id] = 1; done['r:'+r.id] = curRes; srvSaveDone(done); made++;
       }
       srvSaveDone(done);
       if(made){ if(typeof saveState === 'function') saveState(); if(typeof renderIncoming === 'function') renderIncoming(); toast('🖥️ Mode server: '+made+' PDF baru dikirim ke OneDrive.'); }
@@ -15403,6 +15509,57 @@ input::placeholder, textarea::placeholder {
   setInterval(odSweep, 60000);
   setTimeout(srvTick, 10000);
   setInterval(srvTick, 60000);
+
+  /* ---------- Status Accept / Hold / Reject berubah → PDF dibuat ulang & file di OneDrive ditimpa ---------- */
+  var _regenBusy = false, _resT = {}, _resPend = {}, _resRetry = {}, _lastAct = 0, RESK = 'incPdfRes';
+  ['click','change','input','keydown','touchstart'].forEach(function(ev){ document.addEventListener(ev, function(){ _lastAct = Date.now(); }, true); });
+  function resMap(){ try{ return JSON.parse(localStorage.getItem(RESK) || '{}'); }catch(e){ return {}; } }
+  function resSave(m){ try{ localStorage.setItem(RESK, JSON.stringify(m)); }catch(e){} }
+  async function regenPdf(id){
+    var r = findRec(id); if(!r || !(r.docPdf && r.docPdf.name)) return true;
+    for(var c=0;c<CATS.length;c++){ var l = r[CATS[c]] || []; for(var k=0;k<l.length;k++){ if(!(await loadPhoto(l[k]))) return false; } }   // foto belum lengkap di perangkat ini
+    toast('🔄 Status berubah ('+(r.result||'PENDING')+') — memperbarui PDF…');
+    var res = await makeRecordPdf(r, {quiet:true});
+    var name = r.docPdf.name || pdfFileName(r);                        // nama sama → file lama ditimpa
+    await putPdf(r.id, res.blob, name);
+    r.docPdf = {name:name, savedAt:Date.now(), size:res.blob.size, pages:res.count, od:false};
+    var odh = null; try{ odh = await odReady(false); }catch(e){}
+    try{ var via = await odDeliver(name, res.blob, false, odh); if(via) r.docPdf.od = true; }
+    catch(e){ console.warn('[OneDrive update]', e); }
+    if(typeof saveState === 'function') saveState();
+    if(typeof renderIncoming === 'function') renderIncoming();
+    toast(r.docPdf.od ? '✅ PDF diperbarui & dikirim ke OneDrive.' : '✅ PDF diperbarui (antre kirim ke OneDrive).');
+    return true;
+  }
+  async function resWatch(){
+    if(typeof incStoreAll !== 'function') return;
+    var all = incStoreAll(), m = resMap(), ch = false, now = Date.now();
+    all.forEach(function(r){
+      if(!r || !r.id || !(r.docPdf && r.docPdf.name)) return;
+      var cur = r.result || '';
+      if(!(r.id in m)){ m[r.id] = cur; ch = true; return; }
+      if(m[r.id] !== cur){
+        if(now - _lastAct < 10000){ if(_resPend[r.id] !== cur){ _resPend[r.id] = cur; _resT[r.id] = now; } }   // diubah pengguna di perangkat ini
+        else { m[r.id] = cur; ch = true; delete _resPend[r.id]; }                                                // datang dari sinkron: PDF diperbarui oleh perangkat yang mengubah
+      } else if(_resPend[r.id] !== undefined){ delete _resPend[r.id]; }                                           // dikembalikan ke status semula
+    });
+    if(ch) resSave(m);
+    if(_regenBusy || _srvBusy || navigator.onLine === false) return;
+    var ids = Object.keys(_resPend).filter(function(id){ return now - _resT[id] >= 3000 && now >= (_resRetry[id]||0); });   // tunggu 3 dtk setelah klik terakhir
+    if(!ids.length) return;
+    _regenBusy = true;
+    try{
+      for(var i=0;i<ids.length;i++){
+        var id = ids[i], want = _resPend[id];
+        try{
+          var done = await regenPdf(id);
+          if(done){ var m2 = resMap(); m2[id] = want; resSave(m2); delete _resPend[id]; delete _resRetry[id]; }
+          else { _resRetry[id] = Date.now() + 60000; }
+        }catch(e){ console.warn('[PDF update status]', e); _resRetry[id] = Date.now() + 60000; toast('⚠️ PDF belum bisa diperbarui: '+(e && e.message || e)+' (dicoba lagi)'); }
+      }
+    } finally { _regenBusy = false; }
+  }
+  setInterval(resWatch, 2000);
   window.addEventListener('online', function(){ setTimeout(function(){ odFlush(false, null).catch(function(){}); srvTick(); }, 1500); });
   setTimeout(function(){ odFlush(false, null).catch(function(){}); }, 6000);
   setInterval(function(){ odFlush(false, null).catch(function(){}); }, 120000);
@@ -15535,8 +15692,7 @@ input::placeholder, textarea::placeholder {
     busy('Membuat PDF dokumentasi…');
     try{
       var cur = findRec(rec.id) || rec;
-      var fresh = await buildRecordPages(cur);
-      var blob = await renderPdfBlob(fresh.html);
+      var fresh = await makeRecordPdf(cur); var blob = fresh.blob;
       var name = pdfFileName(cur);
       await putPdf(cur.id, blob, name);
       cur.docPdf = {name:name, savedAt:Date.now(), size:blob.size, pages:fresh.count};
@@ -15719,8 +15875,7 @@ input::placeholder, textarea::placeholder {
       busy('Membuat PDF…');
       try{
         var cur = findRec(recId) || rec;
-        var fresh = await buildRecordPages(cur);
-        var blob = await renderPdfBlob(fresh.html);
+        var fresh = await makeRecordPdf(cur); var blob = fresh.blob;
         var name = pdfFileName(cur);
         await putPdf(cur.id, blob, name);
         cur.docPdf = {name:name, savedAt:Date.now(), size:blob.size, pages:fresh.count};
@@ -15744,8 +15899,7 @@ input::placeholder, textarea::placeholder {
       busy('Membuat PDF…');
       try{
         var cur = findRec(recId) || rec;
-        var fresh = await buildRecordPages(cur);
-        var blob = await renderPdfBlob(fresh.html);
+        var fresh = await makeRecordPdf(cur); var blob = fresh.blob;
         var res = await deliverBlob(blob, pdfFileName(cur));
         if(res === 'downloaded') toast('✅ PDF berhasil diunduh.');
         else if(res === 'shared') toast('✅ PDF berhasil dibagikan.');
