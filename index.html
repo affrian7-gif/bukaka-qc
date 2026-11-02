@@ -6144,7 +6144,7 @@ body.guest-mode .out-photo-box .rm-photo { display:none !important; }
         <label>Ukuran <input id="penSize" type="range" min="1" max="12" value="3"></label>
         <button onclick="setMarkupMode('pen')">✎ Coret</button><button onclick="setMarkupMode('eraser')">⌫ Hapus coretan</button><button onclick="clearMarkup()">Bersihkan</button><button onclick="saveMarkup()">Save As PNG</button><button onclick="saveInspection()">Save Inspection</button><button onclick="closeDrawingModal()">✕ Tutup</button>
       </div></div>
-      <div class="drawing-stage"><iframe id="drawingFrame" src="./QC Inspection &amp; Drawing Checksheet_files/preview.html" title="Drawing"></iframe><canvas id="markupCanvas" width="1920" height="855"></canvas><div id="drawingHint">Jika drawing Google Drive tidak tampil, pastikan file dapat diakses dan gunakan tombol “Buka link asli”. Coretan disimpan sebagai PNG transparan karena browser tidak mengizinkan mengambil isi iframe Google Drive.</div></div>
+      <div class="drawing-stage"><iframe id="drawingFrame" src="about:blank" title="Drawing"></iframe><canvas id="markupCanvas" width="1920" height="855"></canvas><div id="drawingHint">Jika drawing Google Drive tidak tampil, pastikan file dapat diakses dan gunakan tombol “Buka link asli”. Coretan disimpan sebagai PNG transparan karena browser tidak mengizinkan mengambil isi iframe Google Drive.</div></div>
       <div class="drawing-modal-foot"><span id="activeLinkText">Link: https://drive.google.com/file/d/1uTcI8gbmcJYVrnxFu3gaTelg1_vdDNu8/view?usp=drive_link</span><a id="openTabBtn" href="https://drive.google.com/file/d/1uTcI8gbmcJYVrnxFu3gaTelg1_vdDNu8/view?usp=drive_link" target="_blank" rel="noopener">Buka link asli ↗</a><span id="markupStatus">Mode coret</span></div>
     </div>
     <style>
@@ -9091,9 +9091,11 @@ window.addEventListener('load', () => {
 <script>
 // --- ZERO-SETUP AUTO SYNC VIA GITHUB REPO ---
 // Semua inspector membuka link yang sama, data otomatis ambil & simpan dari file publik GitHub / GitHub Pages
+let __autoSyncTimer = null;
 async function autoSyncCheck() {
     try {
         let res = await fetch('./qc_data.json?t=' + Date.now());
+        if (res.status === 404) { if (__autoSyncTimer) { clearInterval(__autoSyncTimer); __autoSyncTimer = null; } return; }
         if (res.ok) {
             let data = await res.json();
             if (data && data[currentProject]) {
@@ -9113,7 +9115,7 @@ async function autoSyncCheck() {
 
 window.addEventListener('load', () => {
     setTimeout(autoSyncCheck, 2000);
-    setInterval(autoSyncCheck, 20000); // Cek pembaruan setiap 20 detik otomatis
+    __autoSyncTimer = setInterval(autoSyncCheck, 20000); // Cek pembaruan setiap 20 detik otomatis (berhenti sendiri jika qc_data.json tidak ada)
 });
 </script>
 
@@ -26015,4 +26017,126 @@ window.addEventListener('storage',function(e){if(e.key&&e.key.indexOf(PFX)===0)t
 })();
 
 </script>
+<script id="qc-rename-outstanding-fix">
+/* ============================================================
+   FIX: Outstanding hilang setelah ganti nama project
+   - Outstanding (qcout_*) menyimpan nama project di field "proj".
+     Fungsi ganti nama sebelumnya tidak ikut mengubahnya, sehingga
+     item tidak lagi cocok dengan project baru.
+   - (1) Mulai sekarang: ganti nama project otomatis memindahkan Outstanding.
+   - (2) Data yang sudah terlanjur: banner "Perbaiki Outstanding" untuk
+         menautkan nama lama ke project yang ada sekarang.
+   ============================================================ */
+(function(){
+  'use strict';
+  var PFX='qcout_', MODS={fab:1,comp:1,nt:1,ship:1}, UNIT=/ - Unit \d+$/;
+  function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+  function toast(m){try{if(typeof window.showToastMsg==='function')window.showToastMsg(m);}catch(e){}}
+  function baseOf(p){return String(p||'').replace(UNIT,'');}
+  function pdNames(){try{return Object.keys(projectData);}catch(e){return [];}}
+  function eachItem(fn){
+    var keys=[],i,k;
+    for(i=0;i<localStorage.length;i++){k=localStorage.key(i);if(k&&k.indexOf(PFX)===0)keys.push(k);}
+    keys.forEach(function(k){var x=null;try{x=JSON.parse(localStorage.getItem(k));}catch(e){}if(x&&x.id)fn(k,x);});
+  }
+  function reloadOut(){try{if(window.QCOut&&window.QCOut.reload)window.QCOut.reload();}catch(e){console.warn('QCOut reload',e);}}
+  function logRen(o,n,c){try{var L=JSON.parse(localStorage.getItem('qc_rename_log')||'[]');L.push({o:o,n:n,c:c,t:Date.now()});localStorage.setItem('qc_rename_log',JSON.stringify(L.slice(-50)));}catch(e){}}
+
+  /* pindahkan semua Outstanding dari nama project lama -> baru (termasuk "<lama> - Unit N") */
+  function remap(oldB,newB){
+    var n=0,now=Date.now();
+    eachItem(function(k,x){
+      if(!MODS[x.mod])return;
+      var p=String(x.proj||''),np=null;
+      if(p===oldB)np=newB; else if(p.indexOf(oldB+' - Unit ')===0)np=newB+p.slice(oldB.length);
+      if(np==null)return;
+      x.proj=np;x.t=now;
+      try{localStorage.setItem(k,JSON.stringify(x));n++;}catch(e){console.warn('remap outstanding',k,e);}
+    });
+    if(n){logRen(oldB,newB,n);reloadOut();}
+    return n;
+  }
+
+  /* (1) sambungkan ke fungsi ganti nama project */
+  function hook(){
+    var P=window.QCProj;
+    if(!P||P.__qoFix||typeof P.rename!=='function')return false;
+    var orig=P.rename;
+    P.rename=async function(old,nw){
+      var nn=String(nw==null?'':nw).trim().replace(/\s+/g,' ');
+      var r=await orig.apply(this,arguments);
+      if(r){try{var c=remap(old,nn);if(c)toast('📌 '+c+' Outstanding ikut dipindah ke "'+nn+'"');}catch(e){console.error('rename outstanding',e);}}
+      return r;
+    };
+    P.__qoFix=1;return true;
+  }
+  if(!hook()){var t=0,iv=setInterval(function(){if(hook()||++t>40)clearInterval(iv);},500);}
+
+  /* (2) cari Outstanding yatim (nama project tidak ada lagi) */
+  function orphans(){
+    var names=pdNames(),have={},by={};
+    names.forEach(function(n){have[n]=1;});
+    eachItem(function(k,x){
+      if(!MODS[x.mod]||!x.proj)return;
+      if(have[x.proj])return;
+      var b=baseOf(x.proj);if(have[b])return;
+      var o=by[b]||(by[b]={n:0,mods:{}});o.n++;o.mods[x.mod]=1;
+    });
+    return by;
+  }
+  function tok(s){return String(s).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);}
+  function sim(a,b){var A=tok(a),B=tok(b);if(!A.length||!B.length)return 0;var s=0;A.forEach(function(w){if(B.indexOf(w)>=0)s++;});return s/(A.length+B.length-s);}
+  function targets(){return pdNames().filter(function(n){return !UNIT.test(n);});}
+  function outCount(){var c={};eachItem(function(k,x){if(MODS[x.mod]){var b=baseOf(x.proj);c[b]=(c[b]||0)+1;}});return c;}
+
+  function openFix(){
+    var by=orphans(),keys=Object.keys(by);
+    var old=document.getElementById('qoFixModal');if(old)old.remove();
+    if(!keys.length){toast('✅ Semua Outstanding sudah terhubung ke project');return;}
+    var tg=targets(),oc=outCount(),MN={fab:'Fabrikasi',comp:'FAT',nt:'Fab & Prep',ship:'Pengiriman'};
+    var rows=keys.map(function(o,i){
+      var best=-1,bs=0;
+      tg.forEach(function(t,j){var s=sim(o,t)+(oc[t]?0:0.25);if(sim(o,t)>0&&s>bs){bs=s;best=j;}});
+      var opts='<option value="">— biarkan (jangan dipindah) —</option>'+tg.map(function(t,j){return '<option value="'+esc(t)+'"'+(j===best?' selected':'')+'>'+esc(t)+'</option>';}).join('');
+      return '<div style="border:1px solid #334155;border-radius:10px;padding:10px;margin:8px 0">'
+        +'<div><b>'+esc(o)+'</b> <span style="color:#94a3b8">· '+by[o].n+' item · '+Object.keys(by[o].mods).map(function(m){return MN[m]||m;}).join(', ')+'</span></div>'
+        +'<div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="color:#94a3b8">Pindahkan ke:</span>'
+        +'<select data-o="'+esc(o)+'" style="background:#0f172a;color:#f8fafc;border:1px solid #475569;border-radius:8px;padding:6px 8px;max-width:100%">'+opts+'</select></div></div>';
+    }).join('');
+    var m=document.createElement('div');m.id='qoFixModal';
+    m.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(2,6,23,.8);display:flex;align-items:center;justify-content:center;padding:16px';
+    m.innerHTML='<div style="background:#1e293b;color:#f8fafc;border:1px solid #334155;border-radius:12px;max-width:560px;width:100%;max-height:90vh;overflow:auto;padding:18px;font-size:.9rem;line-height:1.5">'
+      +'<h3 style="margin:0 0 6px;color:#38bdf8">🔧 Perbaiki Outstanding</h3>'
+      +'<p style="color:#94a3b8;margin:0 0 6px">Outstanding di bawah ini masih memakai <b>nama project lama</b> (project sudah diganti nama), sehingga tidak muncul. Pilih project tujuannya lalu terapkan.</p>'
+      +rows
+      +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button type="button" id="qoFixNo" style="padding:7px 14px">Nanti</button><button type="button" id="qoFixGo" class="primary" style="padding:7px 14px">Terapkan</button></div></div>';
+    document.body.appendChild(m);
+    m.addEventListener('click',function(e){if(e.target===m)m.remove();});
+    document.getElementById('qoFixNo').onclick=function(){m.remove();};
+    document.getElementById('qoFixGo').onclick=function(){
+      var tot=0;m.querySelectorAll('select[data-o]').forEach(function(s){if(s.value)tot+=remap(s.getAttribute('data-o'),s.value);});
+      m.remove();toast(tot?('✅ '+tot+' Outstanding dipulihkan'):'Tidak ada yang dipindah');check();
+    };
+  }
+
+  function check(){
+    var bar=document.getElementById('qoOrphBar'),n=0,by=orphans();
+    Object.keys(by).forEach(function(k){n+=by[k].n;});
+    if(!n){if(bar)bar.remove();return;}
+    if(bar){bar.querySelector('span').textContent='⚠️ '+n+' Outstanding tidak terhubung ke project (nama lama)';return;}
+    try{if(sessionStorage.getItem('qoOrphDismiss')==='1')return;}catch(e){}
+    bar=document.createElement('div');bar.id='qoOrphBar';
+    bar.style.cssText='position:fixed;left:12px;bottom:12px;z-index:99998;background:#7c2d12;color:#fff;border:1px solid #fb923c;border-radius:10px;padding:8px 10px;font-size:.82rem;display:flex;gap:8px;align-items:center;max-width:calc(100% - 24px);box-shadow:0 6px 20px rgba(0,0,0,.4)';
+    bar.innerHTML='<span>⚠️ '+n+' Outstanding tidak terhubung ke project (nama lama)</span><button type="button" id="qoOrphGo" style="padding:4px 10px">Perbaiki</button><button type="button" id="qoOrphX" aria-label="Tutup" style="padding:4px 8px">✕</button>';
+    document.body.appendChild(bar);
+    document.getElementById('qoOrphGo').onclick=openFix;
+    document.getElementById('qoOrphX').onclick=function(){try{sessionStorage.setItem('qoOrphDismiss','1');}catch(e){}bar.remove();};
+  }
+
+  window.QCFixOutstanding={open:openFix,check:check,remap:remap,orphans:orphans};
+  setTimeout(check,3500);setTimeout(check,12000);setInterval(check,30000);
+  document.addEventListener('qo-changed',function(){setTimeout(check,200);});
+})();
+</script>
+
 </body></html>
