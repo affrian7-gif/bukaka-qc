@@ -6162,6 +6162,7 @@ body.guest-mode .out-photo-box .rm-photo { display:none !important; }
         let currentDrawing = {url:'', name:'', key:''};
 
         function init() {
+            if (!projectData[currentProject]) currentProject = Object.keys(projectData)[0];
             const sel = document.getElementById('projectSelect');
             sel.innerHTML = '';
             for (let p in projectData) {
@@ -6196,7 +6197,8 @@ function renderTable() {
             window.__inspSet=null;
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = '';
-            let rows = projectData[currentProject];
+            if (!projectData[currentProject]) currentProject = Object.keys(projectData)[0];
+            let rows = projectData[currentProject] || [];
             let checkedNum = 0;
             let totalItems = rows.filter(row => !row.level.startsWith('▶')).length;
             const query = (document.getElementById('searchInput')?.value || '').trim().toLowerCase();
