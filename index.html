@@ -25024,7 +25024,7 @@ function grouped(){
   names.forEach(function(n){var m=UNIT_RE.exec(n),b=m?m[1]:n,ti=TY[b],typed=!!(ti&&ti.g),key=typed?'g:'+ti.g:'b:'+b;
     if(!(key in idx)){idx[key]=groups.length;groups.push({base:typed?ti.g:b,typed:typed,rows:[]});}
     var ul=(QU.label&&QU.label(n))||(m?'Unit '+m[2]:'Project'),multiU=(QU.count&&QU.count(b)>1);
-    groups[idx[key]].rows.push({name:n,label:typed?((ti.t||b)+(multiU||m?' · '+ul:'')):ul,u:m?+m[2]:0,type:typed?(ti.t||b):'',typed:typed});});
+    groups[idx[key]].rows.push({name:n,label:typed?((ti.t||b)+(multiU||m?' · '+ul:'')):ul,ul:ul,u:m?+m[2]:0,type:typed?(ti.t||b):'',typed:typed});});
   groups.sort(function(a,b){return a.base.localeCompare(b.base,'id',{numeric:true});});
   groups.forEach(function(g){g.rows.sort(function(a,b){return (g.typed?a.type.localeCompare(b.type,'id',{numeric:true}):0)||a.u-b.u;});});
   return groups;
@@ -25161,7 +25161,7 @@ function dashHtml(D){
 
 /* --- resume inspeksi per hari --- */
 function inD(d,day){return day&&day.from?(d>=day.from&&d<=day.to):d===day;}
-var KN={FAB:'Fabrikasi & Prep',FAT:'FAT',INC:'Incoming',WI:'WI & NDT'};
+var KN={FAB:'Fabrikasi & Prep',FAT:'FAT',INC:'Incoming',WI:'WI & NDT',COAT:'Coating'};
 function dayRecords(D,day,carry){
   var rows=[];
   D.insp.concat(D.add||[]).forEach(function(x){if(!inD(x.date,day))return;rows.push({kind:x.main?'FAB':'FAT',d:x.date,t:x.t,by:x.by,name:x.name,sub:x.proj+(x.add?' · Additional':'')+(x.dwg?' · '+x.dwg:''),
@@ -25175,6 +25175,42 @@ function dayRecords(D,day,carry){
   D.wi.forEach(function(r){var wd=String(r.t||'').slice(0,10);if(!inD(wd,day))return;
     rows.push({kind:'WI',d:wd,id:r.id,t:0,by:r.i||r.insp||'',name:(r.m||'Welding')+(r.w?' · '+r.w:''),sub:(r.p||'')+' · '+nf(num(r.l))+' mm',
       st:(r.cat==='acc'||r.cat==='accr')?'accept':'reject',stLbl:String(r.x||'').toUpperCase()||'-',stC:(r.cat==='acc'||r.cat==='accr')?'#16a34a':'#dc2626'});});
+  try{coatDayRows(D,day).forEach(function(r){rows.push(r);});}catch(e){console.error('[Resume Coating]',e);}
+  return rows;
+}
+/* ---- aktivitas Coating Inspection: progres komponen, form QC, Outstanding ---- */
+var COAT_PN={cabin:'Cabin',tunnel_a:'Tunnel A',tunnel_b:'Tunnel B',tunnel_c:'Tunnel C',corridor:'Corridor',rigid:'Rigid',roof_rotunda:'Roof Rotunda',column_rotunda:'Column Rotunda',upper_column:'Upper Column',lower_column:'Lower Column',frame_wheel:'Frame Wheel Boogie',carriage_wheel:'Carriage Wheel Boogie',other:'Other'};
+function coatLbl(p){return ((p.no||'')+(p.name?' - '+p.name:'')+(p.unit?' · '+p.unit:'')).trim()||'Project';}
+function coatDayRows(D,day){
+  var rows=[],st=lsJSON('dcs_bb_state'),ps=(st&&Array.isArray(st.projects))?st.projects:[],byId={};
+  ps.forEach(function(p){if(p&&p.id)byId[p.id]=p;});
+  ps.forEach(function(p){
+    if(!p)return;var lb=coatLbl(p),parts=p.parts||{};
+    /* progres per komponen (riwayat perubahan %) */
+    Object.keys(parts).forEach(function(k){
+      var pt=parts[k];if(!pt)return;
+      (pt.hist||[]).forEach(function(h){
+        if(!h||!h.t||!inD(iso(h.t),day))return;
+        var pc=Math.max(0,Math.min(100,Math.round(+h.p||0)));
+        rows.push({kind:'COAT',d:iso(h.t),t:h.t,by:pt.inspector||'',name:'Progres '+(COAT_PN[k]||k)+' → '+pc+'%',sub:lb,
+          st:pc>=100?'accept':'hold',stLbl:pc>=100?'SELESAI':pc+'%',stC:pc>=100?'#16a34a':'#d97706'});
+      });
+    });
+    /* form QC coating */
+    (p.forms||[]).forEach(function(f){
+      if(!f||!f.created||!inD(iso(f.created),day))return;
+      var v=String((f.d&&f.d.v)||'').toUpperCase(),acc=v.indexOf('ACCEPT')===0,rej=v==='REJECT';
+      rows.push({kind:'COAT',d:iso(f.created),t:f.created,by:'',name:'Form QC '+(f.code||'')+(f.comp?' · '+(COAT_PN[f.comp]||f.comp):''),sub:lb,
+        st:rej?'reject':acc?'accept':'hold',stLbl:v||'DRAFT',stC:rej?'#dc2626':acc?'#16a34a':'#d97706'});
+    });
+  });
+  /* Outstanding Coating (dihitung pada tanggal temuan) */
+  (D.out||[]).forEach(function(x){
+    if(!x||x.mod!=='coat'||!inD(String(x.od||'').slice(0,10),day))return;
+    var cl=x.st==='CLOSE',p=byId[x.ref];
+    rows.push({kind:'COAT',d:String(x.od).slice(0,10),t:+x.c||0,by:x.pic||'',name:'Outstanding · '+(x.lbl||x.comp||x.cat||'Coating'),sub:(p?coatLbl(p):(x.proj||''))+(x.cm?' · '+String(x.cm).slice(0,60):''),
+      st:cl?'accept':'hold',stLbl:cl?'CLOSE':'OPEN',stC:cl?'#16a34a':'#d97706'});
+  });
   return rows;
 }
 function dayHtml(D){
@@ -25186,7 +25222,7 @@ function dayHtml(D){
   var rows=dayRecords(D,rng),by={};rows.forEach(function(r){by[r.by||'(tanpa nama)']=1;});
   var inspectors=Object.keys(by).sort();if(NV.by!=='all'&&inspectors.indexOf(NV.by)<0)NV.by='all';
   var f=rows.filter(function(r){return NV.by==='all'||(r.by||'(tanpa nama)')===NV.by;});
-  var kinds=[['FAB','Fabrikasi & Preparation'],['FAT','FAT · Bay 1'],['INC','Incoming'],['WI','WI & NDT']];
+  var kinds=[['FAB','Fabrikasi & Preparation'],['FAT','FAT · Bay 1'],['INC','Incoming'],['WI','WI & NDT'],['COAT','Coating Inspection']];
   var tb=kinds.map(function(k){var a=f.filter(function(r){return r.kind===k[0];}),c={accept:0,hold:0,reject:0};a.forEach(function(r){c[r.st==='hold'?'hold':(r.st==='reject'?'reject':'accept')]++;});
     return '<tr class="nvr'+(a.length?'':' dim')+(NV.kind===k[0]?' sel':'')+'" data-nv-kind="'+k[0]+'" tabindex="0" title="Klik untuk melihat aktivitas '+k[1]+'"><td><b>'+k[1]+'</b></td><td class="n">'+a.length+'</td><td class="n">'+c.accept+'</td><td class="n">'+c.hold+'</td><td class="n">'+c.reject+'</td></tr>';}).join('');
   var tot={accept:0,hold:0,reject:0};f.forEach(function(r){tot[r.st==='hold'?'hold':(r.st==='reject'?'reject':'accept')]++;});
@@ -25199,11 +25235,11 @@ function dayHtml(D){
   var kLbl='';kinds.forEach(function(k){if(k[0]===NV.kind)kLbl=k[1];});if(NV.kind==='ALL')kLbl='Semua jenis';
   var empty='<div class="nv-empty">'+(isR?'Tidak ada kegiatan inspeksi pada rentang tanggal ini.':(NV.day===today?'Belum ada kegiatan inspeksi hari ini.':'Tidak ada kegiatan inspeksi pada tanggal ini.'))+'</div>';
   var rowsH=fk.slice().sort(function(a,b){var da=a.d||'',db=b.d||'';return da>db?-1:da<db?1:(b.t||0)-(a.t||0);}).slice(0,200).map(function(r,i){
-    var _ca=r.key?'data-key="'+esc(r.key)+'" title="Klik untuk membuka hasil inspeksi"':(r.kind==='INC'&&r.id)?'data-nv-inc="'+esc(r.id)+'" title="Klik untuk membuka detail Incoming"':(r.kind==='WI'&&r.id)?'data-nv-wi="'+esc(r.id)+'" title="Klik untuk membuka detail WI &amp; NDT"':'';
+    var _ca=r.key?'data-key="'+esc(r.key)+'" title="Klik untuk membuka hasil inspeksi"':(r.kind==='INC'&&r.id)?'data-nv-inc="'+esc(r.id)+'" title="Klik untuk membuka detail Incoming"':(r.kind==='WI'&&r.id)?'data-nv-wi="'+esc(r.id)+'" title="Klik untuk membuka detail WI &amp; NDT"':(r.kind==='COAT')?'data-nv-coat="1" title="Klik untuk membuka Coating Inspection"':'';
     return '<tr class="nv-ar'+(_ca?' clk':'')+'" '+_ca+'><td class="n">'+(i+1)+'</td><td>'+(isR&&r.d?r.d.slice(8,10)+'/'+r.d.slice(5,7)+' · ':'')+hhmm(r.t)+'</td><td><b>'+esc(r.name)+'</b></td><td>'+esc(KN[r.kind]||r.kind)+'</td><td>'+esc(r.sub)+'</td><td>'+esc(r.by||'-')+'</td><td><span class="nv-st nv-st-'+(r.st==='hold'?'hold':(r.st==='reject'?'rej':'ok'))+'">'+esc(r.stLbl)+'</span></td></tr>';}).join('');
   var list=rowsH?'<div class="nv-scroll nv-dl"><table class="nv-tbl nv-atbl"><thead><tr><th class="n">No</th><th>'+(isR?'Tanggal · Jam':'Jam')+'</th><th>Kegiatan</th><th>Jenis</th><th>Project / Detail</th><th>Inspector</th><th>Status</th></tr></thead><tbody>'+rowsH+'</tbody></table></div>'+(fk.length>200?'<p class="nv-def">Menampilkan 200 dari '+fk.length+' kegiatan.</p>':''):empty;
   var actHtml=NV.kind?'<h3>Aktivitas · '+esc(kLbl)+'</h3><p class="nv-def">Klik baris hasil inspeksi untuk membukanya. <a href="#" data-nv-kind="">Tutup</a></p>'+list
-    :'<h3>Aktivitas</h3><p class="nv-def">Klik salah satu jenis inspeksi pada tabel untuk menampilkan aktivitasnya.</p><div class="nv-hint">👆 Pilih Fabrikasi &amp; Preparation, FAT, Incoming, WI &amp; NDT, atau Total</div>';
+    :'<h3>Aktivitas</h3><p class="nv-def">Klik salah satu jenis inspeksi pada tabel untuk menampilkan aktivitasnya.</p><div class="nv-hint">👆 Pilih Fabrikasi &amp; Preparation, FAT, Incoming, WI &amp; NDT, Coating Inspection, atau Total</div>';
   return '<div class="nv-tools" id="nvDayTools" style="margin-bottom:12px"><span class="nv-rg"><label>Dari <input type="date" data-nv="day" class="nv-date" value="'+NV.day+'"></label><label>Sampai <input type="date" data-nv="dayTo" class="nv-date" value="'+(isR?NV.dayTo:'')+'" min="'+NV.day+'"></label></span><select data-nv="by"><option value="all">Semua inspector</option>'+inspectors.map(function(b){return '<option value="'+esc(b)+'"'+(NV.by===b?' selected':'')+'>'+esc(b)+'</option>';}).join('')+'</select><button type="button" data-nv-act="today">Hari ini</button><button type="button" data-nv-act="r7">7 hari</button><button type="button" data-nv-act="r30">30 hari</button><button type="button" data-nv-act="rmonth">Bulan ini</button></div>'+
     '<div class="nv-panel"><div class="nv-day"><div style="grid-column:1/-1"><h3>Ringkasan per Jenis Inspeksi</h3><p class="nv-def">'+rngTxt+(NV.by!=='all'?' · '+esc(NV.by):'')+'. Accept termasuk Spesial Accepted.</p>'+
     '<div class="nv-scroll"><table class="nv-tbl"><thead><tr><th>Jenis inspeksi</th><th class="n">Total</th><th class="n">✔ Accept</th><th class="n">⏸ Hold</th><th class="n">✖ Reject/Repair</th></tr></thead><tbody>'+tb+'</tbody></table></div>'+
@@ -25389,31 +25425,93 @@ function monitorHtml(D){
     grp('Di luar bay','Packing &amp; Delivery',card(C.ship),2,'','out')+'</div>';
 }
 function closePicker(){var o=document.querySelector('.nv-ov');if(o)o.remove();}
-function pickProject(title,sub,meta,onPick){
-  closePicker();
-  var cur=curP(),gs=grouped();
-  var cards=gs.map(function(g,gi){var tot=0;
-    function btn(r){var m=meta(r.name);tot+=m.o||0;
-      return '<button type="button" class="nv-pu'+(r.name===cur?' on':'')+'" data-p="'+esc(r.name)+'"><span><b>'+esc(g.typed||g.rows.length>1||UNIT_RE.test(r.name)?r.label:g.base)+(r.name===cur?' ●':'')+'</b><br><small>'+m.t+'</small></span><span>Buka →</span></button>';}
-    var body;
-    if(g.typed){
-      var types=[],by={};g.rows.forEach(function(r){if(!(r.type in by)){by[r.type]=[];types.push(r.type);}by[r.type].push(r);});
-      var curT=(g.rows.filter(function(r){return r.name===cur;})[0]||{}).type;
-      body='<p class="nv-thint">Pilih type:</p><div class="nv-tch">'+types.map(function(ty,ti){return '<button type="button" class="nv-ty'+(ty===curT?' on':'')+'" data-gi="'+gi+'" data-ti="'+ti+'"'+(by[ty].length===1?' data-p="'+esc(by[ty][0].name)+'"':'')+'>'+esc(ty)+(by[ty].length>1?' ▾':' →')+'</button>';}).join('')+'</div>'
-        +types.map(function(ty,ti){return '<div class="nv-trows" data-gi="'+gi+'" data-ti="'+ti+'"'+(ty===curT?'':' hidden')+'>'+by[ty].map(btn).join('')+'</div>';}).join('');
-    }else body=g.rows.map(btn).join('');
-    return '<div class="nv-pj"><h5><span>'+esc(g.base)+(g.typed?' <small>('+(function(){var s={};g.rows.forEach(function(r){s[r.type]=1});return Object.keys(s).length})()+' type)</small>':'')+'</span><em class="'+(tot?'':'z')+'">'+(tot?nf(tot)+' outstanding':'✓ clear')+'</em></h5>'+body+'</div>';}).join('')||'<div class="nv-empty">Belum ada project. Tambahkan di Master Project.</div>';
-  var ov=document.createElement('div');ov.className='nv-ov';
-  ov.innerHTML='<div class="nv-pk" role="dialog" aria-modal="true"><h3>'+title+'</h3><p>'+sub+'</p>'+cards+'<button type="button" class="nv-x">Tutup</button></div>';
-  ov.addEventListener('click',function(e){if(e.target===ov||e.target.closest('.nv-x')){ov.remove();return;}
-    var tb=e.target.closest('.nv-ty');
-    if(tb){var pp=tb.getAttribute('data-p');if(pp){ov.remove();onPick(pp);return;}
-      var gi=tb.getAttribute('data-gi'),ti=tb.getAttribute('data-ti');
-      ov.querySelectorAll('.nv-trows[data-gi="'+gi+'"]').forEach(function(x){x.hidden=x.getAttribute('data-ti')===ti?!x.hidden:true;});
-      ov.querySelectorAll('.nv-ty[data-gi="'+gi+'"]').forEach(function(x){x.classList.toggle('on',x===tb&&!ov.querySelector('.nv-trows[data-gi="'+gi+'"][data-ti="'+ti+'"]').hidden);});
-      return;}
-    var b=e.target.closest('.nv-pu');if(b){var p=b.getAttribute('data-p');ov.remove();onPick(p);}});
-  document.body.appendChild(ov);
+function pickProject(title,sub,meta,onPick,opt){
+  opt=opt||{};closePicker();
+  if(!document.getElementById('pk-picker-css')){var st=document.createElement('style');st.id='pk-picker-css';st.textContent=
+    '.nv-ov .nv-pk{width:min(680px,100%)}.pk-list{display:grid;gap:10px}'
+    +'.pk-q{width:100%;box-sizing:border-box;border:1px solid #cdd8ea;border-radius:12px;padding:9px 12px;font:600 .85rem inherit;margin:0 0 12px;background:#f7f9fd}'
+    +'.pk-card{border:1px solid #d6deec;border-radius:14px;padding:12px 14px;background:#fff;display:flex;flex-direction:column;gap:6px;cursor:pointer;transition:border-color .15s,box-shadow .15s}'
+    +'.pk-card:hover{border-color:#6f8fc4;box-shadow:0 4px 14px -8px #1c3f7a80}.pk-card.on{border-color:#002060;box-shadow:inset 3px 0 0 #002060}'
+    +'.pk-top{display:flex;justify-content:space-between;align-items:center;gap:8px}.pk-top b{font-size:.95rem;line-height:1.25}'
+    +'.pk-badge{font-style:normal;font-size:.68rem;font-weight:800;padding:2px 9px;border-radius:99px;white-space:nowrap;flex:none}'
+    +'.pk-badge.o{background:#fde3e1}.pk-badge.z{background:#e3f6ec}'
+    +'.nv-ov .pk-badge.o{color:#b3261e!important}.nv-ov .pk-badge.z{color:#12794a!important}'
+    +'.pk-sub{font-size:.74rem;opacity:.7}.pk-bar{height:6px;border-radius:99px;background:#e3ebf6;overflow:hidden}'
+    +'.pk-bar i{display:block;height:100%;background:linear-gradient(90deg,#3b82f6,#002060);border-radius:99px}'
+    +'.pk-pt{display:flex;justify-content:space-between;gap:8px;font-size:.72rem;font-weight:600}.pk-go{align-self:flex-end;font-size:.8rem;font-weight:800}'
+    +'.pk-acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:2px}'
+    +'.pk-b{border:1px solid #002060;background:#fff;border-radius:10px;padding:6px 14px;font:800 .8rem inherit;cursor:pointer}.pk-b:hover{background:#e8eef9}'
+    +'.pk-b2,.pk-pill{border:1px solid #d6deec;background:#f7f9fd;border-radius:10px;padding:6px 12px;font:700 .76rem inherit;cursor:pointer}.pk-b2:hover,.pk-pill:hover{background:#e8eef9}'
+    +'.pk-pill{border-radius:99px}.pk-pill.o{background:#fde3e1;border-color:#f3b4af}'
+    +'.pk-back{border:0;background:transparent;font:700 .8rem inherit;cursor:pointer;padding:0 0 8px;text-decoration:underline}'
+    +'.pk-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin:6px 0 14px}'
+    +'.pk-sum>div{background:#f2f6fd;border:1px solid #dbe5f4;border-radius:12px;padding:8px 10px}.pk-sum small{display:block;font-size:.66rem;font-weight:700;opacity:.65}.pk-sum b{font-size:1.05rem}'
+    +'.pk-lbl{font-size:.72rem;font-weight:800;margin:10px 0 6px;text-transform:uppercase;letter-spacing:.04em;opacity:.7}'
+    +'.pk-chips{display:flex;flex-wrap:wrap;gap:6px}.pk-chip{border:1px solid #9fb3d3;background:#fff;border-radius:99px;padding:6px 14px;font:800 .8rem inherit;cursor:pointer}'
+    +'.pk-chip small{font-weight:600;opacity:.7}.pk-chip.on{background:#dbe8fb;border-color:#002060}'
+    +'.pk-row{display:flex;justify-content:space-between;align-items:center;gap:12px;border:1px solid #e3e9f3;background:#f7f9fd;border-radius:12px;padding:10px 12px;margin-top:8px;cursor:pointer}'
+    +'.pk-row:hover{background:#e8eef9;border-color:#8497b0}.pk-row.on{border-color:#002060}'
+    +'.pk-l{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}.pk-l b{font-size:.9rem}.pk-l small{font-size:.72rem;font-weight:600;opacity:.75}'
+    +'.pk-r{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}'
+    +'.pk-tag{font-size:.64rem;font-weight:800;background:#e6eefa;border-radius:6px;padding:1px 6px;margin-left:4px}'
+    +'@media(max-width:520px){.pk-row{flex-direction:column;align-items:stretch}.pk-r{justify-content:space-between}}';
+    document.head.appendChild(st);}
+  var isOut=opt.mode==='out',cur=curP(),gs=grouped(),M={},view={gi:-1,ty:''},q='';
+  gs.forEach(function(g){g.rows.forEach(function(r){var m=meta(r.name)||{};M[r.name]={o:+m.o||0,c:+m.c||0,n:+m.n||0};});});
+  function agg(rows){var a={o:0,c:0,n:0};rows.forEach(function(r){var m=M[r.name];a.o+=m.o;a.c+=m.c;a.n+=m.n;});return a;}
+  function pct(a){return a.n?Math.max(0,Math.min(100,a.c/a.n*100)):0;}
+  function ptxt(a){var p=pct(a);return !a.n?'–':(p>0&&p<1?'<1%':Math.round(p)+'%');}
+  function stat(a){return isOut?(a.n?nf(a.c)+' closed dari '+nf(a.n)+' temuan':'Belum ada temuan'):nf(a.c)+' / '+nf(a.n)+' dicek';}
+  function bar(a){return '<div class="pk-bar"><i style="width:'+pct(a).toFixed(1)+'%"></i></div>';}
+  function badge(o){return '<em class="pk-badge '+(o?'o':'z')+'">'+(o?nf(o)+(isOut?' open':' outstanding'):'✓ clear')+'</em>';}
+  function typesOf(g){var t=[],s={};g.rows.forEach(function(r){if(!(r.type in s)){s[r.type]=1;t.push(r.type);}});return t;}
+  function listHTML(){
+    if(!gs.length)return '<div class="nv-empty">Belum ada project. Tambahkan di Master Project.</div>';
+    return gs.map(function(g,gi){
+      var a=agg(g.rows),multi=g.rows.length>1,has=g.rows.some(function(r){return r.name===cur;}),info=[],foot,r0=g.rows[0];
+      if(g.typed)info.push(typesOf(g).length+' type');if(multi)info.push(g.rows.length+' unit');if(!info.length)info.push('Project');
+      if(multi)foot='<span class="pk-go">Pilih '+(g.typed?'type / unit':'unit')+' →</span>';
+      else foot='<span class="pk-acts"><button type="button" class="pk-b" data-act="open" data-p="'+esc(r0.name)+'">Buka →</button>'+(opt.outFn&&!isOut?'<button type="button" class="pk-b2" data-act="out" data-p="'+esc(r0.name)+'">📌 Outstanding'+(M[r0.name].o?' ('+M[r0.name].o+')':'')+'</button>':'')+'</span>';
+      return '<div class="pk-card'+(has?' on':'')+(multi?' pk-multi':'')+'" data-gi="'+gi+'" data-p="'+esc(r0.name)+'" data-n="'+esc((g.base+' '+g.rows.map(function(r){return r.label;}).join(' ')).toLowerCase())+'">'
+        +'<div class="pk-top"><b>'+esc(g.base)+(has?' ●':'')+'</b>'+badge(a.o)+'</div><div class="pk-sub">'+info.join(' · ')+'</div>'+bar(a)
+        +'<div class="pk-pt"><span>'+stat(a)+'</span><span>'+ptxt(a)+'</span></div>'+foot+'</div>';
+    }).join('');
+  }
+  function detailHTML(){
+    var g=gs[view.gi],a=agg(g.rows),types=g.typed?typesOf(g):[],chips='';
+    var rows=g.rows.filter(function(r){return !g.typed||!view.ty||r.type===view.ty;});
+    if(g.typed)chips='<p class="pk-lbl">Type</p><div class="pk-chips"><button type="button" class="pk-chip'+(!view.ty?' on':'')+'" data-ty="">Semua <small>'+g.rows.length+' unit</small></button>'
+      +types.map(function(ty){var rr=g.rows.filter(function(r){return r.type===ty;}),b=agg(rr);return '<button type="button" class="pk-chip'+(view.ty===ty&&view.ty!==''?' on':'')+'" data-ty="'+esc(ty)+'">'+esc(ty||'(tanpa type)')+' <small>'+rr.length+' unit'+(b.o?' · '+b.o+(isOut?' open':' out'):'')+'</small></button>';}).join('')+'</div>';
+    var list=rows.map(function(r){var m=M[r.name];
+      return '<div class="pk-row'+(r.name===cur?' on':'')+'" data-p="'+esc(r.name)+'"><div class="pk-l"><b>'+esc(r.ul||r.label)+(g.typed&&!view.ty?'<span class="pk-tag">'+esc(r.type)+'</span>':'')+(r.name===cur?' ●':'')+'</b>'+bar(m)+'<small>'+stat(m)+' · '+ptxt(m)+'</small></div>'
+        +'<div class="pk-r">'+(isOut?badge(m.o):(opt.outFn?'<button type="button" class="pk-pill'+(m.o?' o':'')+'" data-act="out" data-p="'+esc(r.name)+'">📌 '+(m.o?m.o+' outstanding':'Outstanding')+'</button>':''))
+        +'<button type="button" class="pk-b" data-act="open" data-p="'+esc(r.name)+'">Buka →</button></div></div>';}).join('');
+    return '<button type="button" class="pk-back" data-act="back">← Semua project</button><h3>'+esc(g.base)+'</h3><p>'+title+'</p>'
+      +'<div class="pk-sum"><div><small>'+(isOut?'Closed':'Progres')+'</small><b>'+ptxt(a)+'</b></div><div><small>'+(isOut?'Open':'Outstanding')+'</small><b>'+nf(a.o)+'</b></div><div><small>Unit</small><b>'+g.rows.length+'</b></div>'+(g.typed?'<div><small>Type</small><b>'+types.length+'</b></div>':'')+'</div>'
+      +chips+'<p class="pk-lbl">Pilih unit</p>'+(list||'<div class="nv-empty">Tidak ada unit.</div>');
+  }
+  var ov=document.createElement('div');ov.className='nv-ov';ov.innerHTML='<div class="nv-pk" role="dialog" aria-modal="true"></div>';
+  var box=ov.firstChild;
+  function filt(){box.querySelectorAll('.pk-card').forEach(function(c){c.style.display=(!q||c.getAttribute('data-n').indexOf(q)>=0)?'':'none';});}
+  function render(){
+    box.innerHTML=(view.gi<0?'<h3>'+title+'</h3><p>'+sub+'</p>'+(gs.length>5?'<input type="search" class="pk-q" placeholder="Cari project…" value="'+esc(q)+'">':'')+'<div class="pk-list">'+listHTML()+'</div>':detailHTML())+'<button type="button" class="nv-x">Tutup</button>';
+    if(view.gi<0)filt();ov.scrollTop=0;
+  }
+  ov.addEventListener('input',function(e){if(e.target.classList&&e.target.classList.contains('pk-q')){q=e.target.value.trim().toLowerCase();filt();}});
+  ov.addEventListener('click',function(e){
+    var t=e.target;if(t===ov||t.closest('.nv-x')){ov.remove();return;}
+    var ab=t.closest('[data-act]');
+    if(ab){var act=ab.getAttribute('data-act'),p=ab.getAttribute('data-p');
+      if(act==='back'){view.gi=-1;view.ty='';render();return;}
+      if(act==='open'){ov.remove();onPick(p);return;}
+      if(act==='out'){ov.remove();if(opt.outFn)opt.outFn(p);return;}}
+    var ch=t.closest('.pk-chip');if(ch){view.ty=ch.getAttribute('data-ty')||'';var d=box.scrollTop;render();return;}
+    var row=t.closest('.pk-row');if(row){ov.remove();onPick(row.getAttribute('data-p'));return;}
+    var card=t.closest('.pk-card');if(card){
+      if(card.classList.contains('pk-multi')){view.gi=+card.getAttribute('data-gi');var g=gs[view.gi],ct=(g.rows.filter(function(r){return r.name===cur;})[0]||{}).type;view.ty=g.typed?(ct||(typesOf(g).length===1?typesOf(g)[0]:'')):'';render();}
+      else{ov.remove();onPick(card.getAttribute('data-p'));}}
+  });
+  render();document.body.appendChild(ov);
 }
 function openInspection(id){
   NV.from='monitor';showBack();
@@ -25422,10 +25520,10 @@ function openInspection(id){
   if(id==='coa'){window.showCoating();return;}
   if(id==='ship'){openOutstanding('ship');return;}
   var view={fat:'complete',fab:'main',nt:'nontunnel'}[id],mod={fat:'comp',fab:'fab',nt:'nt'}[id];
-  pickProject('Pilih project — '+(id==='fat'?'FAT':id==='fab'?'Fabrication':'Fabrication & Preparation'),'Inspeksi baru dibuka per project / unit.',function(p){
-    var m=pst(p),o=oc(mod,p).o;var main=id==='fab';
-    return {o:o,t:nf(main?m.mainChecked:m.compChecked)+' / '+nf(main?m.mainTotal:m.compTotal)+' dicek'+(o?' · <u>'+o+' outstanding</u>':'')};
-  },function(p){setP(p);window.openView(view);});
+  pickProject('Pilih project — '+(id==='fat'?'FAT':id==='fab'?'Fabrication':'Fabrication & Preparation'),'Pilih project, lalu type / unit. Inspeksi baru dibuka per unit.',function(p){
+    var m=pst(p),o=oc(mod,p).o,main=id==='fab';
+    return {o:o,c:main?m.mainChecked:m.compChecked,n:main?m.mainTotal:m.compTotal};
+  },function(p){setP(p);window.openView(view);},{mode:'insp',outFn:function(p){window.QCOut.open({mod:mod,proj:p,projLbl:p,ref:null,refLbl:''});}});
 }
 function openOutstanding(id){
   NV.from='monitor';showBack();
@@ -25434,8 +25532,8 @@ function openOutstanding(id){
   if(id==='wi'){window.QCOut.open({mod:'wi',proj:null});return;}
   var mod={fat:'comp',fab:'fab',nt:'nt',ship:'ship'}[id],nm={comp:'FAT',fab:'Fabrication',nt:'Fabrication & Preparation',ship:'Packing & Delivery'}[mod];
   pickProject('📌 Outstanding — '+esc(nm),'Pilih project &amp; unit. Temuan tiap unit ditampilkan terpisah.',function(p){
-    var c=oc(mod,p),n=c.o+c.c;return {o:c.o,t:n?(c.o?'<u>'+c.o+' open</u> · ':'')+c.c+' closed · '+n+' total':'Belum ada temuan'};
-  },function(p){window.QCOut.open({mod:mod,proj:p,projLbl:p,ref:null,refLbl:''});});
+    var c=oc(mod,p);return {o:c.o,c:c.c,n:c.o+c.c};
+  },function(p){window.QCOut.open({mod:mod,proj:p,projLbl:p,ref:null,refLbl:''});},{mode:'out'});
 }
 
 /* ---------- 3. MASTER PROJECT ---------- */
@@ -25554,6 +25652,7 @@ if(root0){
     var a=t.closest('[data-nv-act]');if(a){e.preventDefault();act(a.getAttribute('data-nv-act'));return;}
     var di=t.closest('.nv-di[data-key],.nv-ar[data-key]');if(di){openItem(di.getAttribute('data-key'));return;}
     var ci=t.closest('.nv-ar[data-nv-inc]');if(ci){try{openIncDetailModal(ci.getAttribute('data-nv-inc'));}catch(er){toast('Detail Incoming belum tersedia');}return;}
+    var cc=t.closest('.nv-ar[data-nv-coat]');if(cc){if(typeof window.showCoating==='function')window.showCoating();else toast('Coating Inspection belum tersedia');return;}
     var cw=t.closest('.nv-ar[data-nv-wi]');if(cw){if(typeof window._wiOpen==='function')window._wiOpen(cw.getAttribute('data-nv-wi'));else toast('Detail WI & NDT belum tersedia');return;}
     var pr=t.closest('[data-nv-proj]');if(pr){setP(pr.getAttribute('data-nv-proj'));build(false);toast('Project aktif: '+curP());return;}
   });
