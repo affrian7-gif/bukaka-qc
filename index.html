@@ -6190,10 +6190,32 @@ body.guest-mode .out-photo-box .rm-photo { display:none !important; }
     }
 
 window.INSP_ST={accept:{t:'✔ Accept',c:'#16a34a'},special:{t:'★ Spesial Accepted',c:'#2563eb'},reject:{t:'✖ Reject',c:'#dc2626'},hold:{t:'⏸ Hold Inspect',c:'#d97706'}};
-function inspHas(k){if(!window.__inspSet){window.__inspRv={};const s=new Set(),st={};for(let i=0;i<localStorage.length;i++){const n=localStorage.key(i);if(!n)continue;if(n.startsWith('insp_'))s.add(n.slice(5));else if(n.startsWith('inspst_'))st[n.slice(7)]=localStorage.getItem(n)}window.__inspSet=s;window.__inspSt=st}return window.__inspSet.has(k)}
+function __curStg(){return (typeof currentView!=='undefined'&&currentView==='complete')?'T':'F'}
+/* STATUS PER TAHAP: hasil FAT dan hasil Fab dibaca terpisah. Buka FAT -> hanya hasil FAT; buka Fab -> hanya hasil Fab. */
+function inspHas(k){
+  const cs=__curStg();
+  if(!window.__inspSet||!window.__inspSt||window.__inspSetS!==cs){
+    window.__inspRv={};window.__inspPri={};
+    const s=new Set(),st={},res={},ls=window.localStorage,ks=[];
+    for(let i=0;i<ls.length;i++){const n=ls.key(i);if(!n)continue;if(n.startsWith('insp_'))ks.push(n.slice(5));else if(n.startsWith('inspst_'))st[n.slice(7)]=ls.getItem(n)}
+    ks.forEach(key=>{
+      let raw='';try{raw=ls.getItem('insp_'+key)||''}catch(e){}
+      let p='F',a='',as='';
+      const ai=raw.indexOf('"alt":{"stg":"'),pi=raw.indexOf('"stg":"');
+      if(pi>=0&&!(ai>=0&&pi===ai+7))p=raw.charAt(pi+7)==='T'?'T':'F';
+      if(ai>=0){a=raw.charAt(ai+14)==='T'?'T':'F';const j=raw.indexOf('"status":"',ai+14);if(j>=0){const e=raw.indexOf('"',j+10);as=e>j?raw.slice(j+10,e):''}}
+      const L={};L[p]={st:st[key]||'',pri:1};
+      if(a&&a!==p)L[a]={st:st[key+'~'+a]||as,pri:0};
+      ['F','T'].forEach(x=>{if(!L[x]&&st[key+'~'+x]!==undefined)L[x]={st:st[key+'~'+x],pri:0}});
+      if(L[cs]){s.add(key);res[key]=L[cs].st||'';if(L[cs].pri)window.__inspPri[key]=1}
+    });
+    window.__inspSet=s;window.__inspSt=res;window.__inspSetS=cs;
+  }
+  return window.__inspSet.has(k)
+}
 /* hasil FAT yang disimpan terpisah dari Fabrikasi: status-nya di 'inspst_<key>~T' (dipakai saat view = FAT) */
-function __stK(k){const s=(typeof currentView!=='undefined'&&currentView==='complete')?'T':'F',m=window.__inspSt;return (m&&m[k+'~'+s])?k+'~'+s:k}
-function inspColor(k){inspHas(k);const o=INSP_ST[(window.__inspSt||{})[__stK(k)]];return o?o.c:'#059669'}
+function __stK(k){return k}
+function inspColor(k){inspHas(k);const o=INSP_ST[(window.__inspSt||{})[k]];return o?o.c:'#059669'}
 function inspRevInfo(k){
   inspHas(k);const C=window.__inspRv=window.__inspRv||{};
   if(C[k])return C[k];
@@ -6202,10 +6224,10 @@ function inspRevInfo(k){
     if(m){r.rev=+m[1];r.rvs=m[2]?m[2].split(',').map(x=>x.replace(/"/g,'')):[];}}catch(e){}
   return C[k]=r;
 }
-function inspLabel(k){inspHas(k);const kk=__stK(k),o=INSP_ST[(window.__inspSt||{})[kk]];const n=kk===k?inspRevInfo(k).rev:0;return (o?o.t:'📁 Inspected')+(n>0?' · Rev '+n:'')}
+function inspLabel(k){inspHas(k);const o=INSP_ST[(window.__inspSt||{})[k]],tg=__curStg()==='T'?'FAT':'Fab';const n=(window.__inspPri||{})[k]?inspRevInfo(k).rev:0;return (o?o.t:'📁 Inspected')+' '+tg+(n>0?' · Rev '+n:'')}
 /* tombol revisi sebelumnya (Rev 0, Rev 1, …) di sebelah hasil inspect terbaru */
 function inspRevHtml(k){
-  if(!inspHas(k))return '';const ri=inspRevInfo(k);if(!ri.rvs.length)return '';
+  if(!inspHas(k)||!(window.__inspPri||{})[k])return '';const ri=inspRevInfo(k);if(!ri.rvs.length)return '';
   let h='';
   for(let i=ri.rvs.length-1;i>=0;i--){const o=INSP_ST[ri.rvs[i]];
     h+='<button onclick="openInspectedRev(\''+String(k).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\','+i+');return false;" title="Hasil inspect Rev '+i+(o?' — '+o.t:'')+' (arsip, hanya lihat)" style="margin-left:4px;background:transparent;color:'+(o?o.c:'#94a3b8')+';padding:2px 7px;border-radius:4px;border:1.5px solid currentColor;cursor:pointer;font-weight:bold;font-size:10.5px;">Rev '+i+'</button>';}
@@ -7584,7 +7606,7 @@ async function saveAnn(key){
   try{localStorage.setItem('insp_'+key,json);await kvDel('ann_'+key);}
   catch(e){
     await kvSet('ann_'+key,data);
-    try{localStorage.setItem('insp_'+key,JSON.stringify({v:3,rev:data.rev||0,rvs:data.rvs||[],idb:1,link:data.link,title:data.title,status:data.status||'',by:data.by||'',date:data.date||'',t:data.t}));}catch(e2){}
+    try{localStorage.setItem('insp_'+key,JSON.stringify({v:3,rev:data.rev||0,rvs:data.rvs||[],idb:1,stg:data.stg||'F',link:data.link,title:data.title,status:data.status||'',by:data.by||'',date:data.date||'',t:data.t}));}catch(e2){}
   }
   window.__inspSet=null;
   if(shownRev>0)try{toast('Hasil inspect disimpan sebagai Rev '+shownRev+' — Rev '+(shownRev-1)+' tetap tersimpan');}catch(e){}
@@ -7720,7 +7742,7 @@ function save(){
   if(!S.pdf||!S.bytes){alert('PDF belum dimuat — tidak ada yang bisa disimpan.');return;}
   commitEditor();S.pend=S.status||'';
   const sb=k=>'<button class="iq-btn iq-st" data-st="'+k+'" onclick="iq.setSt(\''+k+'\')" style="padding:12px;font-size:.85rem;border:2px solid '+INSP_ST[k].c+';background:transparent;color:'+INSP_ST[k].c+'">'+INSP_ST[k].t+'</button>';
-  showMsg('<h3>Simpan hasil inspeksi</h3>1. Pilih status:'+
+  showMsg('<h3>Simpan hasil inspeksi — '+(S.stg==='T'?'FAT':'Fab')+'</h3>1. Pilih status ('+(S.stg==='T'?'FAT':'Fab')+'):'+
     '<div class="row" style="flex-direction:column;margin-top:6px">'+sb('accept')+sb('special')+sb('reject')+sb('hold')+'</div>'+
     '<div style="margin-top:12px">2. Isi data stempel:</div>'+
     '<div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">'+
@@ -21070,6 +21092,204 @@ body.is-wi #qoBtn{display:none}
 })();
 </script>
 
+<script id="qc-import-core">
+/* ===== QC Import Core — baca file Checksheet / IR (JSON export, Excel .xlsx/.xls, CSV) ===== */
+(function(){
+'use strict';
+if(window.QCImp)return;
+function norm(s){return String(s==null?'':s).replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();}
+function low(s){return norm(s).toLowerCase();}
+function toast(m){
+  var t=document.getElementById('qcImpToast');
+  if(!t){t=document.createElement('div');t.id='qcImpToast';
+    t.style.cssText='position:fixed;left:50%;bottom:26px;transform:translateX(-50%);max-width:92vw;background:#0f1b2d;color:#fff;padding:11px 18px;border-radius:10px;font:700 13px Arial,sans-serif;z-index:2147483000;opacity:0;pointer-events:none;transition:opacity .2s;box-shadow:0 8px 24px rgba(0,0,0,.4);text-align:center';
+    document.body.appendChild(t);}
+  t.textContent=m;t.style.opacity='1';clearTimeout(toast.t);toast.t=setTimeout(function(){t.style.opacity='0';},4200);
+}
+function isGuest(){return !!document.getElementById('gxTgt');}
+
+/* ---------- label header (meta) ---------- */
+var LBL=[
+  ['docno',/^doc\.?\s*ir\s*no\.?/i],
+  ['reportno',/^report\s*no\.?/i],
+  ['proj',/^(project\s*(code|name)?(\s*\/\s*(name|code))?|proyek)/i],
+  ['customer',/^(client\s*\/\s*customer|customer\s*\/\s*(airport|client)|customer|client)/i],
+  ['area',/^inspection\s*area/i],
+  ['docref',/^(doc\.?\s*reference|std\.?\s*reference|standard\s*reference)/i],
+  ['part',/^(item\s*description|unit\s*description)/i],
+  ['qtypart',/^qty\s*total/i],
+  ['qtyinsp',/^qty\s*inspect(ed)?/i],
+  ['date',/^date\b/i],
+  ['inspector',/^inspected\s*(&|and)?\s*(tested\s*)?by/i]
+];
+function labelOf(t){
+  t=norm(t);if(!t||t.length>60)return null;
+  for(var i=0;i<LBL.length;i++){var m=LBL[i][1].exec(t);if(m)return {key:LBL[i][0],rest:t.slice(m[0].length)};}
+  return null;
+}
+function cleanVal(v){return norm(String(v||'').replace(/^[\s:：]+/,''));}
+
+/* ---------- header tabel (kolom) ---------- */
+function hdrCols(row){
+  var c={};
+  row.forEach(function(t,i){
+    t=low(t);if(!t||t.length>40)return;
+    if(c.no==null&&/^(no\.?|item no\.?|nomor|no urut)$/.test(t))c.no=i;
+    else if(c.desc==null&&/^(item description|description|point check|deskripsi|uraian|parameter|location of lamps|location test|location|lokasi|check item)\b/.test(t))c.desc=i;
+    else if(c.qty==null&&/^qty\b/.test(t))c.qty=i;
+    else if(c.std==null&&/^(standard|std\.?|spec|spesifikasi)\b/.test(t))c.std=i;
+    else if(c.tol==null&&/^toleran/.test(t))c.tol=i;
+    else if(c.act==null&&/^(actual|measuring|measured|hasil ukur)/.test(t))c.act=i;
+    else if(c.pass==null&&/^(pass|passed|ok|accept)$/.test(t))c.pass=i;
+    else if(c.fail==null&&/^(fail|failed|ng|reject|not ok)$/.test(t))c.fail=i;
+    else if(c.rm==null&&/^(remarks?|keterangan|catatan)\b/.test(t))c.rm=i;
+    else if(c.res==null&&/^(result|status|hasil)\b/.test(t))c.res=i;
+  });
+  return c;
+}
+function isHdr(c){
+  if(c.desc==null)return false;
+  var n=0;['std','tol','act','res','pass','fail','rm','qty'].forEach(function(k){if(c[k]!=null)n++;});
+  return n>=1;
+}
+function subHdr(c,row){ /* baris header ke-2 (STANDARD|TOLERANCE, PASS|FAIL) digabung ke header 1 */
+  var s=hdrCols(row);
+  if(s.desc!=null)return false;
+  var ne=row.filter(function(x){return norm(x);}).length,nk=Object.keys(s).length;
+  if(!ne||nk!==ne)return false;                       /* semua sel harus berupa judul kolom, bukan data */
+  ['std','tol','pass','fail'].forEach(function(k){if(s[k]!=null)c[k]=s[k];});
+  ['act','rm','qty'].forEach(function(k){if(s[k]!=null&&c[k]==null)c[k]=s[k];});
+  if((c.pass!=null||c.fail!=null)&&c.res!=null&&(c.res===c.pass||c.res===c.fail))c.res=null;
+  return true;
+}
+function mark(t){t=norm(t);return !!t&&!/^(-|—|–|n\/?a|0|false)$/i.test(t);}
+function resWord(t){
+  t=low(t);if(!t)return '';
+  if(/^(p|ok|pass|passed|accept|accepted|✔|✓|√|v|good|baik|completely function)$/.test(t)||/^(pass|accept)/.test(t))return 'PASS';
+  if(/^(f|ng|fail|failed|reject|rejected|✖|✗|x|not ok|buruk)$/.test(t)||/^(fail|reject|not )/.test(t))return 'FAIL';
+  return '';
+}
+var STOP=/^(measurement tools|measuring tools|summary inspection|remarks?\b|conclusion|final status|inspected|reviewed|witnessed|comment|prepared by|tested)/i;
+
+function kindOf(rows){
+  var txt=[];for(var i=0;i<Math.min(rows.length,30);i++)txt.push(rows[i].join(' '));
+  var s=low(txt.join(' '));
+  if(/doc\s*ir\s*no/.test(s)||/inspection report\b/.test(s)&&!/electrical inspection report/.test(s)&&/(sketch|visual inspection|dimensional inspection)/.test(s))return 'ir';
+  if(/factory acceptance test/.test(s))return 'fat';
+  if(/final function test/.test(s))return 'fft';
+  if(/electrical inspection report/.test(s))return 'eir';
+  if(/lighting brightness/.test(s))return 'ilbr';
+  if(/ac performance test/.test(s))return 'aptr';
+  return '';
+}
+
+function parseAOA(rows,name){
+  var meta={},items=[],zone='',cols=null,blank=0,inRec=false;
+  for(var r=0;r<rows.length;r++){
+    var row=rows[r].map(function(x){return x==null?'':String(x);});
+    var first=''; for(var j=0;j<row.length;j++){if(norm(row[j])){first=norm(row[j]);break;}}
+    if(!first){if(cols&&++blank>=3){cols=null;}continue;}
+    blank=0;
+    /* penanda seksi */
+    var lf=first.toLowerCase();
+    if(/^visual inspection/.test(lf)){zone='vis';inRec=true;cols=null;continue;}
+    if(/^dimensional inspection|^dimension\b/.test(lf)&&row.filter(norm).length<=3){zone='dim';inRec=true;cols=null;continue;}
+    if(/^inspection record/.test(lf)){inRec=true;cols=null;continue;}
+    /* header tabel? */
+    var hc=hdrCols(row);
+    if(isHdr(hc)){
+      cols=hc;inRec=true;
+      var nx=rows[r+1];
+      if(nx&&subHdr(cols,nx.map(function(x){return x==null?'':String(x);})))r++;
+      continue;
+    }
+    if(cols){
+      if(STOP.test(first)){cols=null;continue;}
+      var d=norm(row[cols.desc]);
+      var val=function(k){return cols[k]!=null?norm(row[cols[k]]):'';};
+      var std=val('std'),tol=val('tol'),act=val('act'),qty=val('qty'),rm=val('rm'),rs=val('res');
+      var pass=cols.pass!=null?mark(row[cols.pass]):false,fail=cols.fail!=null?mark(row[cols.fail]):false;
+      var res=fail?'FAIL':pass?'PASS':resWord(rs);
+      if(!res&&rs&&!rm){rm=rs;}else if(!res&&rs&&rm&&rs!==rm){rm=rs+' — '+rm;}
+      if(!d)continue;
+      if(!(std||tol||act||qty||rm||res))continue;     /* baris judul / seksi tanpa data */
+      var no=cols.no!=null?norm(row[cols.no]):'';
+      var g=zone||((tol||/\d/.test(act))?'dim':'vis');
+      items.push({grp:g,no:no,desc:d,qty:qty,std:std,tol:tol,act:act,res:res,rm:rm,rawres:(res?'':'')||(cols.res!=null?norm(row[cols.res]):'')});
+      continue;
+    }
+    /* label header (hanya sebelum tabel catatan) */
+    if(!inRec){
+      for(var c=0;c<row.length;c++){
+        var L=labelOf(row[c]);if(!L||meta[L.key])continue;
+        var v=cleanVal(L.rest);
+        if(!v){
+          for(var k=c+1;k<row.length;k++){
+            var nt=norm(row[k]);if(!nt)continue;
+            if(labelOf(nt))break;
+            v=cleanVal(nt);break;
+          }
+        }
+        if(v&&!/^[:：\-–—]*$/.test(v))meta[L.key]=v;
+      }
+    }
+  }
+  /* alias checksheet -> meta IR */
+  if(meta.reportno&&!meta.docno)meta.docno=meta.reportno;
+  return {name:name||'',kind:kindOf(rows),meta:meta,items:items};
+}
+
+function xl(){return window.XLSX||window.XLSXS;}
+function readSheets(buf,fname){
+  var X=xl();if(!X)throw new Error('Pustaka Excel belum termuat');
+  var wb=X.read(buf,{type:'array',cellDates:false});
+  var out=[];
+  wb.SheetNames.forEach(function(sn){
+    var ws=wb.Sheets[sn];if(!ws||!ws['!ref'])return;
+    var rows=X.utils.sheet_to_json(ws,{header:1,raw:false,defval:''});
+    if(!rows.length)return;
+    var P=parseAOA(rows,sn);
+    if(P.items.length||Object.keys(P.meta).length>1)out.push(P);
+  });
+  return out;
+}
+function readText(f){return new Promise(function(ok,no){var r=new FileReader();r.onload=function(){ok(r.result);};r.onerror=function(){no(new Error('Gagal membaca file'));};r.readAsText(f);});}
+function readBuf(f){
+  if(f.arrayBuffer)return f.arrayBuffer();
+  return new Promise(function(ok,no){var r=new FileReader();r.onload=function(){ok(r.result);};r.onerror=function(){no(new Error('Gagal membaca file'));};r.readAsArrayBuffer(f);});
+}
+
+/* hasil: {type:'bir',o} | {type:'qccs',o} | {type:'tables',sheets:[...]} */
+function readAny(f){
+  var nm=String(f.name||'').toLowerCase();
+  if(/\.(xlsx|xlsm|xls|csv|tsv)$/.test(nm)){
+    return readBuf(f).then(function(b){
+      var sh=readSheets(b,f.name);
+      if(!sh.length)throw new Error('Tidak ada tabel checksheet / IR yang dikenali di file Excel ini');
+      return {type:'tables',sheets:sh};
+    });
+  }
+  return readText(f).then(function(t){
+    var o;try{o=JSON.parse(t);}catch(e){throw new Error('File bukan JSON / Excel yang valid');}
+    if(o&&o.bir===1&&o.meta&&o.body)return {type:'bir',o:o};
+    if(o&&o.qccs===1)return {type:'qccs',o:o};
+    throw new Error('JSON ini bukan export Bank IR maupun export Checksheet');
+  });
+}
+function pick(accept,multiple,cb){
+  var i=document.createElement('input');i.type='file';i.accept=accept;if(multiple)i.multiple=true;i.style.display='none';
+  i.addEventListener('change',function(){var fl=[].slice.call(i.files||[]);i.remove();if(fl.length)cb(fl);});
+  document.body.appendChild(i);i.click();
+}
+function download(name,data,type){
+  var a=document.createElement('a'),u=URL.createObjectURL(new Blob([data],{type:type||'application/json'}));
+  a.href=u;a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){a.remove();URL.revokeObjectURL(u);},500);
+}
+function nk(s){return norm(s).toLowerCase().replace(/^[\d.]+[.)]?\s+/,'').replace(/[^a-z0-9]+/g,' ').trim();}
+window.QCImp={readAny:readAny,parseAOA:parseAOA,toast:toast,isGuest:isGuest,pick:pick,download:download,nk:nk,norm:norm};
+})();
+
+</script>
 <script id="qc-checksheets">
 /* ===== CHECKSHEET SELECTOR (FAT view) — FAT / Electrical / Lighting / AC / Final Function ===== */
 (function(){
@@ -21162,7 +21382,7 @@ function act(b){const a=b.dataset.act,k=b.dataset.k,S=SH[cur];const O=own();cons
  else if(a=='adds'){const n=prompt('Nama seksi baru (mis. PUMP MOTOR):');if(!n)return;O.push({n:n.toUpperCase(),cur:confirm('Seksi ini memakai pengukuran ARUS (A)?\nOK = arus (Forward/Reverse)\nCancel = tegangan (V)'),rows:[{k:nid(),p:'',c:'',i:'',e:''}]})}
  else if(a=='dels'){if(confirm('Hapus seksi ini beserta semua barisnya?'))O.splice(+b.dataset.sa,1);else return}
  save();const y=window.scrollY;render();window.scrollTo(0,y)}
-function bar(){document.getElementById('csBar').innerHTML='<span>Checksheet:</span>'+Object.keys(SH).map(k=>`<button data-sel="${k}" class="${k==cur?'on':''}">${SH[k].n}</button>`).join('')}
+function bar(){document.getElementById('csBar').innerHTML='<span>Checksheet:</span>'+Object.keys(SH).map(k=>`<button data-sel="${k}" class="${k==cur?'on':''}">${SH[k].n}</button>`).join('')+'<span style="flex:1"></span><button data-imp="1" title="Import checksheet (Excel .xlsx/.xls/.csv atau .json export) atau IR (.json / Excel) ke Bank IR">⬆ Import Checksheet / IR</button>'+(cur!='list'?'<button data-exp="1" title="Export isian checksheet ini ke file .json">⬇ Export Checksheet</button>':'')}
 function select(k){cur=k;ed=false;bar();const on=k!='list';document.body.classList.toggle('cs-mode',on);document.getElementById('csForm').style.display=on?'block':'none';if(on){render();window.scrollTo(0,0)}else if(typeof renderTable=='function')renderTable()}
 function show(on){document.body.classList.toggle('cs-view',!!on);document.getElementById('csBar').style.display=on?'flex':'none';if(!on){document.body.classList.remove('cs-mode');document.getElementById('csForm').style.display='none'}}
 function init(){
@@ -21199,7 +21419,7 @@ body.cs-mode .stats-grid,body.cs-mode .main-layout,body.cs-mode #searchInput,bod
 `;document.head.appendChild(css2);
  const bar_=document.createElement('div');bar_.id='csBar';const form=document.createElement('div');form.id='csForm';
  const anchor=document.querySelector('.stats-grid');anchor.parentNode.insertBefore(bar_,anchor);anchor.parentNode.insertBefore(form,anchor);
- bar_.addEventListener('click',e=>{const b=e.target.closest('[data-sel]');if(b)select(b.dataset.sel)});
+ bar_.addEventListener('click',e=>{const b=e.target.closest('[data-sel]');if(b)return select(b.dataset.sel);if(e.target.closest('[data-imp]'))return window.QCImp.pick('.xlsx,.xlsm,.xls,.csv,.json,application/json',true,fl=>{(async()=>{for(const f of fl)await csImpFile(f)})()});if(e.target.closest('[data-exp]'))csExp()});
  form.addEventListener('click',e=>{const g=e.target.closest('[data-go]');if(g)return select(g.dataset.go);
   const ac=e.target.closest('[data-act]');if(ac)return act(ac);const b=e.target.closest('[data-pf]');if(!b)return;const k=b.dataset.pf,v=st().v;v[k]=v[k]==b.dataset.v?'':b.dataset.v;save();const keep=window.scrollY;render();window.scrollTo(0,keep)});
  form.addEventListener('input',e=>{const t=e.target;if(t.dataset.e){own();const R=fnd(t.dataset.k);if(R){R[t.dataset.e]=t.value;save();document.getElementById('csSum').innerHTML=sum()}return}if(t.dataset.sn!=null){own()[+t.dataset.sn].n=t.value;save();return}if(t.dataset.m){st().m[t.dataset.m]=t.value}else if(t.dataset.k){st().v[t.dataset.k]=t.value;const S=SH[cur];
@@ -21224,7 +21444,84 @@ body.cs-mode .stats-grid,body.cs-mode .main-layout,body.cs-mode #searchInput,bod
   });
   return out;
  }
- window.QCSheets={stats:csStats,edit(){ed=!ed;render()},std(){if(confirm('Kembalikan struktur form ke standar Excel? Isian (hasil) tetap tersimpan, tetapi butir yang ditambah/diubah akan hilang.')){delete st().s;save();render()}},select,print(){ed=false;render();let pg=document.getElementById('csPage');if(!pg){pg=document.createElement('style');pg.id='csPage';document.head.appendChild(pg)}pg.textContent='@page{size:A4 '+(cur=='eir'?'landscape':'portrait')+';margin:7mm}';document.body.classList.add('cs-print');setTimeout(()=>{window.print();document.body.classList.remove('cs-print')},50)},reset(){if(confirm('Hapus semua isian (hasil) checksheet ini untuk project '+proj()+'?')){{const o=st();o.m={};o.v={}}save();render()}}};
+ /* ===== IMPORT / EXPORT checksheet (FAT view) ===== */
+ const csNk=s=>window.QCImp.nk(s);
+ function csApplyTable(key,P){
+  const S=SH[key],prev=cur;cur=key;let ok=0,skip=0,note='';
+  try{
+   if(S.ty=='eir'){note='eir';skip=P.items.length}
+   else{
+    const o=st(),rows=dat(),idx={};
+    rows.forEach(r=>{if(S.ty=='list'&&!r.s)return;const n=csNk(r.t);if(!n)return;(idx[n]=idx[n]||[]).push(r)});
+    P.items.forEach(it=>{
+     const q=idx[csNk(it.desc)],r=q&&q.length?q.shift():null;
+     if(!r){skip++;return}
+     const k=r.k,v=o.v;
+     if(it.act&&(S.ty!='list'||key=='fat'))v[k+':a']=it.act;
+     if(S.ty=='list'){
+      if(it.tol&&key=='fat')v[k+':t']=it.tol;
+      if(it.res=='PASS')v[k+':p']='P';else if(it.res=='FAIL')v[k+':p']='F';
+      if(it.rm)v[k+':m']=it.rm;
+     }else{
+      if(it.rm)v[k+':m']=it.rm;
+      if(S.ty=='temp'&&it.std)v[k+':s']=it.std;
+     }
+     ok++;
+    });
+    const M=P.meta||{},mp={proj:'pj',customer:'cl',part:'ud',docref:'sr',date:'dt',reportno:'rn'};
+    Object.keys(mp).forEach(k=>{if(M[k])o.m[mp[k]]=M[k]});
+   }
+  }finally{cur=prev}
+  save();return{ok,skip,note};
+ }
+ function csRestore(o){
+  const key=o.sheet;
+  if(!SH[key]||key=='list'){alert('Checksheet "'+key+'" tidak dikenal.');return null}
+  if(!confirm('Timpa isian checksheet '+SH[key].n+' untuk project '+proj()+' dengan data dari file'+(o.project&&o.project!==proj()?' (asal project: '+o.project+')':'')+'?'))return null;
+  const p=proj();DB[p]=DB[p]||{};
+  const raw=o.raw||{};DB[p][key]={m:raw.m||{},v:raw.v||{}};if(raw.s)DB[p][key].s=raw.s;
+  save();return key;
+ }
+ async function csImpFile(f){
+  const Q=window.QCImp;if(!Q){alert('Modul import belum termuat.');return}
+  if(Q.isGuest()){Q.toast('Mode tamu: hanya baca, import dinonaktifkan');return}
+  let P;try{P=await Q.readAny(f)}catch(e){alert('Import gagal: '+(e&&e.message||e));return}
+  const allIR=P.type=='bir'||(P.type=='tables'&&P.sheets.every(s=>s.kind=='ir'));
+  if(allIR){ /* file IR -> masuk Bank IR */
+   if(!window.BankIR||!window.BankIR.importParsed){alert('Bank IR belum siap.');return}
+   if(typeof window.showHome=='function')window.showHome();
+   window.BankIR.open();await new Promise(r=>setTimeout(r,150));
+   await window.BankIR.importParsed(P,f.name);return;
+  }
+  if(P.type=='qccs'){
+   let key=null;
+   if(P.o.raw)key=csRestore(P.o);
+   else if(SH[P.o.sheet]&&P.o.sheet!='list'){const r=csApplyTable(P.o.sheet,{items:P.o.items||[],meta:P.o.meta||{}});key=P.o.sheet;Q.toast('Import: '+r.ok+' butir terisi'+(r.skip?', '+r.skip+' dilewati':''))}
+   if(key){select(key);Q.toast('Checksheet '+SH[key].n+' berhasil diimpor')}
+   return;
+  }
+  let last=null,ok=0,skip=0,eir=false,irN=0;
+  P.sheets.forEach(s=>{
+   if(s.kind=='ir'){irN++;return}
+   const key=(SH[s.kind]&&s.kind!='list')?s.kind:(cur!='list'?cur:'fat');
+   const r=csApplyTable(key,s);ok+=r.ok;skip+=r.skip;last=key;if(r.note=='eir')eir=true;
+  });
+  if(last)select(last);
+  Q.toast('Import checksheet: '+ok+' butir terisi'+(skip?', '+skip+' tidak cocok / dilewati':'')+(eir?' · Electrical hanya bisa lewat JSON export':'')+(irN?' · '+irN+' sheet IR dilewati (impor lewat Bank IR)':'')+(!ok&&!eir?' — pastikan kolom DESCRIPTION sama dengan checksheet':''));
+ }
+ function csExp(){
+  const Q=window.QCImp;
+  if(cur=='list'){Q.toast('Pilih dulu salah satu checksheet (FAT / Electrical / Lighting / AC / Final Function)');return}
+  const o=st(),S=SH[cur],items=[],pw=a=>a=='P'?'PASS':a=='F'?'FAIL':'';
+  if(S.ty=='list')dat().forEach(r=>{if(!r.s)return;items.push({desc:r.t,std:r.s,tol:V(r.k+':t'),act:V(r.k+':a'),res:pw(V(r.k+':p')),rm:V(r.k+':m'),grp:cur=='fat'?'dim':'vis'})});
+  else if(S.ty=='lux')dat().forEach(r=>{if(!r.s)return;items.push({desc:r.t,std:r.s,act:V(r.k+':a'),res:pw(auto(V(r.k+':a'),r.s)),rm:V(r.k+':m'),grp:'dim'})});
+  else if(S.ty=='temp')dat().forEach(r=>{const sd=V(r.k+':s')||r.s;items.push({desc:r.t,std:sd,act:V(r.k+':a'),res:pw(auto(V(r.k+':a'),sd)),rm:V(r.k+':m'),grp:'dim'})});
+  const mt=Object.assign({},DEF(),o.m);
+  Q.download('Checksheet_'+cur.toUpperCase()+'_'+String(proj()).replace(/[^\w-]+/g,'_')+'.json',JSON.stringify({qccs:1,sheet:cur,title:S.t,project:proj(),exported:new Date().toISOString(),meta:{proj:mt.pj,customer:mt.cl,part:mt.ud,docref:mt.sr,date:mt.dt,reportno:mt.rn},items:items,raw:{m:o.m,v:o.v,s:o.s||null}}),'application/json');
+  Q.toast('Checksheet '+S.n+' diexport (.json) — bisa diimpor ke FAT atau Bank IR');
+ }
+
+ window.QCSheets={impFile:csImpFile,expSheet:csExp,stats:csStats,edit(){ed=!ed;render()},std(){if(confirm('Kembalikan struktur form ke standar Excel? Isian (hasil) tetap tersimpan, tetapi butir yang ditambah/diubah akan hilang.')){delete st().s;save();render()}},select,print(){ed=false;render();let pg=document.getElementById('csPage');if(!pg){pg=document.createElement('style');pg.id='csPage';document.head.appendChild(pg)}pg.textContent='@page{size:A4 '+(cur=='eir'?'landscape':'portrait')+';margin:7mm}';document.body.classList.add('cs-print');setTimeout(()=>{window.print();document.body.classList.remove('cs-print')},50)},reset(){if(confirm('Hapus semua isian (hasil) checksheet ini untuk project '+proj()+'?')){{const o=st();o.m={};o.v={}}save();render()}}};
 }
 if(document.readyState=='complete')init();else window.addEventListener('load',()=>setTimeout(init,0));
 })();
@@ -23299,7 +23596,7 @@ view.innerHTML=
    '<div class="bir-stage" id="birStage" spellcheck="false"></div>'+
    '<div class="bir-hint"><b>Tips:</b> klik kotak foto untuk menambah foto (HP: kamera/galeri), atau tempel (Ctrl+V) / seret foto ke kotak. <b>Ukuran foto:</b> klik foto → seret kotak biru di sudut kanan-bawah (Shift = bebas rasio), atau pakai 🔍＋/－. <b>Baris:</b> klik sel (Shift+klik atau seret = blok) lalu ＋Baris / 🗑 Baris / Gabung / Pisah; seret garis bawah baris untuk mengubah tinggi. <b>PDF:</b> Cetak → pilih “Save as PDF”; halaman dipotong rapi per baris dan header diulang di tiap halaman.</div>'+
   '</div>'+
- '<input type="file" id="birFile" accept="image/*" multiple style="display:none"><input type="file" id="birImp" accept=".json,application/json" style="display:none">';
+ '<input type="file" id="birFile" accept="image/*" multiple style="display:none"><input type="file" id="birImp" accept=".json,application/json,.xlsx,.xlsm,.xls,.csv" multiple style="display:none">';
 document.body.appendChild(view);
 var lb=document.createElement('div');lb.id='birLb';lb.innerHTML='<img alt="">';document.body.appendChild(lb);
 lb.addEventListener('click',function(){lb.classList.remove('open');});
@@ -23426,7 +23723,7 @@ function renderList(){
    '<input id="birQ" placeholder="Cari no IR / customer / part / inspector…" value="'+esc(listEl.dataset.q||'')+'">'+
    '<select id="birSo" title="Urutkan riwayat"><option value="no">Urut: No IR terbaru</option><option value="old">No IR terlama</option><option value="upd">Terakhir diubah</option><option value="cus">Customer A–Z</option><option value="ins">Inspector A–Z</option></select>'+
    '<select id="birFs"><option value="all">Semua format</option><option value="frm">Format FRM/PQ/PC/33</option><option value="old">Format lama</option></select>'+
-   '<button class="bir-btn" id="birImpB" type="button">⬆ Import .json</button></div></div>';
+   '<button class="bir-btn" id="birImpB" type="button" title="Import IR (.json hasil Export) atau checksheet / IR dari Excel (.xlsx, .xls, .csv) atau checksheet FAT (.json)">⬆ Import Checksheet / IR</button></div></div>';
   if(!rows.length){h+='<div class="bir-list"><div class="bir-empty">'+(metas.length?'Tidak ada hasil.':'Belum ada report. Pilih format di atas untuk mulai membuat IR.')+'</div></div>';}
   else{
     h+='<div class="bir-list"><table><thead><tr><th>Doc IR No</th><th>Style</th><th>Customer</th><th>Part</th><th>Project</th><th>Tgl</th><th>Inspector</th><th>Status</th><th>Foto</th><th>Diubah</th><th></th></tr></thead><tbody>';
@@ -23560,19 +23857,84 @@ function expReport(id){
     download('IR_'+((m.docno||m.id).replace(/[^\w-]+/g,'_'))+'.json',JSON.stringify({bir:1,meta:m,body:b}),'application/json');
   });
 }
+/* ---------- IMPORT: IR (.json export) · checksheet / IR dari Excel (.xlsx/.xls/.csv) · checksheet (.json export FAT) ---------- */
+function impBirObj(o){
+  var m=o.meta;m.id=uid();m.updated=Date.now();
+  return bodySet(m.id,o.body).then(function(){var a=loadMeta();a.push(m);saveMeta(a);syncMark('b:'+m.id);return 1;});
+}
+function irSet(s,f,v){if(v==null||v==='')return;var td=s.querySelector('td[data-f='+f+']');if(!td)return;var el=td.querySelector('.v')||td;el.textContent=v;}
+function irFill(s,grp,items){
+  if(!items.length)return 0;
+  var sel='tr[data-grp='+grp+']';
+  var slots=function(){return [].filter.call(s.querySelectorAll(sel),function(tr){return tr.querySelector('td.bno');});};
+  var sl=slots(),guard=0;
+  while(sl.length&&sl.length<items.length&&guard++<400){
+    var all=s.querySelectorAll(sel),last=all[all.length-1],src=sl[sl.length-1];
+    var c=src.cloneNode(true);c.classList.remove('sel-row');
+    [].forEach.call(c.querySelectorAll('td'),function(td){td.classList.remove('sel-cell');clearCell(td);});
+    last.parentNode.insertBefore(c,last.nextSibling);
+    sl=slots();
+  }
+  var n=0;
+  items.forEach(function(it,i){
+    var tr=sl[i];if(!tr)return;
+    var cells=[].slice.call(tr.querySelectorAll('td.e'));
+    var rs=[it.rawres||it.res,it.rm].filter(function(x){return x&&String(x).trim();});
+    if(rs.length===2&&rs[0]===rs[1])rs.pop();
+    var vals=[(it.no&&String(it.no).length<=6)?it.no:'',it.desc,it.qty,it.std,it.tol,it.act,rs.join(' — ')];
+    cells.forEach(function(td,j){if(j>=vals.length)return;if(j===0){if(vals[0])td.textContent=vals[0];return;}td.textContent=vals[j]||'';});
+    n++;
+  });
+  return n;
+}
+function saveNow(){
+  var id=cur.id,html=cleanClone().outerHTML,m=collectMeta();
+  return bodySet(id,html).then(function(){
+    var a=loadMeta().filter(function(x){return x.id!==id;});a.push(m);saveMeta(a);syncMark('b:'+id);
+  });
+}
+function irFromParsed(S){
+  newReport('frm');
+  var s=sheetEl(),M=S.meta||{},I=S.items||[];
+  ['proj','customer','area','docref','part','qtypart','qtyinsp'].forEach(function(f){irSet(s,f,M[f]);});
+  if(M.date){var dt=s.querySelector('td[data-f=date]');if(dt)dt.textContent=M.date;}
+  if(M.inspector){var nm=s.querySelector('td.nm .v');if(nm)nm.textContent=M.inspector;}
+  var dm=M.docno?/(\d+)\s*\/\s*IR\s*\/\s*QC\s*\/\s*BRB\s*\/\s*([IVX]+)\s*\/\s*(\d{4})/i.exec(M.docno):null;
+  if(dm){var sp=function(k,v){var e=s.querySelector('.dn [data-s='+k+']');if(e)e.textContent=v;};sp('no',dm[1]);sp('mon',dm[2].toUpperCase());sp('yr',dm[3]);}
+  irFill(s,'vis',I.filter(function(x){return x.grp!=='dim';}));
+  irFill(s,'dim',I.filter(function(x){return x.grp==='dim';}));
+  relabelBlk();renumber();layoutAll();fit();
+  return saveNow();
+}
+function importParsed(P){
+  if(P.type==='bir'){
+    return impBirObj(P.o).then(function(){toast('Import berhasil');renderList();updCount();return 1;});
+  }
+  var list=P.type==='qccs'?[{name:P.o.title||P.o.sheet,kind:P.o.sheet,meta:P.o.meta||{},items:P.o.items||[]}]:(P.sheets||[]);
+  var jobs=[];
+  try{
+    list.forEach(function(S){
+      if(!(S.items||[]).length&&Object.keys(S.meta||{}).length<2)return;
+      jobs.push(irFromParsed(S));
+    });
+  }catch(e){console.error('[import IR]',e);toast('Gagal mengimpor: '+(e&&e.message||e));}
+  if(!jobs.length){toast('Tidak ada data checksheet / IR yang bisa dibaca dari file ini');return Promise.resolve(0);}
+  return Promise.all(jobs).then(function(){
+    var n=jobs.length;
+    if(n>1){showList();toast(n+' IR berhasil diimpor ke Bank IR');}
+    else{head();var sv=$('eSave');if(sv){sv.textContent='✓ Tersimpan';sv.className='bir-save';}toast('Import berhasil — periksa isian IR, lalu tekan ← Bank');}
+    updCount();return n;
+  }).catch(function(e){console.error('[import IR]',e);toast('Gagal menyimpan hasil import');return 0;});
+}
+function importFile(f){
+  if(!window.QCImp)return Promise.resolve(0);
+  if(window.QCImp.isGuest()){toast('Mode tamu: hanya baca');return Promise.resolve(0);}
+  return window.QCImp.readAny(f).then(importParsed).catch(function(x){toast('Import gagal: '+(x&&x.message||x));return 0;});
+}
 $('birImp').addEventListener('change',function(e){
   var fl=[].slice.call(e.target.files||[]);e.target.value='';
-  fl.forEach(function(f){
-    var r=new FileReader();
-    r.onload=function(){
-      try{
-        var o=JSON.parse(r.result);if(!o||o.bir!==1||!o.meta||!o.body)throw 0;
-        var m=o.meta;m.id=uid();m.updated=Date.now();
-        bodySet(m.id,o.body).then(function(){var a=loadMeta();a.push(m);saveMeta(a);syncMark('b:'+m.id);toast('Import berhasil');renderList();updCount();});
-      }catch(x){toast('File bukan export Bank IR yang valid');}
-    };
-    r.readAsText(f);
-  });
+  var chain=Promise.resolve();
+  fl.forEach(function(f){chain=chain.then(function(){return importFile(f);});});
 });
 $('birBack').onclick=function(){window.showHome();};
 $('eBank').onclick=showList;
@@ -24995,7 +25357,7 @@ if(typeof rh==='function'){
 }
 try{inject();}catch(e){}
 window.addEventListener('beforeunload',function(){if(cur)flushSave();});
-window.BankIR={open:window.showBir,getForSync:getForSync,apply:applySync,refresh:refreshSoon};
+window.BankIR={open:window.showBir,getForSync:getForSync,apply:applySync,refresh:refreshSoon,importParsed:importParsed,importFile:importFile};
 try{(window.__birQ||[]).splice(0).forEach(function(r){applySync(r.k.charAt(0),r.k.slice(2),r.v);});}catch(e){}
 })();
 
