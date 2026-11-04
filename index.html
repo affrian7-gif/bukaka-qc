@@ -25680,16 +25680,23 @@ function pctT(p){return p==null?'–':nf(p,p>0&&p<10?1:0)+'%';}
 function chip(l,v,c,p){return '<span class="nv-chip" style="--c:'+c+'">'+(p!=null?'<span class="mt" style="--p:'+Math.max(0,Math.min(100,p))+'%"></span>':'<i></i>')+(l?'<em>'+l+'</em>':'')+'<b>'+v+'</b></span>';}
 /* ---------- pengumpul data (hanya baca) ---------- */
 function isMain(row){return !!(row&&String(row.level||'').charAt(0)==='▶');}
+/* hasil tahap lain (mis. FAT di samping Fabrikasi) yang tersimpan di record.alt */
+function altLayer(d,key){
+  var a=d&&d.alt;if(!a||!(a.approved||(a.items&&a.items.length)))return null;
+  var g=a.stg||'F',st=a.status||localStorage.getItem('inspst_'+key+'~'+g)||'';if(!st)return null;
+  return {stg:g,st:st,date:a.date||(a.t?iso(a.t):''),t:a.t||0,by:a.by||''};
+}
 function gatherInsp(){
   var out=[],pd=PD(),seen={};
   try{
     for(var i=0;i<localStorage.length;i++){
       var k=localStorage.key(i);if(!k)continue;
-      var key,st='',date='',by='',t=0;
+      var key,st='',date='',by='',t=0,stg='',alt=null;
       if(k.indexOf('insp_')===0&&k!=='insp_by_last'){
         var raw=localStorage.getItem(k);if(!raw||raw.charAt(0)!=='{')continue;
         var d;try{d=JSON.parse(raw);}catch(e){continue;}
         key=k.slice(5);st=d.status||localStorage.getItem('inspst_'+key)||'';t=d.t||0;date=d.date||(t?iso(t):'');by=d.by||'';
+        stg=d.stg||'';alt=altLayer(d,key);
       }else if(k.indexOf('inspst_')===0){
         key=k.slice(7);if(seen[key])continue;st=localStorage.getItem(k)||'';
       }else continue;
@@ -25697,7 +25704,7 @@ function gatherInsp(){
       var u=key.lastIndexOf('_'),proj=key.slice(0,u),idx=+key.slice(u+1),row=(pd[proj]||[])[idx];
       if(!row)continue;
       seen[key]=1;
-      out.push({key:key,proj:proj,idx:idx,main:isMain(row),st:st,date:date,t:t,by:by,
+      out.push({key:key,proj:proj,idx:idx,main:isMain(row),st:st,date:date,t:t,by:by,stg:stg,alt:alt,
         name:String(row.part_name||row.level||'').replace(/^▶\s*/,''),dwg:row.drawing_no||''});
     }
   }catch(e){console.error(e);}
@@ -25706,13 +25713,13 @@ function gatherInsp(){
 /* Komponen ADDITIONAL: kunci inspeksi '<PROJECT>~add_<id>' (bukan baris Excel). Dikumpulkan terpisah supaya statistik progres/evaluasi yang sudah ada tidak bergeser. */
 function gatherAdd(){
   var out=[],seen={};
-  function one(key,st,date,by,t){
+  function one(key,st,date,by,t,stg,alt){
     var ai=key.indexOf('~add_');if(ai<0||!st||seen[key])return;
     var proj=key.slice(0,ai),o=null;
     try{o=JSON.parse(localStorage.getItem('qcadd_'+proj+'|'+key.slice(ai+5))||'null');}catch(e){}
     if(!o)return;                       /* komponen sudah dihapus -> hasilnya tidak dihitung */
     seen[key]=1;
-    out.push({key:key,proj:proj,st:st,date:date,t:t,by:by,name:String(o.part_name||o.no||'Additional'),dwg:o.drawing_no||'',add:true});
+    out.push({key:key,proj:proj,st:st,date:date,t:t,by:by,name:String(o.part_name||o.no||'Additional'),dwg:o.drawing_no||'',add:true,stg:stg||'',alt:alt||null});
   }
   try{
     for(var i=0;i<localStorage.length;i++){           /* 1) insp_ (lengkap: tanggal, jam, inspector) */
@@ -25720,7 +25727,7 @@ function gatherAdd(){
       var raw=localStorage.getItem(k);if(!raw||raw.charAt(0)!=='{')continue;
       var d;try{d=JSON.parse(raw);}catch(e){continue;}
       var key=k.slice(5);if(key.indexOf('~add_')<0)continue;
-      var t=d.t||0;one(key,d.status||localStorage.getItem('inspst_'+key)||'',d.date||(t?iso(t):''),d.by||'',t);
+      var t=d.t||0;one(key,d.status||localStorage.getItem('inspst_'+key)||'',d.date||(t?iso(t):''),d.by||'',t,d.stg||'',altLayer(d,key));
     }
     for(var j=0;j<localStorage.length;j++){           /* 2) inspst_ saja (tanpa detail) */
       var k2=localStorage.key(j);if(!k2||k2.indexOf('inspst_')!==0)continue;
@@ -25886,11 +25893,17 @@ function dashHtml(D){
 
 /* --- resume inspeksi per hari --- */
 function inD(d,day){return day&&day.from?(d>=day.from&&d<=day.to):d===day;}
-var KN={FAB:'Fabrikasi & Prep',FAT:'FAT',INC:'Incoming',WI:'WI & NDT',COAT:'Coating'};
+var KN={FAB:'Fabrikasi & Prep · Bay 2 & 4',FAT:'FAT · Bay 1',INC:'Incoming',WI:'WI & NDT',COAT:'Coating · Bay 3'};
 function dayRecords(D,day,carry){
   var rows=[];
-  D.insp.concat(D.add||[]).forEach(function(x){if(!inD(x.date,day))return;rows.push({kind:x.main?'FAB':'FAT',d:x.date,t:x.t,by:x.by,name:x.name,sub:x.proj+(x.add?' · Additional':'')+(x.dwg?' · '+x.dwg:''),
-    st:x.st==='special'?'accept':x.st,stLbl:(window.INSP_ST&&INSP_ST[x.st]&&INSP_ST[x.st].t)||x.st,stC:(window.INSP_ST&&INSP_ST[x.st]&&INSP_ST[x.st].c)||'#64748b',key:x.key});});
+  /* Jenis (FAB/FAT) = tahap yang tersimpan pada hasil inspeksi (stg: T=FAT, F=Fabrikasi); satu drawing bisa punya hasil di kedua tahap.
+     Record lama tanpa penanda tahap: tebakan lama (Main Assy = Fabrikasi, lainnya = FAT). */
+  D.insp.concat(D.add||[]).forEach(function(x){
+    var Ls=[{stg:x.stg,st:x.st,date:x.date,t:x.t,by:x.by}];if(x.alt&&x.alt.st)Ls.push(x.alt);
+    Ls.forEach(function(y){if(!inD(y.date,day))return;
+      var kind=y.stg==='T'?'FAT':y.stg==='F'?'FAB':(x.main?'FAB':'FAT');
+      rows.push({kind:kind,d:y.date,t:y.t,by:y.by,name:x.name,sub:x.proj+(x.add?' · Additional':'')+(x.dwg?' · '+x.dwg:''),
+        st:y.st==='special'?'accept':y.st,stLbl:(window.INSP_ST&&INSP_ST[y.st]&&INSP_ST[y.st].t)||y.st,stC:(window.INSP_ST&&INSP_ST[y.st]&&INSP_ST[y.st].c)||'#64748b',key:x.key});});});
   D.inc.forEach(function(r){var s=incSplit(r),rd=String(r.date||'').slice(0,10),isOut=s.open>0;
     if(carry?(!isOut&&!inD(rd,day)):!inD(rd,day))return;
     /* inspector = Nama Inspektor pada record incoming; jam = waktu input record, hanya bila diinput pada tanggal inspeksi yang sama */
@@ -25947,7 +25960,7 @@ function dayHtml(D){
   var rows=dayRecords(D,rng),by={};rows.forEach(function(r){by[r.by||'(tanpa nama)']=1;});
   var inspectors=Object.keys(by).sort();if(NV.by!=='all'&&inspectors.indexOf(NV.by)<0)NV.by='all';
   var f=rows.filter(function(r){return NV.by==='all'||(r.by||'(tanpa nama)')===NV.by;});
-  var kinds=[['FAB','Fabrikasi & Preparation'],['FAT','FAT · Bay 1'],['INC','Incoming'],['WI','WI & NDT'],['COAT','Coating Inspection']];
+  var kinds=[['FAB','Fabrikasi & Preparation · Bay 2 & 4'],['FAT','FAT · Bay 1'],['INC','Incoming'],['WI','WI & NDT'],['COAT','Coating Inspection · Bay 3']];
   var tb=kinds.map(function(k){var a=f.filter(function(r){return r.kind===k[0];}),c={accept:0,hold:0,reject:0};a.forEach(function(r){c[r.st==='hold'?'hold':(r.st==='reject'?'reject':'accept')]++;});
     return '<tr class="nvr'+(a.length?'':' dim')+(NV.kind===k[0]?' sel':'')+'" data-nv-kind="'+k[0]+'" tabindex="0" title="Klik untuk melihat aktivitas '+k[1]+'"><td><b>'+k[1]+'</b></td><td class="n">'+a.length+'</td><td class="n">'+c.accept+'</td><td class="n">'+c.hold+'</td><td class="n">'+c.reject+'</td></tr>';}).join('');
   var tot={accept:0,hold:0,reject:0};f.forEach(function(r){tot[r.st==='hold'?'hold':(r.st==='reject'?'reject':'accept')]++;});
@@ -25962,12 +25975,12 @@ function dayHtml(D){
   var rowsH=fk.slice().sort(function(a,b){var da=a.d||'',db=b.d||'';return da>db?-1:da<db?1:(b.t||0)-(a.t||0);}).slice(0,200).map(function(r,i){
     var _ca=r.key?'data-key="'+esc(r.key)+'" title="Klik untuk membuka hasil inspeksi"':(r.kind==='INC'&&r.id)?'data-nv-inc="'+esc(r.id)+'" title="Klik untuk membuka detail Incoming"':(r.kind==='WI'&&r.id)?'data-nv-wi="'+esc(r.id)+'" title="Klik untuk membuka detail WI &amp; NDT"':(r.kind==='COAT')?'data-nv-coat="1" title="Klik untuk membuka Coating Inspection"':'';
     return '<tr class="nv-ar'+(_ca?' clk':'')+'" '+_ca+'><td class="n">'+(i+1)+'</td><td>'+(isR&&r.d?r.d.slice(8,10)+'/'+r.d.slice(5,7)+' · ':'')+hhmm(r.t)+'</td><td><b>'+esc(r.name)+'</b></td><td>'+esc(KN[r.kind]||r.kind)+'</td><td>'+esc(r.sub)+'</td><td>'+esc(r.by||'-')+'</td><td><span class="nv-st nv-st-'+(r.st==='hold'?'hold':(r.st==='reject'?'rej':'ok'))+'">'+esc(r.stLbl)+'</span></td></tr>';}).join('');
-  var list=rowsH?'<div class="nv-scroll nv-dl"><table class="nv-tbl nv-atbl"><thead><tr><th class="n">No</th><th>'+(isR?'Tanggal · Jam':'Jam')+'</th><th>Kegiatan</th><th>Jenis</th><th>Project / Detail</th><th>Inspector</th><th>Status</th></tr></thead><tbody>'+rowsH+'</tbody></table></div>'+(fk.length>200?'<p class="nv-def">Menampilkan 200 dari '+fk.length+' kegiatan.</p>':''):empty;
+  var list=rowsH?'<div class="nv-scroll nv-dl"><table class="nv-tbl nv-atbl"><thead><tr><th class="n">No</th><th>'+(isR?'Tanggal · Jam':'Jam')+'</th><th>Kegiatan</th><th>BAY</th><th>Project / Detail</th><th>Inspector</th><th>Status</th></tr></thead><tbody>'+rowsH+'</tbody></table></div>'+(fk.length>200?'<p class="nv-def">Menampilkan 200 dari '+fk.length+' kegiatan.</p>':''):empty;
   var actHtml=NV.kind?'<h3>Aktivitas · '+esc(kLbl)+'</h3><p class="nv-def">Klik baris hasil inspeksi untuk membukanya. <a href="#" data-nv-kind="">Tutup</a></p>'+list
     :'<h3>Aktivitas</h3><p class="nv-def">Klik salah satu jenis inspeksi pada tabel untuk menampilkan aktivitasnya.</p><div class="nv-hint">👆 Pilih Fabrikasi &amp; Preparation, FAT, Incoming, WI &amp; NDT, Coating Inspection, atau Total</div>';
   return '<div class="nv-tools" id="nvDayTools" style="margin-bottom:12px"><span class="nv-rg"><label>Dari <input type="date" data-nv="day" class="nv-date" value="'+NV.day+'"></label><label>Sampai <input type="date" data-nv="dayTo" class="nv-date" value="'+(isR?NV.dayTo:'')+'" min="'+NV.day+'"></label></span><select data-nv="by"><option value="all">Semua inspector</option>'+inspectors.map(function(b){return '<option value="'+esc(b)+'"'+(NV.by===b?' selected':'')+'>'+esc(b)+'</option>';}).join('')+'</select><button type="button" data-nv-act="today">Hari ini</button><button type="button" data-nv-act="r7">7 hari</button><button type="button" data-nv-act="r30">30 hari</button><button type="button" data-nv-act="rmonth">Bulan ini</button></div>'+
-    '<div class="nv-panel"><div class="nv-day"><div style="grid-column:1/-1"><h3>Ringkasan per Jenis Inspeksi</h3><p class="nv-def">'+rngTxt+(NV.by!=='all'?' · '+esc(NV.by):'')+'. Accept termasuk Spesial Accepted.</p>'+
-    '<div class="nv-scroll"><table class="nv-tbl"><thead><tr><th>Jenis inspeksi</th><th class="n">Total</th><th class="n">✔ Accept</th><th class="n">⏸ Hold</th><th class="n">✖ Reject/Repair</th></tr></thead><tbody>'+tb+'</tbody></table></div>'+
+    '<div class="nv-panel"><div class="nv-day"><div style="grid-column:1/-1"><h3>Ringkasan per BAY</h3><p class="nv-def">'+rngTxt+(NV.by!=='all'?' · '+esc(NV.by):'')+'. Accept termasuk Spesial Accepted.</p>'+
+    '<div class="nv-scroll"><table class="nv-tbl"><thead><tr><th>BAY</th><th class="n">Total</th><th class="n">✔ Accept</th><th class="n">⏸ Hold</th><th class="n">✖ Reject/Repair</th></tr></thead><tbody>'+tb+'</tbody></table></div>'+
     '<h4>7 hari terakhir (kegiatan / hari)</h4><div class="nv-spark">'+spark+'</div></div>'+
     '<div style="grid-column:1/-1">'+actHtml+'</div></div></div>';
 }
@@ -26427,9 +26440,9 @@ try{if(document.body.classList.contains('is-home'))window.renderHome(false);}cat
 /* Centang per tahap, disimpan di checkedState (ikut sinkron):
    - Fab & Prep: kunci "<key>~F"   - FAT: kunci lama "<key>" (Dashboard membaca ini)
    Kolom kanan = yang diklik inspector (menu Fab & Prep -> kolom Fab & Prep, menu FAT -> kolom FAT).
-   Kolom kiri = OTOMATIS (tidak bisa diklik langsung):
-   - baris tanpa sub : tercentang bila salah satu tahap (Fab & Prep atau FAT) sudah dicentang.
-   - baris ASSY (punya sub) : tercentang bila Fab & Prep DAN FAT sama-sama dicentang + semua sub sudah lengkap.
+   Kotak kiri = BISA DIKLIK LANGSUNG: mencentang/membatalkan tahap yang sedang aktif (menu Fab & Prep -> Fab & Prep, menu FAT -> FAT),
+   sama dengan kotak di kolom tahap aktif. Menu Fabrikasi Main Assy: kotak kiri baris ▶ = centang Main Assy (kunci lama, dibaca Dashboard).
+   Komponen Additional memakai centang biasa.
    Semua centang (assy maupun sub) sepenuhnya MANUAL: tidak ada bypass / centang massal otomatis. */
 (function(){
 'use strict';
@@ -26506,16 +26519,16 @@ function decorate(){
         (g.tot?'<small class="stg-prog'+(full?' ok':'')+'">'+g.done+'/'+g.tot+'</small>':'');
     });
     /* kiri = otomatis. Assy: butuh Fab & Prep + FAT + semua sub lengkap. Bukan assy: salah satu tahap. */
-    var on=leftOn(p,idx,h);
-    cb.checked=on;cb.disabled=false;cb.tabIndex=-1;
-    cb.title=hk?'Otomatis: tercentang bila Fab & Prep DAN FAT sama-sama dicentang dan semua sub komponen lengkap':'Otomatis mengikuti kolom kanan: tercentang bila Fab & Prep atau FAT sudah dicentang';
+    var on=isOn(key,s);
+    cb.checked=on;cb.disabled=false;cb.removeAttribute('tabindex');
+    cb.title='Centang tahap '+(s==='F'?'Fab & Prep':'FAT')+(hk?' (sub tercentang: '+g.done+' / '+g.tot+')':'');
     tr.classList.toggle('checked',on);
     var pg=tr.cells[0].querySelector('.stg-prog');if(pg)pg.remove();
   });
   {
-    /* angka ringkasan di atas tabel = jumlah baris yang tercentang di kiri, termasuk komponen Additional */
+    /* angka ringkasan di atas tabel = jumlah baris tercentang (tahap aktif) di kotak kiri, termasuk komponen Additional */
     var c=0,t=0;
-    for(var i=0;i<rows.length;i++){if(h.depth[i]===0)continue;t++;if(leftOn(p,i,h))c++;}
+    for(var i=0;i<rows.length;i++){if(h.depth[i]===0)continue;t++;if(isOn(p+'_'+i,s))c++;}
     try{var ad=window.QCAdd&&window.QCAdd.stats&&window.QCAdd.stats(p);if(ad){t+=ad.total;c+=ad.checked;}}catch(e){}
     var set=function(id,v){var e=$(id);if(e)e.innerText=v;};
     set('progressCount','Checked: '+c+' / '+t);set('totalStat',t.toLocaleString());set('checkedStat',c.toLocaleString());
@@ -26529,11 +26542,20 @@ document.addEventListener('change',function(e){
   checkedState[sk(key,s)]=t.checked;
   saveChecked();updateCounts();
 });
-/* centang kiri tidak bisa diubah langsung: selalu mengikuti kanan */
-window.toggleCheck=function(key,checkbox){decorate();};
+/* klik kotak kiri: baris Excel -> centang tahap aktif (FAT / Fab & Prep); komponen Additional -> centang biasa */
+window.toggleCheck=function(key,checkbox){
+  var p=currentProject,idx=keyIdx(key,p);
+  if(idx<0){
+    checkedState[key]=checkbox.checked;saveChecked();
+    var tr=checkbox.closest&&checkbox.closest('tr');if(tr)tr.classList.toggle('checked',checkbox.checked);
+    updateCounts();return;
+  }
+  checkedState[sk(key,stage())]=checkbox.checked;
+  saveChecked();updateCounts();
+};
 window.toggleCheckAll=function(m){
   var s=stage(),p=currentProject,rows=projectData[p]||[],v=m.checked,h=hier(p);
-  rows.forEach(function(r,i){checkedState[sk(p+'_'+i,s)]=v;});
+  rows.forEach(function(r,i){if(currentView==='main'&&h.depth[i]!==0)return;checkedState[sk(p+'_'+i,s)]=v;});
   saveChecked();renderTable();
 };
 var _rt=renderTable;
@@ -26546,6 +26568,7 @@ if(typeof _ps==='function')window.projStats=function(p){
   var m=_ps.apply(this,arguments);
   try{var rows=projectData[p]||[],h=hier(p);
     for(var i=0;i<rows.length;i++){
+      if(String((rows[i]&&rows[i].level)||'').charAt(0)==='\u25b6')continue; /* Main Assy: centang langsung di kotak kiri */
       var c0=!!checkedState[p+'_'+i],d=leftOn(p,i,h);
       if(c0===d)continue;
       var dl=d?1:-1;
@@ -29694,26 +29717,26 @@ function dnParts(dn){var s=String(dn||'').trim().split('-');
 
 function convert(table){
   var h=findHeader(table); if(!h)return{err:'Header tidak dikenali (butuh KEY NO, PART NAME, DRAWING NUMBER, dst.)'};
-  var M=h.map, out=[], warns=[], seen={}, lm=null, block='', curMain=false;
+  var M=h.map, out=[], warns=[], seen={}, lm=null, block='', curMain=false, curMainN='';
   var g=function(r,k){return k in M?String(r[M[k]]==null?'':r[M[k]]).trim():''};
   for(var i=h.row+1;i<table.length;i++){var r=table[i],line=i+1;
     var key=g(r,'key'),code=g(r,'code'),item=g(r,'item'),dn=g(r,'dn'),pn=g(r,'pn'),par=g(r,'parent'),
         mat=g(r,'mat'),qty=g(r,'qty'),L=g(r,'len'),W=g(r,'wid'),H=g(r,'hei'),pr=g(r,'print'),lk=g(r,'link');
     if(!pn&&!dn&&!code)continue;
     var id=fileId(lk);lk=id?dUrl(id):(/^https?:/i.test(lk)?lk:'');
-    var P=dnParts(dn),isMain=!key,rowId,row;
+    var P=dnParts(dn),isMain=!key||(!code&&!item&&!mat&&!L&&!W&&!H),rowId,row;
     if(isMain){
-      var nm=pn||dn; rowId='M|'+(P.id&&P.id!=='-'?P.id:N(nm)); block=N(nm); lm={}; lm[N(nm)]=0; curMain=true;
+      var nm=pn||dn; rowId='M|'+(P.id&&P.id!=='-'?P.id:N(nm)); block=N(nm); curMainN=block; lm={}; lm[N(nm)]=0; curMain=true;
       row={level:'▶ '+nm+(dn?' — '+dn:''),no:'',part_num:'',part_name:'',drawing_no:'',qty:'',material:'',foto:'',cek:'☐',link:lk||'-'};
     }else{
       if(!curMain){warns.push('Baris '+line+': komponen muncul sebelum Main Assy pertama'); curMain=true; lm={}; block='OTHER'}
       var lv=1;
-      if(par){var pl=lm[N(par)]; if(pl===undefined)warns.push('Baris '+line+': parent "'+par+'" tidak ditemukan dalam grup ini ('+pn+'), dianggap L1'); else lv=pl+1}
+      if(par){var pl=lm[N(par)]; if(pl===undefined&&curMainN&&curMainN.indexOf(N(par))===0)lv=1; else if(pl===undefined)warns.push('Baris '+line+': parent "'+par+'" tidak ditemukan dalam grup ini ('+pn+'), dianggap L1'); else lv=pl+1}
       lm[N(pn)]=lv;
       var okDn=P.id&&P.id!=='-'&&P.id.length>5;
       rowId=okDn?'C|'+P.id:'C|'+block+'|'+N(par)+'|'+N(pn)+'|'+key;
       var dims=[L,W,H].filter(Boolean).join('×');
-      row={level:'L'+lv,no:key,part_num:code,part_name:pn,drawing_no:dn||'-',qty:qty,
+      row={level:(lv<=1?'L1':'  \u2514 L'+lv),no:key,part_num:code,part_name:pn,drawing_no:dn||'-',qty:qty,
         material:[mat,item,dims].filter(Boolean).join(' · '),foto:lk?'Lihat Link →':'-',cek:'☐',link:lk||'-'};
       if(!lk)warns.push('Baris '+line+': '+pn+' belum punya link drawing');
     }
@@ -29813,7 +29836,7 @@ function diff(oldRows,newRows){
       if(o.drawing_no!==r.drawing_no&&o._rev===r._rev)ch.push('no. drawing');
       if(o.qty!==r.qty)ch.push('qty '+(o.qty||'-')+'→'+(r.qty||'-'));
       if(o.material!==r.material)ch.push('material/ukuran');
-      if(o.level!==r.level)ch.push('level');
+      if(String(o.level).replace(/^[\s\u2514]+/,'')!==String(r.level).replace(/^[\s\u2514]+/,''))ch.push('level');
     }else if(o.level!==r.level&&o._rev===r._rev)ch.push('nama/no. drawing');
     if(o.link!==r.link)ch.push('link drawing');
     if(ch.length)changed.push({l:lab(r),w:ch.join(', ')})});
@@ -29898,7 +29921,7 @@ function saveCfg(){try{LS.setItem(KC,JSON.stringify(cfg))}catch(e){}}
 function readInputs(){var m=$('slBody');if(!m)return null;var N=m.querySelectorAll('.slN'),U=m.querySelectorAll('.slU'),o=[];
   for(var i=0;i<N.length;i++)o.push({project:N[i].value.trim(),url:U[i].value.trim()});return o}
 function renderPanel(keep){var b=$('slBody');if(!b)return;
-  if(keep===true){var cur=readInputs();if(cur&&cur.length===cfg.projects.length&&cur.every(function(x,i){return x.project===cfg.projects[i].project&&x.url===cfg.projects[i].url})){/* tidak ada edit tertunda: render ulang aman */}else if(cur&&$('slModal').classList.contains('open')){return}}
+  if(keep===true){var cur=readInputs();if(cur&&cur.length===cfg.projects.length&&cur.every(function(x,i){return x.project===cfg.projects[i].project&&x.url===cfg.projects[i].url})){/* tidak ada edit tertunda: render ulang aman */}else if(cur&&$('pmModal')&&$('pmModal').classList.contains('open')){return}}
   var h='<label>URL Apps Script (cukup sekali, berlaku untuk semua project)</label><input type="text" id="slScript" placeholder="https://script.google.com/macros/s/.../exec" value="'+esc(cfg.script||'')+'">'+
     '<div class="sl-note">Tiap baris di bawah = satu project. Isi <b>link Google Sheet</b> (salin dari bilah alamat saat tab yang dimaksud terbuka). Satu spreadsheet berisi 2 tipe? Buat 2 baris, masing-masing dengan link tab-nya. Project lain di web tidak terpengaruh.</div>';
   cfg.projects.forEach(function(e,i){var o=stOf(e.project||'');
@@ -29931,11 +29954,16 @@ function ui(){
   var css=document.createElement('style');css.textContent='#slBtn{position:fixed;left:14px;bottom:14px;z-index:99990;background:#0e3a66;border:1px solid #2d6199;color:#fff;border-radius:999px;padding:9px 14px;font-weight:700;font-size:.8rem;cursor:pointer}#slModal{position:fixed;inset:0;z-index:100002;background:#030a14d9;display:none;align-items:flex-start;justify-content:center;padding:6vh 12px;overflow:auto}#slModal.open{display:flex}.sl-box{width:min(620px,100%);background:#0a1a2e;border:1px solid #2d6199;border-radius:18px;color:#eaf4ff;padding:16px 18px}.sl-box label{display:block;margin:10px 0 3px;font-size:.78rem;color:#9bb6d5;font-weight:700}.sl-box input[type=text]{width:100%;margin:3px 0}.sl-pr{display:flex;gap:6px}.sl-p{border:1px solid #1b3552;background:#071326;border-radius:12px;padding:10px 12px;margin:10px 0}.sl-row{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.sl-note,.sl-st{font-size:.82rem;color:#8ca8c8;margin:4px 0}.sl-w{max-height:140px;overflow:auto;font-size:.75rem;color:#fbbf24;margin-top:6px}.sl-box summary{cursor:pointer;font-weight:700;color:#7ee9fb;margin-top:8px}.slB{margin-top:8px;font-size:.75rem;padding:6px 10px}';
   css.textContent+='#slPop{position:fixed;inset:0;z-index:100010;background:#030a14e6;display:flex;align-items:center;justify-content:center;padding:14px}.slp-box{width:min(560px,100%);max-height:90vh;display:flex;flex-direction:column;background:#0a1a2e;border:1px solid #2d6199;border-radius:20px;color:#eaf4ff;box-shadow:0 30px 80px #000c;overflow:hidden}.slp-head{display:flex;gap:14px;align-items:center;padding:16px 18px;background:linear-gradient(135deg,#0e3a66,#0a1a2e);border-bottom:1px solid #1b3552}.slp-head img{width:84px;height:auto;border-radius:14px;border:2px solid #38bdf8;flex:none}.slp-h1{font-size:1.1rem;font-weight:800}.slp-h2{font-size:.82rem;color:#9bb6d5;margin-top:4px}.slp-body{padding:12px 18px;overflow:auto}.slp-proj{border:1px solid #1b3552;background:#071326;border-radius:12px;padding:10px 12px;margin:8px 0}.slp-ph{display:flex;justify-content:space-between;gap:8px}.slp-ph span{color:#8ca8c8;font-size:.75rem}.slp-chips{margin:6px 0}.slp-chips i{font-style:normal;font-size:.78rem;font-weight:700;border-radius:999px;padding:3px 9px;margin-right:6px;background:#102743}.slp-chips .a{color:#4ade80}.slp-chips .c{color:#fbbf24}.slp-chips .r{color:#fb7185}.slp-t{font-size:.74rem;color:#9bb6d5;font-weight:700;margin-top:6px}.slp-proj ul{margin:3px 0 0;padding-left:18px;font-size:.8rem}.slp-proj ul.a li{color:#bbf7d0}.slp-proj ul.c li{color:#fde68a}.slp-proj ul.r li{color:#fecdd3}.slp-x{display:none}.slp-proj ul.open .slp-x{display:list-item}.slp-cut{color:#8ca8c8!important;list-style:none;margin-left:-18px}.sl-more{list-style:none;margin-left:-18px;color:#7ee9fb!important;cursor:pointer;font-weight:700;padding:3px 0}.slp-proj ul.open{max-height:none}.slp-s{font-size:.72rem;color:#8ca8c8;margin-top:4px}.slp-foot{padding:12px 18px;border-top:1px solid #1b3552;text-align:right}';
   document.head.appendChild(css);
-  var b=document.createElement('button');b.id='slBtn';b.textContent='🔗 Sheet';b.onclick=function(){$('slModal').classList.add('open');renderPanel()};document.body.appendChild(b);
-  var m=document.createElement('div');m.id='slModal';m.innerHTML='<div class="sl-box"><div style="display:flex;justify-content:space-between;align-items:center"><b>Sinkron Google Sheet</b><button id="slX">✕</button></div><div id="slBody"></div></div>';
-  m.addEventListener('click',function(e){if(e.target===m||e.target.id==='slX')m.classList.remove('open')});document.body.appendChild(m)}
+  /* Sinkron Google Sheet dipindah ke Kelola Project: menggantikan tab "Sinkron Google Drive" (tidak ada lagi tombol melayang di kiri bawah) */
+  var lab=function(){document.querySelectorAll('.pm-tabs button[data-t="drive"]').forEach(function(x){x.textContent='\uD83D\uDD17 Sinkron Google Sheet'})};lab();
+  var _pt=window.pmTab;
+  window.pmTab=function(t){
+    if(typeof _pt==='function')_pt.apply(this,arguments);
+    lab();
+    if(t==='drive'){var pb=$('pmBody');if(pb){pb.innerHTML='<div id="slBody" class="sl-box" style="width:auto;max-width:none;background:none;border:0;padding:0"></div>';renderPanel()}}
+  }}
 
-window.SheetLink={sync:sync,convert:convert,cfg:cfg,_dnParts:dnParts,_t:{listHtml:listHtml,migrate:migrate,restoreOrphans:restoreOrphans,collect:collect}};
+window.SheetLink={open:function(){window.pmTab&&window.pmTab('drive')},sync:sync,convert:convert,cfg:cfg,_dnParts:dnParts,_t:{listHtml:listHtml,migrate:migrate,restoreOrphans:restoreOrphans,collect:collect}};
 function start(){ui();schedule();showPopup();setTimeout(function(){sync(false)},1500);
   document.addEventListener('visibilitychange',function(){if(!document.hidden)sync(false)});window.addEventListener('online',function(){sync(false)})}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
