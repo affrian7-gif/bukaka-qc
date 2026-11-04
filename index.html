@@ -8788,7 +8788,7 @@ function applyRecords(recs){
     if (kind === 'o') { try { if (r.v === null) { if (raw('qcout_' + key) != null) { _rem.call(LS, 'qcout_' + key); window.__qoCh = true; } } else if (raw('qcout_' + key) !== r.v) { _set.call(LS, 'qcout_' + key, r.v); window.__qoCh = true; } } catch(e) { console.warn('QCSync: penyimpanan penuh, lewati', key); } return; }
     if (kind === 'n' || kind === 'g') { try { if (window.QCInc && window.QCInc.apply(kind, key, r.v)) window.__qcIncCh = true; } catch(e) { console.warn('QCSync: gagal menerapkan record Incoming', key, e); } return; }
     if (kind === 'f') { try { if (window.QCOut) window.QCOut.applyPhoto(key, r.v); } catch(e) {} return; }
-    if (kind === 'a') { try { if (r.v === null) _rem.call(LS, 'qcadd_' + key); else _set.call(LS, 'qcadd_' + key, r.v); window.__qcAddCh = true; } catch(e) { console.warn('QCSync: penyimpanan penuh, lewati', key); } return; }
+    if (kind === 'a') { try { const pv = raw('qcadd_' + key); if (r.v === null) _rem.call(LS, 'qcadd_' + key); else { _set.call(LS, 'qcadd_' + key, r.v); try { const ao = JSON.parse(r.v), bi = key.lastIndexOf('|'), SL = window.SheetLink; if (ao && SL && SL.evt && pv !== r.v) SL.evt(key.slice(0, bi), pv == null ? 'add' : 'upd', '➕ Additional: ' + (ao.part_name || '(tanpa nama)') + (ao.drawing_no ? ' (' + ao.drawing_no + ')' : ''), ao.by || '', pv == null ? ao.t : Date.now()); } catch(e4) {} } window.__qcAddCh = true; } catch(e) { console.warn('QCSync: penyimpanan penuh, lewati', key); } return; }
     if (kind === 'd') { try { if (window.__boqApplyDwg) window.__boqApplyDwg(key, r.v, _set, _rem, LS); } catch(e) {} return; }
     if (kind === 'c') {
       if (r.v === null) { if (key in checkedState) { delete checkedState[key]; chkCh = true; chkKeys.push(key); } }
@@ -8834,7 +8834,11 @@ async function flushExtra(){
       } else {
         const rows = JSON.parse(await decProj(r.v));
         const h = hash(JSON.stringify(rows));
-        if (lastProj[name] !== h || !(name in Q.all())) { lastProj[name] = h; await Q.put(name, rows); changed = true; }
+        if (lastProj[name] !== h || !(name in Q.all())) {
+          const oldRows = (name in Q.all()) ? Q.all()[name] : null;
+          lastProj[name] = h; await Q.put(name, rows); changed = true;
+          try { const SL = window.SheetLink; if (SL && SL.diff && SL.notify && oldRows && oldRows.length && oldRows[0]._id !== undefined && rows.length && rows[0]._id !== undefined) { const dd = SL.diff(oldRows, rows); if (dd.added.length || dd.changed.length || dd.removed.length) SL.notify(name, dd, rows.length); } } catch(e3) { console.warn('QCSync: popup update gagal', e3); }
+        }
       }
       if (d['p:' + name] && d['p:' + name] <= r.ts) { delete d['p:' + name]; jset(K.dirty, d); }
     } catch(e) { console.warn('QCSync: project gagal diterapkan', name, e); }
@@ -9909,7 +9913,7 @@ function setRowLink(kid,link,o){
   var i=kid.indexOf('|'),P=kid.slice(0,i),sig=kid.slice(i+1);ensureSigs(P);var rows=projectData[P]||[];
   for(var x=0;x<rows.length;x++)if(rows[x]._sig===sig){
     if(link){rows[x].link=link;rows[x].foto='Lihat Link →'}
-    if(o&&link)nAdd({P:P,sig:sig,name:nameOf(rows[x]),kind:'manual',by:o.by||'',t:o.t||Date.now(),link:link});break}}
+    if(o&&link){nAdd({P:P,sig:sig,name:nameOf(rows[x]),kind:'manual',by:o.by||'',t:o.t||Date.now(),link:link});try{if(window.SheetLink&&SheetLink.evt)SheetLink.evt(baseOf(P),'drw',nameOf(rows[x]),o.by||'',o.t||Date.now())}catch(e){}}break}}
 window.__boqApplyDwg=function(kid,v,setF,remF,ls){
   var k=OP+kid,cur=ls.getItem(k);
   if(v===null){if(cur==null)return;var old=null;try{old=JSON.parse(cur)}catch(e){}remF.call(ls,k);setRowLink(kid,old&&old.orig||null,null);return}
@@ -29685,6 +29689,7 @@ try{var _s=JSON.parse(LS.getItem(KC)||'{}');
   else if(_s.project||_s.url)cfg.projects=[{project:_s.project||DEFAULT.project,url:_s.url||DEFAULT.url}];
   if(_s.every)cfg.every=_s.every; if(_s.script)cfg.script=_s.script}catch(e){}
 var st={byName:{}}, busy=false, timer=null;
+var KS='qc_sl_seen_t',SEEN=+LS.getItem(KS)||0;if(!SEEN){SEEN=Date.now();try{LS.setItem(KS,String(SEEN))}catch(e){}}
 var $=function(id){return document.getElementById(id)};
 var N=function(s){return String(s==null?'':s).toUpperCase().replace(/[^A-Z0-9]/g,'')};
 var esc=function(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})};
@@ -29848,6 +29853,14 @@ function addNotice(name,d,total){
   var p=jget(KP,[]);p.push(n);jset(KP,p.slice(-10));
   var l=jget(KL,[]);l.unshift(n);jset(KL,l.slice(0,10));
   showPopup()}
+/* popup untuk kejadian dari inspector lain: komponen Additional baru/diubah & link drawing manual diganti.
+   Hanya kejadian SETELAH perangkat ini mulai memakai versi ini (SEEN) supaya data lama tidak membanjiri popup. */
+function evt(project,kind,label,by,t){
+  if(!(t>SEEN))return;
+  var d={added:[],changed:[],removed:[]};
+  if(kind==='add')d.added.push(label+(by?' — oleh '+by:''));
+  else d.changed.push({l:label,w:(kind==='drw'?'link drawing diganti manual':'diubah')+(by?' oleh '+by:'')});
+  addNotice(project,d,0)}
 function listHtml(arr,total,cls,fmt){if(!arr.length)return '';
   var li=function(x,hid){return '<li'+(hid?' class="slp-x"':'')+'>'+esc(fmt?fmt(x):x)+'</li>'};
   var s=arr.slice(0,8).map(function(x){return li(x,0)}).join('')+arr.slice(8).map(function(x){return li(x,1)}).join('');
@@ -29952,7 +29965,7 @@ async function backupDl(name){if(!name)return;
   var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(o)],{type:'application/json'}));a.download='backup_inspeksi_'+name.replace(/[^\w]+/g,'_')+'.json';a.click()}
 function ui(){
   var css=document.createElement('style');css.textContent='#slBtn{position:fixed;left:14px;bottom:14px;z-index:99990;background:#0e3a66;border:1px solid #2d6199;color:#fff;border-radius:999px;padding:9px 14px;font-weight:700;font-size:.8rem;cursor:pointer}#slModal{position:fixed;inset:0;z-index:100002;background:#030a14d9;display:none;align-items:flex-start;justify-content:center;padding:6vh 12px;overflow:auto}#slModal.open{display:flex}.sl-box{width:min(620px,100%);background:#0a1a2e;border:1px solid #2d6199;border-radius:18px;color:#eaf4ff;padding:16px 18px}.sl-box label{display:block;margin:10px 0 3px;font-size:.78rem;color:#9bb6d5;font-weight:700}.sl-box input[type=text]{width:100%;margin:3px 0}.sl-pr{display:flex;gap:6px}.sl-p{border:1px solid #1b3552;background:#071326;border-radius:12px;padding:10px 12px;margin:10px 0}.sl-row{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.sl-note,.sl-st{font-size:.82rem;color:#8ca8c8;margin:4px 0}.sl-w{max-height:140px;overflow:auto;font-size:.75rem;color:#fbbf24;margin-top:6px}.sl-box summary{cursor:pointer;font-weight:700;color:#7ee9fb;margin-top:8px}.slB{margin-top:8px;font-size:.75rem;padding:6px 10px}';
-  css.textContent+='#slPop{position:fixed;inset:0;z-index:100010;background:#030a14e6;display:flex;align-items:center;justify-content:center;padding:14px}.slp-box{width:min(560px,100%);max-height:90vh;display:flex;flex-direction:column;background:#0a1a2e;border:1px solid #2d6199;border-radius:20px;color:#eaf4ff;box-shadow:0 30px 80px #000c;overflow:hidden}.slp-head{display:flex;gap:14px;align-items:center;padding:16px 18px;background:linear-gradient(135deg,#0e3a66,#0a1a2e);border-bottom:1px solid #1b3552}.slp-head img{width:84px;height:auto;border-radius:14px;border:2px solid #38bdf8;flex:none}.slp-h1{font-size:1.1rem;font-weight:800}.slp-h2{font-size:.82rem;color:#9bb6d5;margin-top:4px}.slp-body{padding:12px 18px;overflow:auto}.slp-proj{border:1px solid #1b3552;background:#071326;border-radius:12px;padding:10px 12px;margin:8px 0}.slp-ph{display:flex;justify-content:space-between;gap:8px}.slp-ph span{color:#8ca8c8;font-size:.75rem}.slp-chips{margin:6px 0}.slp-chips i{font-style:normal;font-size:.78rem;font-weight:700;border-radius:999px;padding:3px 9px;margin-right:6px;background:#102743}.slp-chips .a{color:#4ade80}.slp-chips .c{color:#fbbf24}.slp-chips .r{color:#fb7185}.slp-t{font-size:.74rem;color:#9bb6d5;font-weight:700;margin-top:6px}.slp-proj ul{margin:3px 0 0;padding-left:18px;font-size:.8rem}.slp-proj ul.a li{color:#bbf7d0}.slp-proj ul.c li{color:#fde68a}.slp-proj ul.r li{color:#fecdd3}.slp-x{display:none}.slp-proj ul.open .slp-x{display:list-item}.slp-cut{color:#8ca8c8!important;list-style:none;margin-left:-18px}.sl-more{list-style:none;margin-left:-18px;color:#7ee9fb!important;cursor:pointer;font-weight:700;padding:3px 0}.slp-proj ul.open{max-height:none}.slp-s{font-size:.72rem;color:#8ca8c8;margin-top:4px}.slp-foot{padding:12px 18px;border-top:1px solid #1b3552;text-align:right}';
+  css.textContent+='#slPop{position:fixed;inset:0;z-index:2147483600;background:#030a14e6;display:flex;align-items:center;justify-content:center;padding:14px}.slp-box{width:min(560px,100%);max-height:90vh;display:flex;flex-direction:column;background:#0a1a2e;border:1px solid #2d6199;border-radius:20px;color:#eaf4ff;box-shadow:0 30px 80px #000c;overflow:hidden}.slp-head{display:flex;gap:14px;align-items:center;padding:16px 18px;background:linear-gradient(135deg,#0e3a66,#0a1a2e);border-bottom:1px solid #1b3552}.slp-head img{width:84px;height:auto;border-radius:14px;border:2px solid #38bdf8;flex:none}.slp-h1{font-size:1.1rem;font-weight:800}.slp-h2{font-size:.82rem;color:#9bb6d5;margin-top:4px}.slp-body{padding:12px 18px;overflow:auto}.slp-proj{border:1px solid #1b3552;background:#071326;border-radius:12px;padding:10px 12px;margin:8px 0}.slp-ph{display:flex;justify-content:space-between;gap:8px}.slp-ph span{color:#8ca8c8;font-size:.75rem}.slp-chips{margin:6px 0}.slp-chips i{font-style:normal;font-size:.78rem;font-weight:700;border-radius:999px;padding:3px 9px;margin-right:6px;background:#102743}.slp-chips .a{color:#4ade80}.slp-chips .c{color:#fbbf24}.slp-chips .r{color:#fb7185}.slp-t{font-size:.74rem;color:#9bb6d5;font-weight:700;margin-top:6px}.slp-proj ul{margin:3px 0 0;padding-left:18px;font-size:.8rem}.slp-proj ul.a li{color:#bbf7d0}.slp-proj ul.c li{color:#fde68a}.slp-proj ul.r li{color:#fecdd3}.slp-x{display:none}.slp-proj ul.open .slp-x{display:list-item}.slp-cut{color:#8ca8c8!important;list-style:none;margin-left:-18px}.sl-more{list-style:none;margin-left:-18px;color:#7ee9fb!important;cursor:pointer;font-weight:700;padding:3px 0}.slp-proj ul.open{max-height:none}.slp-s{font-size:.72rem;color:#8ca8c8;margin-top:4px}.slp-foot{padding:12px 18px;border-top:1px solid #1b3552;text-align:right}';
   document.head.appendChild(css);
   /* Sinkron Google Sheet dipindah ke Kelola Project: menggantikan tab "Sinkron Google Drive" (tidak ada lagi tombol melayang di kiri bawah) */
   var lab=function(){document.querySelectorAll('.pm-tabs button[data-t="drive"]').forEach(function(x){x.textContent='\uD83D\uDD17 Sinkron Google Sheet'})};lab();
@@ -29963,7 +29976,7 @@ function ui(){
     if(t==='drive'){var pb=$('pmBody');if(pb){pb.innerHTML='<div id="slBody" class="sl-box" style="width:auto;max-width:none;background:none;border:0;padding:0"></div>';renderPanel()}}
   }}
 
-window.SheetLink={open:function(){window.pmTab&&window.pmTab('drive')},sync:sync,convert:convert,cfg:cfg,_dnParts:dnParts,_t:{listHtml:listHtml,migrate:migrate,restoreOrphans:restoreOrphans,collect:collect}};
+window.SheetLink={open:function(){window.pmTab&&window.pmTab('drive')},diff:diff,evt:evt,notify:addNotice,sync:sync,convert:convert,cfg:cfg,_dnParts:dnParts,_t:{listHtml:listHtml,migrate:migrate,restoreOrphans:restoreOrphans,collect:collect}};
 function start(){ui();schedule();showPopup();setTimeout(function(){sync(false)},1500);
   document.addEventListener('visibilitychange',function(){if(!document.hidden)sync(false)});window.addEventListener('online',function(){sync(false)})}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
