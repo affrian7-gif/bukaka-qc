@@ -6527,6 +6527,14 @@ function renderTable() {
   html body .iq-pop{top:auto;bottom:100%;left:8px;right:8px;width:auto;max-height:60dvh;overflow:auto;border-radius:14px 14px 10px 10px}
   html body .iq-pop input[type=text],html body .iq-pop input[type=password]{font-size:16px;padding:10px}
   html body .iq-pop .iq-btn{min-height:44px}
+  /* tombol Tutup selalu terlihat: deretan tombol di header boleh digeser, Tutup menempel di kanan */
+  html body .iq-head{padding-right:max(8px,env(safe-area-inset-right));padding-left:max(10px,env(safe-area-inset-left))}
+  html body .iq-title{flex:1 1 0;min-width:48px}
+  html body .iq-actions{flex:0 1 auto;min-width:0;max-width:calc(100% - 64px);overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none;overscroll-behavior-x:contain}
+  html body .iq-actions::-webkit-scrollbar{display:none}
+  html body .iq-modal .iq-actions .iq-btn{flex:0 0 auto}
+  html body .iq-modal .iq-actions .iq-btn[onclick="iq.close()"]{position:sticky;right:0;z-index:3;background:#13294a;box-shadow:-8px 0 8px -4px #060e1c}
+  html body.bk-light .iq-modal .iq-actions .iq-btn[onclick="iq.close()"]{background:#fff}
 }
 </style>
 <div id="inspModal" class="iq-modal" aria-hidden="true">
@@ -8414,7 +8422,7 @@ const LS = window.localStorage;
 const _set = Storage.prototype.setItem, _rem = Storage.prototype.removeItem;
 const K = {url:'qc_sync_api_url', cursor:'qc_sync_cursor', dirty:'qc_sync_dirty', inited:'qc_sync_inited', last:'qc_sync_last', src:'qc_sync_src', off:'qc_sync_off', inited2:'qc_sync_inited2'};
 const CHK = 'qc_checked_state', UK = 'qc_units', POLL_KEY = 'qc_sync_poll';
-const getPoll = () => Math.min(120000, Math.max(5000, Number(raw(POLL_KEY)) || 15000));   // jeda ambil data (ms), default 15 dtk
+const getPoll = () => Math.min(120000, Math.max(5000, Number(raw(POLL_KEY)) || 6000));   // jeda ambil data (ms), default 15 dtk
 let busy = false, pushTimer = null, pollTimer = null, bigProj = '';
 let st = {kind:'off', msg:'Belum terhubung'};
 
@@ -8629,8 +8637,33 @@ function coatInitial(){   // sekali: kirim data Coating yang sudah ada di perang
 window.QCCoat = {saved: coatSaved, layout: () => { if (coatOn()) markDirty('k:~layout'); }, photo: k => { if (coatOn()) markDirty('m:' + k); }};
 
 /* ---------- deteksi perubahan lokal ---------- */
+/* ---------- OUTBOX: salinan foto/temuan yang belum terkirim, dikirim oleh Service Worker (sw.js) walau tab ditutup ---------- */
+function obDb(){ return new Promise((ok, no) => { const r = indexedDB.open('qc_outbox', 1); r.onupgradeneeded = () => { r.result.createObjectStore('q'); r.result.createObjectStore('m'); }; r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); }); }
+async function obPut(k, ts, v){
+  try {
+    const d = await obDb();
+    await new Promise(ok => { const t = d.transaction(['q', 'm'], 'readwrite'); t.objectStore('q').put({k, ts, v}, k); t.objectStore('m').put(getUrl(), 'url'); t.oncomplete = ok; t.onerror = ok; });
+    if ('serviceWorker' in navigator) { const reg = await navigator.serviceWorker.ready; if (reg && reg.sync) await reg.sync.register('qc-outbox'); }
+  } catch(e) {}
+}
+async function obDel(k, ts){
+  try {
+    const d = await obDb();
+    await new Promise(ok => { const t = d.transaction('q', 'readwrite'), os = t.objectStore('q'), g = os.get(k); g.onsuccess = () => { if (g.result && g.result.ts === ts) os.delete(k); }; t.oncomplete = ok; t.onerror = ok; });
+  } catch(e) {}
+}
+async function obMirror(id, ts){
+  try {
+    const kind = id.charAt(0), key = id.slice(2); let v = null;
+    if (kind === 'o') v = raw('qcout_' + key);
+    else if (kind === 'f') { const pv = window.QCOut ? await window.QCOut.photoGet(key) : undefined; if (pv === undefined) return; v = pv || null; }
+    else return;
+    await obPut(id, ts, v);
+  } catch(e) {}
+}
 function markDirty(id){
-  const d = jget(K.dirty, {}); d[id] = Date.now(); jset(K.dirty, d);
+  const d = jget(K.dirty, {}), ts = Date.now(); d[id] = ts; jset(K.dirty, d);
+  obMirror(id, ts);
   schedulePush();
 }
 function diffChecks(){
@@ -8673,7 +8706,7 @@ async function req(url, opts){
 const withQ = (u, q) => u + (u.indexOf('?') >= 0 ? '&' : '?') + q;
 
 /* ---------- kirim (push) ---------- */
-function schedulePush(){ clearTimeout(pushTimer); pushTimer = setTimeout(push, 1500); }
+function schedulePush(){ clearTimeout(pushTimer); pushTimer = setTimeout(push, 300); }
 async function push(){
   if (!getUrl()) return;
   if (busy) { schedulePush(); return; }
@@ -8682,12 +8715,12 @@ async function push(){
   try {
     let rejected = 0;
     for (;;) {
-      const cur = jget(K.dirty, {}), ids = Object.keys(cur).filter(i => !deferred.has(i));
+      const cur = jget(K.dirty, {}), ids = Object.keys(cur).filter(i => !deferred.has(i)).sort((a, b) => (/[fgm]/.test(a.charAt(0)) ? 0 : 1) - (/[fgm]/.test(b.charAt(0)) ? 0 : 1));   // foto dikirim lebih dulu
       if (!ids.length) break;
       const chk = jget(CHK, {}), uc = jget(UK, {}), batch = [], drop = [];
       let size = 0;
       for (const id of ids) {
-        if (batch.length >= 300 || size > 150000) break;
+        if (batch.length >= 300 || size > 600000) break;
         const kind = id.charAt(0), key = id.slice(2);
         let v = null;
         if (kind === 'b' || kind === 'y') {
@@ -8740,7 +8773,7 @@ async function push(){
         rejected += j.skipped || 0;
       }
       const nd = jget(K.dirty, {});
-      batch.forEach(b => { if (nd[b.id] === b.ts) delete nd[b.id]; });
+      batch.forEach(b => { if (nd[b.id] === b.ts) delete nd[b.id]; try { obDel(b.id, b.ts); } catch(e) {} });
       drop.forEach(id => delete nd[id]);
       jset(K.dirty, nd);
     }
@@ -9038,6 +9071,8 @@ function openModal(){
   $('qcsPoll').value = String(getPoll());
   setStatus(st.kind, getUrl() ? (st.kind === 'off' ? 'Terhubung' : st.msg) : 'Belum terhubung');
 }
+try { if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {}); } catch(e) {}
+document.addEventListener('visibilitychange', () => { if (document.hidden && getUrl() && pendingCount()) push(); });   // pindah aplikasi/tab: langsung kirim
 window.QCSync = {mark: id => { if (getUrl()) markDirty(id); }, projChanged, open: openModal, sync: () => tick(true), state: () => ({url: !!getUrl(), pending: pendingCount(), status: st})};
 })();
 </script>
@@ -9051,13 +9086,45 @@ window.QCSync = {mark: id => { if (getUrl()) markDirty(id); }, projChanged, open
  *
  * Tiap baris sheet = satu catatan: key | ts (waktu klien) | st (waktu server) | n (jumlah potongan) | potongan data...
  */
-var SHEET_NAME = 'QC_Sync';
+var SHEET_NAME = 'QC_Sync';   // nama tab yang berisi data sinkron (kolom key | ts | st | n)
+// WAJIB diisi bila script ini dibuat dari script.google.com (tidak lewat Extensions > Apps Script di dalam Sheet).
+// ID ada di alamat Sheet: docs.google.com/spreadsheets/d/<ID-INI>/edit
+var SPREADSHEET_ID = '';   // kosongkan bila script dibuat dari dalam Sheet (Extensions > Apps Script); isi ID Sheet bila dibuat dari script.google.com
+var VERSION = 'v5-2026-11-05';    // penanda: muncul di /exec?ping=1 bila kode TERBARU yang berjalan
+var ANS_SHEET = 'Tamu_Jawaban';   // tab jawaban tamu (dibuat otomatis saat jawaban pertama masuk)
 var CHUNK = 45000;      // batas sel Google Sheets = 50.000 karakter
 var MAX_CHUNKS = 20;    // maks ±900 KB per catatan
-var PAGE = 150;         // jumlah catatan per respons saat pull
+var PAGE = 150;         // maks jumlah catatan per respons saat pull
+var MAX_RESP = 1500000; // maks ±karakter per respons pull (foto besar dipecah ke beberapa putaran)
+
+function ss_() {
+  // Bersihkan ID: buang spasi, dan terima juga bila yang tertempel URL Sheet utuh
+  var id = String(SPREADSHEET_ID || '').trim().replace(/^.*\/d\//, '').replace(/[\/?#].*$/, '');
+  var ss;
+  try {
+    ss = id ? SpreadsheetApp.openById(id) : SpreadsheetApp.getActive();
+  } catch (err) {
+    throw new Error('SPREADSHEET_ID tidak bisa dibuka (panjang ' + id.length + ' karakter, normalnya ±44). Cek ID di bagian atas Code.gs. Detail: ' + err.message);
+  }
+  if (!ss) throw new Error('Script tidak terikat ke Sheet. Isi SPREADSHEET_ID di bagian atas Code.gs.');
+  return ss;
+}
+
+// Tes manual: pilih "cekId" di editor lalu Run, lihat Execution log
+function cekId() {
+  Logger.log('nama spreadsheet: ' + ss_().getName());
+  Logger.log('tab QC_Sync ada: ' + !!ss_().getSheetByName(SHEET_NAME));
+}
+
+// Dipakai halaman tamu: hanya membaca, tidak pernah membuat tab baru
+function tamuSheet_() {
+  var sh = ss_().getSheetByName(SHEET_NAME);
+  if (!sh) throw new Error('Tab "' + SHEET_NAME + '" tidak ditemukan. Samakan SHEET_NAME dengan nama tab data sinkron.');
+  return sh;
+}
 
 function sheet_() {
-  var ss = SpreadsheetApp.getActive();
+  var ss = ss_();
   var sh = ss.getSheetByName(SHEET_NAME);
   if (!sh) {
     sh = ss.insertSheet(SHEET_NAME);
@@ -9132,33 +9199,67 @@ function doPost(e) {
 
 // Kirim perubahan ke inspector: ?since=<st terakhir>
 function doGet(e) {
+  if (e && e.parameter && e.parameter.view === 'tamu') {
+    return HtmlService.createHtmlOutputFromFile('Tamu').setTitle('Outstanding Report')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  }
   try {
     var now = Date.now();
-    if (e.parameter.ping) return json_({ ok: true, now: now, records: [], more: false });
+    if (e.parameter.ping) return json_({ ok: true, v: VERSION, now: now, records: [], more: false });
+    if (e.parameter.debug) {   // diagnosa: /exec?debug=1
+      var info = { ok: true, v: VERSION };
+      try { var sp_ = ss_(); info.spreadsheet = sp_.getName(); info.tabs = sp_.getSheets().map(function (z) { return z.getName(); }); info.tabSync = !!sp_.getSheetByName(SHEET_NAME); }
+      catch (e2) { info.ok = false; info.error = String(e2); info.stack = String(e2 && e2.stack || ''); }
+      return json_(info);
+    }
+    if (e.parameter.photo) {   // ambil SATU foto langsung: /exec?photo=f:<id>_b
+      var key = String(e.parameter.photo), ps = sheet_(), pl = ps.getLastRow();
+      if (pl < 2) return json_({ ok: true, k: key, v: null });
+      var ph = ps.getRange(2, 1, pl - 1, 1).createTextFinder(key).matchEntireCell(true).findNext();
+      if (!ph) return json_({ ok: true, k: key, v: null });
+      var pn = Number(ps.getRange(ph.getRow(), 4).getValue()) || 0, pv = null;
+      if (pn > 0) {
+        var pc = ps.getRange(ph.getRow(), 5, 1, pn).getValues()[0];
+        pv = ''; for (var q = 0; q < pn; q++) pv += String(pc[q]).substring(1);
+      }
+      return json_({ ok: true, k: key, v: pv });
+    }
     var since = Number(e.parameter.since) || 0;
     var sh = sheet_();
     var last = sh.getLastRow();
     if (last < 2) return json_({ ok: true, now: now, records: [], more: false, cursor: since });
 
-    var st = sh.getRange(2, 3, last - 1, 1).getValues();
+    // hanya kolom C (st) dan D (n): ringan, tidak menyentuh isi foto
+    var meta = sh.getRange(2, 3, last - 1, 2).getValues();
     var hit = [];
-    for (var i = 0; i < st.length; i++) {
-      var s = Number(st[i][0]) || 0;
-      if (s > since) hit.push({ row: i + 2, st: s });
+    for (var i = 0; i < meta.length; i++) {
+      var s = Number(meta[i][0]) || 0;
+      if (s > since) hit.push({ row: i + 2, st: s, n: Number(meta[i][1]) || 0 });
     }
     hit.sort(function (a, b) { return a.st - b.st; });
-    var cut = Math.min(PAGE, hit.length);
+    var cut = 0, tot = 0;
+    while (cut < hit.length && cut < PAGE) {            // batasi jumlah DAN ukuran respons
+      var w = hit[cut].n * CHUNK;
+      if (cut > 0 && tot + w > MAX_RESP) break;
+      tot += w; cut++;
+    }
     while (cut < hit.length && hit[cut].st === hit[cut - 1].st) cut++;   // jangan memotong di antara catatan ber-st sama
     var page = hit.slice(0, cut);
     var more = hit.length > cut;
     var records = [];
 
     if (page.length) {
-      var maxC = sh.getLastColumn();
-      var data = null;
-      if (page.length > 10) data = sh.getRange(2, 1, last - 1, maxC).getValues();
+      var byRow = {}, rows = page.slice().sort(function (a, b) { return a.row - b.row; }), a1 = 0;
+      while (a1 < rows.length) {                        // baca hanya baris yang dibutuhkan, baris berurutan digabung
+        var b1 = a1, mx = rows[a1].n;
+        while (b1 + 1 < rows.length && rows[b1 + 1].row === rows[b1].row + 1) { b1++; mx = Math.max(mx, rows[b1].n); }
+        var vals = sh.getRange(rows[a1].row, 1, b1 - a1 + 1, 4 + mx).getValues();
+        for (var k2 = 0; k2 <= b1 - a1; k2++) byRow[rows[a1 + k2].row] = vals[k2];
+        a1 = b1 + 1;
+      }
       for (var p = 0; p < page.length; p++) {
-        var rw = data ? data[page[p].row - 2] : sh.getRange(page[p].row, 1, 1, maxC).getValues()[0];
+        var rw = byRow[page[p].row];
         var n = Number(rw[3]) || 0;
         var v = null;
         if (n > 0) {
@@ -9173,7 +9274,128 @@ function doGet(e) {
       cursor: page.length ? page[page.length - 1].st : since
     });
   } catch (err) {
-    return json_({ ok: false, error: String(err) });
+    return json_({ ok: false, v: VERSION, error: String(err), stack: String(err && err.stack || '') });
+  }
+}
+
+// ===== Halaman tamu: dipanggil oleh Tamu.html =====
+function getTamuItems() {
+  var sh = tamuSheet_(), last = sh.getLastRow(), items = [];
+  if (last >= 2) {
+    var data = sh.getRange(2, 1, last - 1, sh.getLastColumn()).getValues();
+    for (var i = 0; i < data.length; i++) {
+      var rw = data[i];
+      if (String(rw[0]).indexOf('o:') !== 0) continue;
+      var n = Number(rw[3]) || 0; if (!n) continue;
+      var v = ''; for (var c = 0; c < n; c++) v += String(rw[4 + c]).substring(1);
+      try { var o = JSON.parse(v); if (o && o.id) items.push(o); } catch (err) {}
+    }
+    items.sort(function (a, b) { return (a.c || 0) - (b.c || 0); });
+  }
+
+  // Gabungkan jawaban tamu dari tab Tamu_Jawaban (hanya baca, tidak membuat tab)
+  var as = ss_().getSheetByName(ANS_SHEET);
+  if (as && as.getLastRow() > 1) {
+    var m = {};
+    as.getRange(2, 1, as.getLastRow() - 1, 4).getValues().forEach(function (r) {
+      m[String(r[0])] = { by: r[1], ans: r[2], at: Number(r[3]) || 0 };
+    });
+    items.forEach(function (o) {
+      var a = m[String(o.id)];
+      if (a) { o.ans = a.ans; o.ansBy = a.by; o.ansAt = a.at; }
+    });
+  }
+  return { items: items, now: Date.now() };
+}
+
+function getTamuPhoto(id, side) {
+  var sh = tamuSheet_(), last = sh.getLastRow();
+  if (last < 2) return '';
+  var hit = sh.getRange(2, 1, last - 1, 1).createTextFinder('f:' + id + '_' + side).matchEntireCell(true).findNext();
+  if (!hit) return '';
+  var rw = sh.getRange(hit.getRow(), 1, 1, sh.getLastColumn()).getValues()[0];
+  var n = Number(rw[3]) || 0, v = '';
+  for (var c = 0; c < n; c++) v += String(rw[4 + c]).substring(1);
+  return v;
+}
+
+// Simpan jawaban tamu (satu jawaban per temuan; kirim ulang = memperbarui)
+function submitTamuAnswer(id, nama, jawaban) {
+  id = String(id || '');
+  nama = String(nama || '').trim().slice(0, 80);
+  jawaban = String(jawaban || '').trim().slice(0, 2000);
+  if (!id || !nama || !jawaban) return { ok: false, error: 'Data tidak lengkap' };
+
+  var it = getTamuItems().items.filter(function (o) { return String(o.id) === id; })[0];
+  if (!it) return { ok: false, error: 'Temuan tidak ditemukan' };
+  if (it.st === 'CLOSE') return { ok: false, error: 'Temuan sudah closed' };
+
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(15000); } catch (e) { return { ok: false, error: 'Server sibuk, coba lagi' }; }
+  try {
+    var ss = ss_(), sh = ss.getSheetByName(ANS_SHEET);
+    if (!sh) {
+      sh = ss.insertSheet(ANS_SHEET);
+      sh.appendRow(['id', 'nama', 'jawaban', 'waktu']);
+      sh.setFrozenRows(1);
+    }
+    var now = Date.now(), last = sh.getLastRow(), row = 0;
+    if (last > 1) {
+      var hit = sh.getRange(2, 1, last - 1, 1).createTextFinder(id).matchEntireCell(true).findNext();
+      if (hit) row = hit.getRow();
+    }
+    if (!row) row = last + 1;
+    sh.getRange(row, 1, 1, 4).setNumberFormat('@').setValues([[id, nama, jawaban, now]]); // format teks: aman dari rumus
+    return { ok: true, ans: jawaban, by: nama, at: now };
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ===== Master Project: hanya project/unit AKTIF yang ditampilkan di dashboard tamu =====
+// Dibaca dari catatan berawalan "p:" di tab QC_Sync (hanya baca).
+function getTamuMaster() {
+  var sh = tamuSheet_(), last = sh.getLastRow(), out = [];
+  if (last < 2) return { projects: out };
+  var data = sh.getRange(2, 1, last - 1, sh.getLastColumn()).getValues();
+  for (var i = 0; i < data.length; i++) {
+    var rw = data[i], key = String(rw[0]);
+    if (key.indexOf('p:') !== 0) continue;
+    var n = Number(rw[3]) || 0; if (!n) continue;
+    var v = ''; for (var c = 0; c < n; c++) v += String(rw[4 + c]).substring(1);
+    var o; try { o = JSON.parse(v); } catch (err) { continue; }
+    if (!o || typeof o !== 'object') continue;
+    var name = String(o.name || o.nama || o.n || o.proj || o.project || key.substring(2)).trim();
+    if (!name || name === 'NAMA_PROJECT') continue;
+    out.push({ name: name, units: masterUnits_(o), active: masterActive_(o) });
+  }
+  return { projects: out };
+}
+function masterActive_(o) {
+  if (o.archived || o.arsip || o.done || o.selesai || o.closed || o.nonaktif || o.inactive) return false;
+  if (o.active === false || o.aktif === false) return false;
+  return !/^(close|closed|done|selesai|arsip|archived|nonaktif|inactive|tidak aktif)$/i.test(String(o.status || ''));
+}
+function masterUnits_(o) {
+  var arr = o.units || o.unit || o.u || [], res = [];
+  if (!Array.isArray(arr)) arr = String(arr).split(/[,;\n]/);
+  arr.forEach(function (u) {
+    if (u && typeof u === 'object') { if (!masterActive_(u)) return; u = u.name || u.nama || u.n || u.unit; }
+    u = String(u || '').trim(); if (u) res.push(u);
+  });
+  return res;
+}
+// Tes manual: Run "cekMaster" lalu lihat Execution log (untuk memeriksa isi master project)
+function cekMaster() {
+  var m = getTamuMaster().projects;
+  Logger.log('jumlah master: ' + m.length + ' | aktif: ' + m.filter(function (x) { return x.active; }).length);
+  m.forEach(function (x) { Logger.log((x.active ? '[AKTIF] ' : '[non-aktif] ') + x.name + ' | unit: ' + x.units.join(', ')); });
+  var sh = tamuSheet_(), last = sh.getLastRow();
+  if (last > 1) {
+    var d = sh.getRange(2, 1, last - 1, 5).getValues();
+    for (var i = 0; i < d.length; i++) if (String(d[i][0]).indexOf('p:') === 0 && String(d[i][4])) { Logger.log('contoh data ' + d[i][0] + ': ' + String(d[i][4]).substring(1, 500)); break; }
   }
 }
 </script>
@@ -20377,11 +20599,21 @@ body.is-wi #qoBtn{display:none}
         '<p class="qo-note">Tgl Temuan terisi otomatis hari ini. Saat status diubah ke CLOSE, Tgl Close terisi otomatis dan lama penyelesaian (hari) dihitung. Semua perubahan tersimpan otomatis.</p>'+
       '</div>';
   }
+  var FETCHING={};
+  function fetchPhoto(k,im){
+    var u='';try{u=(localStorage.getItem('qc_sync_api_url')||'').trim();}catch(e){}
+    if(!u||FETCHING[k])return; FETCHING[k]=1;
+    fetch(u+(u.indexOf('?')>=0?'&':'?')+'photo='+encodeURIComponent('f:'+k)+'&_='+Date.now())
+      .then(function(r){return r.json();})
+      .then(function(j){ if(j&&j.ok&&j.v){ PH[k]=j.v; pput(k,j.v).catch(function(){}); if(im&&im.isConnected)im.src=j.v; } })
+      .catch(function(){})
+      .then(function(){ setTimeout(function(){delete FETCHING[k];},10000); });
+  }
   function hydrate(root){
     (root||ov).querySelectorAll('img[data-ph]').forEach(function(im){
       var k=im.getAttribute('data-ph');
       if(PH[k]){im.src=PH[k];return;}
-      pget(k).then(function(v){PH[k]=v;if(v)im.src=v;});
+      pget(k).then(function(v){PH[k]=v;if(v){im.src=v;return;}fetchPhoto(k,im);});
     });
   }
   function render(){
