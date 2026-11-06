@@ -8507,7 +8507,8 @@ const _set = Storage.prototype.setItem, _rem = Storage.prototype.removeItem;
 const K = {url:'qc_sync_api_url', cursor:'qc_sync_cursor', dirty:'qc_sync_dirty', inited:'qc_sync_inited', last:'qc_sync_last', src:'qc_sync_src', off:'qc_sync_off', inited2:'qc_sync_inited2'};
 const CHK = 'qc_checked_state', UK = 'qc_units', POLL_KEY = 'qc_sync_poll';
 const getPoll = () => Math.min(120000, Math.max(5000, Number(raw(POLL_KEY)) || 15000));   // jeda ambil data (ms), default 15 dtk
-let busy = false, pushTimer = null, pollTimer = null, bigProj = '', gen = 0, busySince = 0;
+let busy = false, pushTimer = null, pollTimer = null, bigProj = '', gen = 0, busySince = 0, idleOn = false, lastAct = Date.now();
+const IDLE_MS = 180000;   // tidak ada perubahan (lokal/dari inspector lain) selama 3 menit -> sinkron otomatis berhenti, lanjut sendiri saat ada perubahan/aktivitas
 let st = {kind:'off', msg:'Belum terhubung'};
 
 const raw  = k => { try { return LS.getItem(k); } catch(e) { return null; } };
@@ -8610,6 +8611,7 @@ function ensureLive(){
     '#qcLive[data-k=ok] .ql-ck{display:block}',
     '#qcLive[data-k=ok] .ql-ic:after{content:"";position:absolute;inset:1px;border-radius:50%;border:2px solid #22c55e;animation:qlripple 2.2s ease-out infinite}',
     '#qcLive[data-k=ok]{border-color:#1f7a47}',
+    '#qcLive[data-idle="1"] .ql-ic:after{animation:none;display:none}',
     '#qcLive[data-k=pending] .ql-dot,#qcLive[data-k=stale] .ql-dot{display:block;background:#f59e0b;animation:qlpulse 1.1s ease-in-out infinite}',
     '#qcLive[data-k=pending],#qcLive[data-k=stale]{border-color:#9a6a12}',
     '#qcLive[data-k=err] .ql-dot{display:block;background:#ef4444;animation:qlshake .5s ease-in-out infinite}',
@@ -8666,10 +8668,12 @@ function renderLive(){
   else if (kind === 'ok') {
     if (srvOld) { k = 'pending'; t1 = 'Tersinkron (server lama)'; t2 = 'Pasang Code v6 di Apps Script'; }
     else if (!fullAt) { k = 'busy'; t1 = 'Menyinkronkan…'; t2 = 'Mohon tunggu'; }
+    else if (idleOn) { k = 'ok'; t1 = 'Sinkron selesai · tidak ada perubahan'; t2 = 'Berhenti otomatis, lanjut saat ada perubahan' + (last ? ' · terakhir ' + last : ''); }
     else if (ago > Math.max(60, getPoll() / 1000 * 4)) { k = 'stale'; t1 = 'Menunggu sinkron berikutnya…'; t2 = 'Terakhir ' + last + ' · ' + agoT; }
     else { k = 'ok'; t1 = 'Sinkron penuh · data terbaru'; t2 = 'Terakhir ' + last + ' · ' + agoT; }
   } else { k = 'off'; t1 = 'Menyiapkan sinkron…'; t2 = ''; }
   if (el.dataset.k !== k) el.dataset.k = k;
+  el.dataset.idle = (idleOn && k === 'ok') ? '1' : '0';
   const a = el.querySelector('.ql-st'), b = el.querySelector('.ql-sub');
   if (a.textContent !== t1) a.textContent = t1; if (b.textContent !== t2) b.textContent = t2;
   el.title = t1 + (t2 ? ' — ' + t2 : '') + '. Klik untuk membuka pengaturan sinkronisasi.';
@@ -8950,7 +8954,7 @@ async function slimPhoto(id, v){
   if (slimCache.size > 30) slimCache.clear();
   slimCache.set(ck, out); return out;
 }
-function schedulePush(){ clearTimeout(pushTimer); pushTimer = setTimeout(push, 300); }
+function schedulePush(){ noteChange(); clearTimeout(pushTimer); pushTimer = setTimeout(push, 300); }
 async function push(){
   if (!getUrl()) return;
   if (busy) { watchdog(); schedulePush(); return; }
@@ -9175,6 +9179,7 @@ async function pull(){
       if (j.more) { if (!(Number(j.cursor) > since) || ++pages > 500) throw new Error('Server tidak maju (cursor sama), dicoba lagi nanti'); since = j.cursor; _set.call(LS, K.cursor, String(since)); setStatus('busy', 'Mengambil data… (' + total + ')'); }
       else break;
     }
+    if (total > 0) noteChange();   // ada data dari inspector lain: tetap aktif
     _set.call(LS, K.cursor, String(Math.max(0, srvNow - 5000)));   // tumpang tindih 5 dtk agar tidak ada yang terlewat
     okMsg();
   } catch(e) {
@@ -9210,7 +9215,23 @@ async function tick(force){
   if (document.hidden && !force) return;
   await pull();
   await push();
+  checkIdle();
 }
+/* ---------- mode istirahat: tidak ada perubahan -> berhenti sinkron berkala ---------- */
+function checkIdle(){
+  if (!getUrl() || idleOn) return;
+  if (!busy && !pendingCount() && st.kind === 'ok' && Date.now() - lastAct > IDLE_MS) {
+    idleOn = true; clearInterval(pollTimer); pollTimer = null; renderLive();
+  }
+}
+function resume(){      // lanjutkan sinkron berkala
+  lastAct = Date.now();
+  if (!idleOn) return;
+  idleOn = false; clearInterval(pollTimer);
+  if (getUrl()) pollTimer = setInterval(tick, getPoll());
+  renderLive();
+}
+function noteChange(){ resume(); }
 function start(){
   clearInterval(pollTimer);
   if (!getUrl()) { setStatus('off', 'Belum terhubung'); return; }
@@ -9243,6 +9264,7 @@ function start(){
       jset(K.dirty, d); _set.call(LS, 'qc_sync_inited6', '1'); schedulePush();
     } catch(e) {}
   }
+  idleOn = false; lastAct = Date.now();
   tick(true);
   pollTimer = setInterval(tick, getPoll());
 }
@@ -9250,6 +9272,12 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) tick
 window.addEventListener('online', () => tick(true));
 window.addEventListener('focus', () => { if (getUrl()) tick(true); });
 window.addEventListener('load', () => setTimeout(start, 2500));
+/* sedang istirahat: sentuhan/ketikan memicu SATU kali cek data baru (sinkron berkala lanjut bila ternyata ada perubahan) */
+let lastWakeAt = 0;
+['pointerdown', 'keydown', 'touchstart'].forEach(ev => document.addEventListener(ev, () => {
+  if (!idleOn || !getUrl()) return;
+  const n = Date.now(); if (n - lastWakeAt < 10000) return; lastWakeAt = n; tick(true);
+}, {passive: true, capture: true}));
 
 /* ---------- antarmuka ---------- */
 const inp = 'width:100%;box-sizing:border-box;background:#0f172a;color:#f8fafc;border:1px solid #334155;border-radius:6px;padding:8px 10px;font-size:.85rem';
@@ -9331,9 +9359,9 @@ function openModal(){
     $('qcsCopy').onclick = copyCode; $('qcsSave').onclick = saveUrl;
     $('qcsPoll').onchange = () => {
       _set.call(LS, POLL_KEY, $('qcsPoll').value);
-      clearInterval(pollTimer); if (getUrl()) pollTimer = setInterval(tick, getPoll());   // langsung berlaku
+      idleOn = false; lastAct = Date.now(); clearInterval(pollTimer); if (getUrl()) pollTimer = setInterval(tick, getPoll());   // langsung berlaku
     };
-    $('qcsNow').onclick = () => tick(true); $('qcsInv').onclick = copyInvite; $('qcsPerm').onclick = copyPerm; $('qcsOff').onclick = disconnect; $('qcsClose').onclick = closeModal;
+    $('qcsNow').onclick = () => { resume(); tick(true); }; $('qcsInv').onclick = copyInvite; $('qcsPerm').onclick = copyPerm; $('qcsOff').onclick = disconnect; $('qcsClose').onclick = closeModal;
   }
   m.style.display = 'flex';
   $('qcsUrl').value = getUrl();
