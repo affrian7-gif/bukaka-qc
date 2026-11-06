@@ -8506,8 +8506,8 @@ const LS = window.localStorage;
 const _set = Storage.prototype.setItem, _rem = Storage.prototype.removeItem;
 const K = {url:'qc_sync_api_url', cursor:'qc_sync_cursor', dirty:'qc_sync_dirty', inited:'qc_sync_inited', last:'qc_sync_last', src:'qc_sync_src', off:'qc_sync_off', inited2:'qc_sync_inited2'};
 const CHK = 'qc_checked_state', UK = 'qc_units', POLL_KEY = 'qc_sync_poll';
-const getPoll = () => Math.min(120000, Math.max(5000, Number(raw(POLL_KEY)) || 6000));   // jeda ambil data (ms), default 15 dtk
-let busy = false, pushTimer = null, pollTimer = null, bigProj = '';
+const getPoll = () => Math.min(120000, Math.max(5000, Number(raw(POLL_KEY)) || 15000));   // jeda ambil data (ms), default 15 dtk
+let busy = false, pushTimer = null, pollTimer = null, bigProj = '', gen = 0, busySince = 0;
 let st = {kind:'off', msg:'Belum terhubung'};
 
 const raw  = k => { try { return LS.getItem(k); } catch(e) { return null; } };
@@ -8569,7 +8569,6 @@ function setStatus(kind, msg){
   const dot = $('qcSyncDot'); if (dot) dot.style.color = col;
   const s = $('qcsStatus'); if (s) { s.textContent = msg; s.style.color = col; }
   const b = $('qcSyncBtn'); if (b) b.title = 'Sinkronisasi: ' + msg;
-  const ic = $('qcSyncIco'); if (ic) ic.classList.toggle('qc-spin', kind === 'busy');
   renderLive();
 }
 function okMsg(){
@@ -8646,9 +8645,10 @@ function tickClock(){
   renderLive();
 }
 function renderLive(){
+  { const ic = $('qcSyncIco'); if (ic) ic.classList.toggle('qc-spin', st.kind === 'busy' && !!busyAt && Date.now() - busyAt > 1500); }
   const el = ensureLive(); if (!el) return;
-  if (st.kind === 'busy' && busyAt && Date.now() - busyAt < 600) {   // pengambilan singkat tidak perlu berkedip
-    clearTimeout(rlT); rlT = setTimeout(renderLive, 620 - (Date.now() - busyAt)); return;
+  if (st.kind === 'busy' && busyAt && Date.now() - busyAt < 1500) {   // pengambilan singkat tidak perlu berkedip
+    clearTimeout(rlT); rlT = setTimeout(renderLive, 1520 - (Date.now() - busyAt)); return;
   }
   const n = pendingCount(), kind = st.kind, srvOld = srvKnown && srvV !== EXPECT_V;
   const last = fullAt ? hms(new Date(fullAt)) : '', ago = fullAt ? Math.max(0, Math.round((Date.now() - fullAt) / 1000)) : 0;
@@ -8781,7 +8781,7 @@ function coatSaved(st){
 }
 function coatPiece(key){ return key === '~layout' ? raw(CL) : (coatPieces(coatLoad())[key] ?? null); }
 let _cdb = null;
-const cdb = () => _cdb || (_cdb = new Promise((ok, no) => { const q = indexedDB.open('dcs_bb_photos', 1); q.onupgradeneeded = () => q.result.createObjectStore('p'); q.onsuccess = () => ok(q.result); q.onerror = () => no(q.error); }));
+const cdb = () => _cdb || (_cdb = new Promise((ok, no) => { const q = indexedDB.open('dcs_bb_photos', 1); q.onupgradeneeded = () => q.result.createObjectStore('p'); q.onsuccess = () => ok(q.result); q.onerror = () => { _cdb = null; no(q.error); }; q.onblocked = () => { _cdb = null; no(new Error('IndexedDB blocked')); }; }));
 const cpGet = k => cdb().then(d => new Promise(ok => { const r = d.transaction('p').objectStore('p').get(k); r.onsuccess = () => ok(r.result || ''); r.onerror = () => ok(''); })).catch(() => '');
 const cpPut = (k, v) => cdb().then(d => new Promise((ok, no) => { const t = d.transaction('p', 'readwrite'), s = t.objectStore('p'); if (v) s.put(v, k); else s.delete(k); t.oncomplete = ok; t.onerror = () => no(t.error); }));
 async function coatPhotoGet(key){   // string = ada · null = dihapus · undefined = belum ada di perangkat ini
@@ -8906,15 +8906,27 @@ Storage.prototype.removeItem = function(k){
 
 /* ---------- jaringan ---------- */
 async function req(url, opts){
-  const ac = new AbortController(), to = setTimeout(() => ac.abort(), 60000);
+  const ac = new AbortController(), to = setTimeout(() => ac.abort(), 30000);
   try {
     const res = await fetch(url, Object.assign({signal: ac.signal}, opts || {}));
-    const j = await res.json();
+    const txt = await res.text();
+    let j; try { j = JSON.parse(txt); } catch(e) { throw new Error('Balasan server bukan JSON (cek Deploy Apps Script: akses harus Anyone, atau kuota harian habis)'); }
     if (!j || !j.ok) throw new Error((j && j.error) || 'Respons server tidak valid');
     return j;
+  } catch(e) {
+    if (e && e.name === 'AbortError') throw new Error('Server tidak merespons (timeout 30 detik)');
+    throw e;
   } finally { clearTimeout(to); }
 }
 const withQ = (u, q) => u + (u.indexOf('?') >= 0 ? '&' : '?') + q;
+const TMO = {timeout: 1};
+const wt = (p, ms) => Promise.race([Promise.resolve(p), new Promise(ok => setTimeout(() => ok(TMO), ms))]);
+function watchdog(){   // sinkron macet >90 dtk tanpa kemajuan: lepas kunci 'busy' agar tidak muter selamanya
+  if (busy && busySince && Date.now() - busySince > 90000) {
+    gen++; busy = false;
+    setStatus('err', 'Sinkron sempat macet, dicoba lagi otomatis');
+  }
+}
 
 /* ---------- kirim (push) ---------- */
 /* Foto diperkecil HANYA untuk salinan yang dikirim (asli di HP tetap): target <= ~240 rb karakter agar 1 request bisa membawa beberapa foto */
@@ -8924,7 +8936,7 @@ async function slimPhoto(id, v){
   const ck = id + ':' + v.length; if (slimCache.has(ck)) return slimCache.get(ck);
   let out = v;
   try {
-    const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = v; });
+    const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; setTimeout(no, 10000); i.src = v; });
     const W = im.naturalWidth || im.width, H = im.naturalHeight || im.height;
     for (const [d, q] of [[1100, .72], [900, .66], [760, .6], [640, .55]]) {
       const k = Math.min(1, d / Math.max(W, H)), c = document.createElement('canvas');
@@ -8941,14 +8953,15 @@ async function slimPhoto(id, v){
 function schedulePush(){ clearTimeout(pushTimer); pushTimer = setTimeout(push, 300); }
 async function push(){
   if (!getUrl()) return;
-  if (busy) { schedulePush(); return; }
+  if (busy) { watchdog(); schedulePush(); return; }
   if (!pendingCount()) return;
-  busy = true; deferred.clear(); setStatus('busy', 'Mengirim…');
+  busy = true; const my = ++gen; busySince = Date.now(); deferred.clear(); setStatus('busy', 'Mengirim…');
   try {
-    let rejected = 0;
+    let rejected = 0, rounds = 0;
     for (;;) {
       const cur = jget(K.dirty, {}), ids = Object.keys(cur).filter(i => !deferred.has(i)).sort((a, b) => (/[fgm]/.test(a.charAt(0)) ? 0 : 1) - (/[fgm]/.test(b.charAt(0)) ? 0 : 1));   // foto dikirim lebih dulu
       if (!ids.length) break;
+      if (++rounds > 300) break; busySince = Date.now();
       const chk = jget(CHK, {}), uc = jget(UK, {}), batch = [], drop = [];
       let size = 0;
       for (const id of ids) {
@@ -8957,20 +8970,20 @@ async function push(){
         let v = null;
         if (kind === 'b' || kind === 'y') {
           if (!window.BankIR || !window.BankIR.getForSync) { deferred.add(id); continue; }
-          const pv = await window.BankIR.getForSync(kind, key);
+          const pv = await wt(window.BankIR.getForSync(kind, key), 15000); if (pv === TMO) { deferred.add(id); continue; }
           if (pv === undefined) { drop.push(id); continue; }
           if (pv && pv.wait) { deferred.add(id); continue; }   // foto report dikirim dulu, isi report menyusul
           v = pv;
         } else if (kind === 'o') { v = raw('qcout_' + key); } else if (kind === 'f') {
-          const pv = window.QCOut ? await window.QCOut.photoGet(key) : undefined;
+          const pv = window.QCOut ? await wt(window.QCOut.photoGet(key), 15000) : undefined; if (pv === TMO) { deferred.add(id); continue; }
           if (pv === undefined) { drop.push(id); continue; }              // foto belum ada di perangkat ini: jangan kirim penghapusan
           v = pv || null;
         } else if (kind === 'n' || kind === 'g') {
-          const pv = window.QCInc ? await window.QCInc.getForSync(kind, key) : undefined;
+          const pv = window.QCInc ? await wt(window.QCInc.getForSync(kind, key), 15000) : undefined; if (pv === TMO) { deferred.add(id); continue; }
           if (pv === undefined) { drop.push(id); continue; }
           if (pv && pv.wait) { deferred.add(id); continue; }   // foto belum selesai tersimpan: coba lagi nanti
           v = pv;
-        } else if (kind === 'k') { const ck = coatPiece(key); v = (ck === undefined) ? null : ck; } else if (kind === 'm') { const pv = await coatPhotoGet(key); if (pv === undefined) { drop.push(id); continue; } v = pv || null; } else if (kind === 'd') { v = raw('boqdwg_' + key); } else if (kind === 'a') { v = raw('qcadd_' + key); } else if (kind === 'w') { v = raw('qcusr_' + key); } else if (kind === 'c') {
+        } else if (kind === 'k') { const ck = coatPiece(key); v = (ck === undefined) ? null : ck; } else if (kind === 'm') { const pv = await wt(coatPhotoGet(key), 15000); if (pv === TMO) { deferred.add(id); continue; } if (pv === undefined) { drop.push(id); continue; } v = pv || null; } else if (kind === 'd') { v = raw('boqdwg_' + key); } else if (kind === 'a') { v = raw('qcadd_' + key); } else if (kind === 'w') { v = raw('qcusr_' + key); } else if (kind === 'c') {
           v = (key in chk) ? String(!!chk[key]) : null;
         } else if (kind === 'l') {
           const lb = jget(LBLK, {}); v = (key in lb) ? String(lb[key]) : null;
@@ -9020,7 +9033,7 @@ async function push(){
     if (bigProj) { const b = bigProj; bigProj = ''; setStatus('err', 'Project "' + b + '" terlalu besar untuk disinkronkan lewat Google Sheet'); } else okMsg();
   } catch(e) {
     setStatus('err', 'Gagal kirim: ' + (e.message || e) + ' (akan dicoba lagi)');
-  } finally { busy = false; }
+  } finally { if (gen === my) busy = false; }
 }
 
 /* ---------- terima (pull) ---------- */
@@ -9145,11 +9158,11 @@ async function flushExtra(){
 async function pull(){
   if (!getUrl()) return;
   if (busy) return;
-  busy = true; setStatus('busy', 'Mengambil data…');
+  busy = true; const my = ++gen; busySince = Date.now(); setStatus('busy', 'Mengambil data…');
   try {
     if (!(await whenProj())) throw new Error('Data project belum siap, mencoba lagi');
     initProj();
-    let since = Number(raw(K.cursor)) || 0, srvNow = 0, total = 0;
+    let since = Number(raw(K.cursor)) || 0, srvNow = 0, total = 0, pages = 0;
     for (;;) {
       const t0 = Date.now();
       const j = await req(withQ(getUrl(), 'since=' + since + '&_=' + t0));
@@ -9157,15 +9170,16 @@ async function pull(){
       srvV = j.v || ''; srvKnown = true;
       srvNow = j.now || srvNow;
       total += applyRecords(j.records || []);
-      await flushExtra();
-      if (j.more) { since = j.cursor; _set.call(LS, K.cursor, String(since)); setStatus('busy', 'Mengambil data… (' + total + ')'); }
+      { const fx = await wt(flushExtra(), 45000); if (fx === TMO) throw new Error('Menerapkan data terlalu lama (penyimpanan browser macet?). Tutup tab lain lalu muat ulang'); }
+      busySince = Date.now();
+      if (j.more) { if (!(Number(j.cursor) > since) || ++pages > 500) throw new Error('Server tidak maju (cursor sama), dicoba lagi nanti'); since = j.cursor; _set.call(LS, K.cursor, String(since)); setStatus('busy', 'Mengambil data… (' + total + ')'); }
       else break;
     }
     _set.call(LS, K.cursor, String(Math.max(0, srvNow - 5000)));   // tumpang tindih 5 dtk agar tidak ada yang terlewat
     okMsg();
   } catch(e) {
     setStatus('err', 'Gagal ambil data: ' + (e.message || e));
-  } finally { busy = false; }
+  } finally { if (gen === my) busy = false; }
 }
 
 /* ---------- siklus ---------- */
@@ -9191,6 +9205,7 @@ function initialUpload(){
   jset(K.dirty, d); _set.call(LS, K.inited, '1');
 }
 async function tick(force){
+  watchdog();
   if (!getUrl()) return;
   if (document.hidden && !force) return;
   await pull();
