@@ -8491,7 +8491,7 @@ window.addEventListener('DOMContentLoaded', () => {
   for(var k=localStorage.length-1;k>=0;k--){var key=localStorage.key(k);if(key&&key.indexOf('qc_sl_hash_')===0)localStorage.removeItem(key)}
 }catch(e){console.warn('link pengaturan gagal',e)}})();
 </script>
-<script>window.QC_SYNC_URL='https://script.google.com/macros/s/AKfycbwA9d5Z_ktXNNFLSLcNog4vM8bDGilBARzi_F3JBT5uGg4DBwFbA31rpuKc4QHmTDdqrA/exec';</script>
+<script>window.QC_SYNC_URL='https://script.google.com/macros/s/AKfycbxNZit-L4IoWWG4qRFARpFydVk41qo7MoqLIYfOIRfNXhe_8mvNvM0AORkypUeRc7q9IA/exec';</script>
 <script id="gx-boot">(function(){var h0=location.hash||'',m=/[#&]tamu(?:=([^&]*))?/.exec(h0),tt=/[#&]t=([A-Za-z0-9_-]{20,})/.exec(h0),pp=/[#&]p=([^&]*)/.exec(h0);if(!m&&!tt)return;window.__gxGuest=1;if(pp){try{window.__gxTarget=decodeURIComponent(pp[1]);}catch(e){}if(window.__gxTarget)document.documentElement.classList.add('gx-lock');}try{var u=(m&&m[1])?decodeURIComponent(m[1]):(tt?'https://script.google.com/macros/s/'+tt[1]+'/exec':''),L=localStorage,S=Storage.prototype.setItem,R=Storage.prototype.removeItem;if(/^https:\/\/script\.google\.com\/macros\/s\/[^\s]+\/exec(\?.*)?$/.test(u)&&L.getItem('qc_sync_api_url')!==u){['qc_sync_cursor','qc_sync_inited','qc_sync_inited2','qc_sync_off'].forEach(function(k){R.call(L,k);});S.call(L,'qc_sync_src','manual');S.call(L,'qc_sync_api_url',u);}}catch(e){}document.documentElement.classList.add('gx-guest');})();</script><script id="qc-sync">
 /* ===== SINKRON ANTAR INSPECTOR (Google Apps Script + Google Sheet) =====
    - Centang  : localStorage 'qc_checked_state'  -> catatan 'c:<PROJECT_idx>'
@@ -9347,11 +9347,13 @@ window.QCSync = {mark: id => { if (getUrl()) markDirty(id); }, projChanged, open
 </script>
 <script type="text/plain" id="qcSyncGS" style="display:none">
 /**
- * QC Inspection - Sinkronisasi antar Inspector
- * Tempel kode ini di: Google Sheet -> Extensions -> Apps Script
- * Lalu: Deploy -> New deployment -> Web app
- *   Execute as: Me | Who has access: Anyone
- * Salin URL berakhiran /exec, tempel di dashboard (tombol "Sinkron").
+ * QC Inspection - GABUNGAN: Sinkronisasi antar Inspector + Pembaca Google Sheet (tombol "Sheet")
+ * SATU file ini menggantikan SEMUA file .gs lain di project (hapus boq_sync.gs lama / "Appsscript sheet.gs").
+ * Hanya boleh ada SATU fungsi doGet di seluruh project; jalurnya dipilih otomatis lewat parameter:
+ *   ?id=<ID spreadsheet>[&gid=<tab>]  -> pembaca Sheet (tombol "Sheet")
+ *   ?view=tamu                        -> halaman tamu (Tamu.html)
+ *   selain itu (since/ping/photo/debug)-> sinkronisasi antar inspector
+ * Deploy -> New deployment -> Web app | Execute as: Me | Who has access: Anyone
  *
  * Tiap baris sheet = satu catatan: key | ts (waktu klien) | st (waktu server) | n (jumlah potongan) | potongan data...
  */
@@ -9359,6 +9361,8 @@ var SHEET_NAME = 'QC_Sync';   // nama tab yang berisi data sinkron (kolom key | 
 // WAJIB diisi bila script ini dibuat dari script.google.com (tidak lewat Extensions > Apps Script di dalam Sheet).
 // ID ada di alamat Sheet: docs.google.com/spreadsheets/d/<ID-INI>/edit
 var SPREADSHEET_ID = '1SRHyth8zSHVICy1B_cNdJ8Vl8H2gLvIhtp0Sd6Vfeds';   // kosongkan bila script dibuat dari dalam Sheet (Extensions > Apps Script); isi ID Sheet bila dibuat dari script.google.com
+// Opsional keamanan untuk pembaca Sheet (?id=): isi dengan ID spreadsheet yang BOLEH dibaca. Kosong = semua Sheet yang bisa diakses akun Anda bisa dibaca pemegang URL.
+var ALLOWED_IDS = [];   // contoh: ['1SRHyth8zSHVICy1B_cNdJ8Vl8H2gLvIhtp0Sd6Vfeds', '1AbC...']
 var VERSION = 'v6-2026-11-06';    // penanda: muncul di /exec?ping=1 bila kode TERBARU yang berjalan
 var ANS_SHEET = 'Tamu_Jawaban';   // tab jawaban tamu (dibuat otomatis saat jawaban pertama masuk)
 var CHUNK = 45000;      // batas sel Google Sheets = 50.000 karakter
@@ -9484,7 +9488,10 @@ function doPost(e) {
 
 // Kirim perubahan ke inspector: ?since=<st terakhir>
 function doGet(e) {
-  if (e && e.parameter && e.parameter.view === 'tamu') {
+  e = e || {};
+  e.parameter = e.parameter || {};
+  if (e.parameter.id || e.parameter.gid) return readSheet_(e.parameter);   // pembaca Sheet (tombol "Sheet")
+  if (e.parameter.view === 'tamu') {
     return HtmlService.createHtmlOutputFromFile('Tamu').setTitle('Outstanding Report')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
@@ -9687,6 +9694,28 @@ function cekMaster() {
     for (var i = 0; i < d.length; i++) if (String(d[i][0]).indexOf('p:') === 0 && String(d[i][4])) { Logger.log('contoh data ' + d[i][0] + ': ' + String(d[i][4]).substring(1, 500)); break; }
   }
 }
+
+// ===== Pembaca Google Sheet (dulu file "Appsscript sheet.gs") =====
+// Perbaikan: tanpa ?id= memakai Sheet sinkron (SPREADSHEET_ID), bukan getActive() yang null pada script mandiri.
+function readSheet_(p) {
+  try {
+    var id = String(p.id || '').trim().replace(/^.*\/d\//, '').replace(/[\/?#].*$/, '');
+    if (id && ALLOWED_IDS.length && ALLOWED_IDS.indexOf(id) < 0) {
+      return json_({ ok: false, error: 'Spreadsheet ini tidak diizinkan (ALLOWED_IDS)' });
+    }
+    var ss = id ? SpreadsheetApp.openById(id) : ss_();
+    var sh = null;
+    if (p.gid) {
+      ss.getSheets().forEach(function (z) { if (String(z.getSheetId()) === String(p.gid)) sh = z; });
+      if (!sh) return json_({ ok: false, error: 'Tab dengan gid ' + p.gid + ' tidak ditemukan' });
+    }
+    if (!sh) sh = ss.getSheets()[0];
+    return json_({ ok: true, v: VERSION, rows: sh.getDataRange().getDisplayValues(), name: sh.getName() });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
 </script>
 
 
@@ -22302,7 +22331,7 @@ function guestLink(){var u=(localStorage.getItem('qc_sync_api_url')||'').trim();
  if(location.protocol==='file:'){alert('File ini masih dibuka dari komputer (file://). Agar tamu bisa membuka lewat internet, unggah index.html ini ke hosting (GitHub Pages, Netlify, dsb.), buka dari alamat https-nya, lalu tekan tombol ini lagi.');return;}
  var l=location.origin+location.pathname+'#tamu='+encodeURIComponent(u);
  (navigator.clipboard?navigator.clipboard.writeText(l):Promise.reject()).then(function(){toast('🔗 Link tamu disalin.');},function(){prompt('Salin link tamu:',l);});}
-var TAMU_URL='https://script.google.com/macros/s/AKfycbwA9d5Z_ktXNNFLSLcNog4vM8bDGilBARzi_F3JBT5uGg4DBwFbA31rpuKc4QHmTDdqrA/exec?view=tamu';
+var TAMU_URL='https://script.google.com/macros/s/AKfycbxNZit-L4IoWWG4qRFARpFydVk41qo7MoqLIYfOIRfNXhe_8mvNvM0AORkypUeRc7q9IA/exec?view=tamu';
 function outLink(){var l=TAMU_URL;(navigator.clipboard?navigator.clipboard.writeText(l):Promise.reject()).then(function(){toast('🌐 Link Outstanding tamu disalin.');},function(){prompt('Salin link:',l);});}
 window.gxOutLink=outLink;
 var MN={comp:'FAT',fab:'Fabrikasi Main Assy',nt:'Fabrication & Preparation',wi:'WI & NDT',inc:'Incoming',ship:'Pengiriman',coat:'Coating Inspection'},MI={comp:'🧪',fab:'🏗️',nt:'🚇',wi:'🔍',inc:'📦',ship:'🚚',coat:'🎨'};
