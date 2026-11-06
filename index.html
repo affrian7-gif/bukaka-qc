@@ -8516,7 +8516,7 @@ const jget = (k, d) => { try { const v = raw(k); return v ? JSON.parse(v) : d; }
 const jset = (k, v) => { try { _set.call(LS, k, JSON.stringify(v)); } catch(e) {} };
 const getUrl = () => (raw(K.url) || '').trim();
 /* ---- v6: waktu server sebagai acuan (jam HP yang salah tidak lagi membuat foto/data lama menang) ---- */
-const SKEW_KEY = 'qc_sync_skew', EXPECT_V = 'v12-2026-11-06', LBLK = 'qc_unitlabels', TYPK = 'qc_types';
+const SKEW_KEY = 'qc_sync_skew', EXPECT_V = 'v15-2026-11-06', LBLK = 'qc_unitlabels', TYPK = 'qc_types';
 let skew = Number(raw(SKEW_KEY)) || 0, srvV = '', srvKnown = false, metaCh = false;
 const bigWarn = new Set();
 const sts = t => (t > 1e12 ? t + skew : t);          // waktu lokal -> waktu server (penanda ts=1 tidak diubah)
@@ -8948,7 +8948,7 @@ function coatMeta(key){
 /* Foto diperkecil HANYA untuk salinan yang dikirim (asli di HP tetap): target <= ~240 rb karakter agar 1 request bisa membawa beberapa foto */
 const SLIM_MAX = 150000, slimCache = new Map();
 /* ---- anti kirim-ulang foto: catat tanda-tangan (sig) foto yang SUDAH diterima server ---- */
-const SENT_K = 'qc_sent_v1', SRVTS_K = 'qc_srvts_v1', SEEN_K = 'qc_drvseen', PH_RE = /^[fgmnby]:/;
+const SENT_K = 'qc_sent_v1', SRVTS_K = 'qc_srvts_v1', SEEN_K = 'qc_drvseen', PH_RE = /^[fgmnby]:/, FULLP_K = 'qc_fullph_v1', FQ_K = 'qc_fullq_v1', FD_K = 'qc_fulldrv_v1';
 function photoSig(v){ let h = 2166136261 >>> 0; const n = v.length, step = n > 600000 ? 3 : 1; for (let i = 0; i < n; i += step) { h ^= v.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return n + ':' + h.toString(36); }
 function trimMap(o, max){ const ks = Object.keys(o); if (ks.length > max) ks.slice(0, ks.length - max).forEach(k => delete o[k]); return o; }
 function trackSrv(raws, res){   // dipanggil dari pull: catat foto yang sudah ada di server (+ waktunya) dan isi foto yang sudah dimiliki perangkat
@@ -8959,19 +8959,20 @@ function trackSrv(raws, res){   // dipanggil dari pull: catat foto yang sudah ad
     if (ch) { jset(SRVTS_K, trimMap(ts, 20000)); jset(SENT_K, trimMap(sn, 20000)); }
   } catch(e) {}
 }
-async function slimPhoto(id, v){
-  if (typeof v !== 'string' || v.length <= SLIM_MAX || v.indexOf('data:image/') !== 0) return v;
-  const ck = id + ':' + v.length; if (slimCache.has(ck)) return slimCache.get(ck);
+async function slimPhoto(id, v, th){
+  const mx = th ? 30000 : SLIM_MAX;   // v14: thumbnail (<= ~30 rb karakter) untuk foto f/g/m; Bank IR tetap kualitas report
+  if (typeof v !== 'string' || v.length <= mx || v.indexOf('data:image/') !== 0) return v;
+  const ck = id + ':' + v.length + (th ? 't' : ''); if (slimCache.has(ck)) return slimCache.get(ck);
   let out = v;
   try {
     const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; setTimeout(no, 10000); i.src = v; });
     const W = im.naturalWidth || im.width, H = im.naturalHeight || im.height;
-    for (const [d, q] of [[1100, .72], [900, .66], [760, .6], [640, .55]]) {
+    for (const [d, q] of (th ? [[420, .68], [340, .6], [280, .52], [220, .45]] : [[1100, .72], [900, .66], [760, .6], [640, .55]])) {
       const k = Math.min(1, d / Math.max(W, H)), c = document.createElement('canvas');
       c.width = Math.max(1, Math.round(W * k)); c.height = Math.max(1, Math.round(H * k));
       const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(im, 0, 0, c.width, c.height);
       out = c.toDataURL('image/jpeg', q); c.width = c.height = 0;
-      if (out.length <= SLIM_MAX) break;
+      if (out.length <= mx) break;
     }
     if (out.length >= v.length) out = v;
   } catch(e) { out = v; }
@@ -8989,7 +8990,7 @@ async function push(){
     for (;;) {
       const cur = jget(K.dirty, {}), ids = Object.keys(cur).filter(i => !deferred.has(i)).sort((a, b) => (/[fgm]/.test(a.charAt(0)) ? 0 : 1) - (/[fgm]/.test(b.charAt(0)) ? 0 : 1));   // foto dikirim lebih dulu
       if (!ids.length) break;
-      if (++rounds > 300) break; busySince = Date.now();
+      if (++rounds > 300) break; if (gen !== my) return; busySince = Date.now();
       const chk = jget(CHK, {}), uc = jget(UK, {}), batch = [], drop = [];
       let size = 0;
       for (const id of ids) {
@@ -9011,7 +9012,7 @@ async function push(){
           if (pv === undefined) { drop.push(id); continue; }
           if (pv && pv.wait) { deferred.add(id); continue; }   // foto belum selesai tersimpan: coba lagi nanti
           v = pv;
-        } else if (kind === 'k') { const ck = coatPiece(key); v = (ck === undefined) ? null : ck; } else if (kind === 'm') { const pv = await wt(coatPhotoGet(key), 15000); if (pv === TMO) { deferred.add(id); continue; } if (pv === undefined) { drop.push(id); continue; } v = pv || null; } else if (kind === 'd') { v = raw('boqdwg_' + key); } else if (kind === 'a') { v = raw('qcadd_' + key); } else if (kind === 'w') { v = raw('qcusr_' + key); } else if (kind === 'c') {
+        } else if (kind === 'k') { const ck = coatPiece(key); v = (ck === undefined) ? null : ck; } else if (kind === 'm') { const pv = await wt(coatPhotoGet(key), 15000); if (pv === TMO) { deferred.add(id); continue; } if (pv === undefined) { drop.push(id); continue; } v = pv || null; } else if (kind === 'x') { const xm = jget(FD_K, {})[key]; v = xm ? String(xm.id) : null; } else if (kind === 'd') { v = raw('boqdwg_' + key); } else if (kind === 'a') { v = raw('qcadd_' + key); } else if (kind === 'w') { v = raw('qcusr_' + key); } else if (kind === 'c') {
           v = (key in chk) ? String(!!chk[key]) : null;
         } else if (kind === 'l') {
           const lb = jget(LBLK, {}); v = (key in lb) ? String(lb[key]) : null;
@@ -9044,11 +9045,12 @@ async function push(){
           if (jget(SENT_K, {})[id] === psig) { drop.push(id); continue; }                         // isi foto sama dengan yang sudah terkirim: jangan upload lagi
           const st0 = jget(SRVTS_K, {})[id]; if (st0 && sts(cur[id]) <= st0) { drop.push(id); continue; }   // server sudah punya versi yang sama/lebih baru
         }
-        v = await slimPhoto(id, v);
+        const v0len = (typeof v === 'string') ? v.length : 0;
+        v = await slimPhoto(id, v, kind === 'f' || kind === 'g' || kind === 'm');
         let mt; if (kind === 'f' && v) { try { const ii = key.lastIndexOf('_'), o = JSON.parse(raw('qcout_' + key.slice(0, ii)) || 'null'); if (o) mt = {p: o.proj, m: o.mod, l: o.lbl, d: o.od}; } catch(e) {} }
         else if (kind === 'g' && v) { try { if (window.QCInc && window.QCInc.metaFor) mt = window.QCInc.metaFor(key); } catch(e) {} }
         else if (kind === 'm' && v) mt = coatMeta(key);   // data item: server menyusun folder Project/Bay/Item
-        batch.push({id, k:id, ts:sts(cur[id]), lts:cur[id], v, mt, psig});
+        batch.push({id, k:id, ts:sts(cur[id]), lts:cur[id], v, mt, psig, fz: !!psig && (kind === 'f' || kind === 'g' || kind === 'm') && v0len > ((v && v.length) || 0) + 2000});
         size += (v ? v.length : 0) + 40;
       }
       if (batch.length) {
@@ -9061,13 +9063,13 @@ async function push(){
         if (Array.isArray(j.rej)) rejected += j.rej.length; else rejected += j.skipped || 0;   // server lama: skipped = ditolak + terlalu besar
         if (Array.isArray(j.big)) j.big.forEach(k => bigWarn.add(k));
         try {
-          const sn = jget(SENT_K, {}), ts = jget(SRVTS_K, {}), seen = jget(SEEN_K, {}), bad = new Set([].concat(j.rej || [], j.big || []));
+          const sn = jget(SENT_K, {}), ts = jget(SRVTS_K, {}), seen = jget(SEEN_K, {}), fp = jget(FULLP_K, {}), fq = jget(FQ_K, {}), bad = new Set([].concat(j.rej || [], j.big || []));
           batch.forEach(b => {
             if (bad.has(b.k)) return;
-            if (b.psig) { sn[b.k] = b.psig; ts[b.k] = b.ts; if (j.ids && j.ids[b.k]) seen[b.k] = j.ids[b.k]; }
-            else if (b.v === null && PH_RE.test(b.k)) { delete sn[b.k]; delete ts[b.k]; delete seen[b.k]; }
+            if (b.psig) { if (b.fz) fq[b.k] = {ts: b.ts, mt: b.mt || null}; fp[b.k] = b.ts; sn[b.k] = b.psig; ts[b.k] = b.ts; if (j.ids && j.ids[b.k]) seen[b.k] = j.ids[b.k]; }
+            else if (b.v === null && PH_RE.test(b.k)) { delete sn[b.k]; delete ts[b.k]; delete seen[b.k]; delete fp[b.k]; }
           });
-          jset(SENT_K, trimMap(sn, 20000)); jset(SRVTS_K, trimMap(ts, 20000)); jset(SEEN_K, trimMap(seen, 20000));
+          jset(SENT_K, trimMap(sn, 20000)); jset(SRVTS_K, trimMap(ts, 20000)); jset(SEEN_K, trimMap(seen, 20000)); jset(FULLP_K, trimMap(fp, 20000)); jset(FQ_K, trimMap(fq, 20000));
         } catch(e) {}
       }
       const nd = jget(K.dirty, {});
@@ -9077,6 +9079,7 @@ async function push(){
     }
     if (rejected) _set.call(LS, K.cursor, String(Math.max(0, (Number(raw(K.cursor)) || 0) - 600000)));   // ada data server lebih baru: ambil ulang 10 menit terakhir saja (bukan seluruh data)
     if (bigProj) { const b = bigProj; bigProj = ''; setStatus('err', 'Project "' + b + '" terlalu besar untuk disinkronkan lewat Google Sheet'); } else okMsg();
+    fullKick();
   } catch(e) {
     setStatus('err', 'Gagal kirim: ' + (e.message || e) + ' (akan dicoba lagi)');
   } finally { if (gen === my) busy = false; }
@@ -9103,14 +9106,16 @@ function silentPatch(keys){
   } catch(e) {}
 }
 function applyRecords(recs){
-  const d = jget(K.dirty, {});
+  const d = jget(K.dirty, {}), fpm = jget(FULLP_K, {});
   let chkCh = false, inspCh = false;
   const chkKeys = [];
   recs.forEach(r => {
     if (r.lazy) { if (r.k.charAt(0) === 'g') { try { if (window.QCInc && window.QCInc.noteRemote) window.QCInc.noteRemote(r.k.slice(2), ''); } catch(e) {} } return; }   // foto besar: tidak diunduh saat sinkron, diambil saat dilihat
+    if (r.v && PH_RE.test(r.k) && (fpm[r.k] || 0) >= r.ts) return;   // foto asli dari perangkat ini: jangan ditimpa thumbnail
     if (d[r.k] && sts(d[r.k]) > r.ts) return;       // perubahan lokal yang belum terkirim lebih baru (dibandingkan dalam waktu server)
     const kind = r.k.charAt(0), key = r.k.slice(2);
     if (kind === 'b' || kind === 'y') { try { if (window.BankIR && window.BankIR.apply) window.BankIR.apply(kind, key, r.v); else (window.__birQ = window.__birQ || []).push(r); } catch(e) { console.warn('QCSync: gagal menerapkan Bank IR', key, e); } return; }
+    if (kind === 'x') { try { const fm = jget(FD_K, {}); if (r.v === null) delete fm[key]; else fm[key] = Object.assign({}, fm[key], {id: r.v}); jset(FD_K, trimMap(fm, 20000)); } catch(e) {} return; }
     if (kind === 'k') { coatPend.push(r); return; }
     if (kind === 'm') { coatPendM.push(r); return; }
     if (kind === 'p') { pendP.push(r); return; }
@@ -9203,10 +9208,10 @@ async function flushExtra(){
   }
 }
 /* foto yang tersimpan di Drive datang sebagai penanda "drv:<id>": ambil isinya (3 sekaligus). Foto Outstanding (f:) tetap diambil saat dilihat. */
-async function resolveDrv(recs){
+async function resolveDrv(recs, my){
   const todo = recs.filter(r => typeof r.v === 'string' && r.v.indexOf('drv:') === 0);
   if (!todo.length) return recs;
-  const drop = new Set(); let i = 0, mapCh = false;
+  const drop = new Set(), need = []; let i = 0, mapCh = false;
   const seenM = jget(SEEN_K, {}); let seenCh = false;
   const worker = async () => {
     while (i < todo.length) {
@@ -9222,17 +9227,161 @@ async function resolveDrv(recs){
         } catch(e) {}
         drop.add(r); continue;
       }
-      if (seenM[r.k] === r.v) { drop.add(r); continue; }   // file Drive yang sama sudah ada di perangkat ini: tidak diunduh lagi
-      busySince = Date.now();
-      const j = await req(withQ(getUrl(), 'photo=' + encodeURIComponent(r.k) + '&_=' + Date.now()), null, 60000);
-      if (j && typeof j.v === 'string' && j.v) { seenM[r.k] = r.v; seenCh = true; r.v = j.v; } else drop.add(r);
+      if (seenM[r.k] === r.v) { drop.add(r); continue; }   // sudah ada di perangkat ini
+      need.push(r);
     }
   };
   await Promise.all([worker(), worker(), worker()]);
+  if (need.length) {   /* v14: foto lama tidak ditunggu: masuk antrean latar belakang, sinkron langsung lanjut */
+    bgEnqueue(need.map(r => ({k: r.k, ts: r.ts, v: r.v})));
+    need.forEach(r => drop.add(r));
+  }
   if (seenCh) jset(SEEN_K, trimMap(seenM, 20000));
   if (mapCh) { try { if (window.QCOut && window.QCOut.refresh) window.QCOut.refresh(); } catch(e) {} }
   return drop.size ? recs.filter(r => !drop.has(r)) : recs;
 }
+/* ---------- v14: FOTO DI LATAR BELAKANG (tanpa status/progress) ----------
+   Antrean disimpan di perangkat (qc_phq_v1) agar lanjut setelah reload. Foto yang sudah ada di perangkat ini tidak diunduh. */
+const BGQ_K = 'qc_phq_v1', bgInfl = new Set();
+let bgOn = false;
+function bgEnqueue(list){
+  if (!list || !list.length) return;
+  const q = jget(BGQ_K, {}); let n = Object.keys(q).length;
+  list.forEach(r => { if (!q[r.k]) n++; if (!q[r.k] || (q[r.k].ts || 0) < r.ts) q[r.k] = {ts: r.ts, v: r.v || ''}; });
+  if (n <= 20000) jset(BGQ_K, q);
+}
+function bgEnqueueLazy(raws){ bgEnqueue((raws || []).filter(r => r && r.lazy && /^[fg]:/.test(r.k))); }
+function bgDone(keys){ if (!keys.length) return; const q = jget(BGQ_K, {}); keys.forEach(k => delete q[k]); jset(BGQ_K, q); }
+const idbGetP = (name, key) => new Promise(ok => { try {
+  const r = indexedDB.open(name, 1);
+  r.onupgradeneeded = () => { try { r.transaction.abort(); } catch(e) {} ok(undefined); };
+  r.onsuccess = () => { try { const q = r.result.transaction('p').objectStore('p').get(key); q.onsuccess = () => { try { r.result.close(); } catch(e) {} ok(q.result); }; q.onerror = () => ok(undefined); } catch(e) { ok(undefined); } };
+  r.onerror = () => ok(undefined);
+} catch(e) { ok(undefined); } });
+async function bgHave(k){
+  const kind = k.charAt(0), key = k.slice(2);
+  try {
+    if (kind === 'f') { if (!window.QCOut) return false; const p = await wt(window.QCOut.photoGet(key), 5000); return typeof p === 'string' && !!p; }
+    if (kind === 'g') { if (window.photoCache && window.photoCache[key]) return true; const p = await wt(idbGetP('qc_incoming_photos', key), 5000); return typeof p === 'string' && !!p; }
+  } catch(e) {}
+  return false;
+}
+async function bgFetch(grp){
+  const jb = await req(withQ(getUrl(), 'since=9999999999999&photos=' + encodeURIComponent(grp.join('\n')) + '&_=' + Date.now()), null, 90000);
+  if (jb && jb.photos && typeof jb.photos === 'object') return jb.photos;
+  const o = {};   // server lama (tanpa ?photos=): satu per satu
+  for (const k of grp) { const j1 = await req(withQ(getUrl(), 'photo=' + encodeURIComponent(k) + '&_=' + Date.now()), null, 60000); o[k] = j1 && j1.v; }
+  return o;
+}
+async function bgLoop(){
+  let idle = 0;
+  for (;;) {
+    if (!getUrl() || document.hidden) return;
+    const q = jget(BGQ_K, {}), keys = Object.keys(q).filter(k => !bgInfl.has(k));
+    if (!keys.length) return;
+    const grp = [], gone = [];
+    for (const k of keys) { if (grp.length >= 8) break; if (await bgHave(k)) gone.push(k); else grp.push(k); }
+    bgDone(gone);
+    if (!grp.length) continue;
+    grp.forEach(k => bgInfl.add(k));
+    try {
+      const got = await bgFetch(grp), recs = [], done = [], seenM = jget(SEEN_K, {}); let sc = false;
+      grp.forEach(k => {
+        if (!(k in got)) return;   // server menunda (terlalu besar sekali kirim): tetap di antrean
+        const v = got[k], m = q[k] || {}; done.push(k);
+        if (typeof v === 'string' && v) { recs.push({k, ts: m.ts || 0, v}); if (m.v) { seenM[k] = m.v; sc = true; } }
+      });
+      if (recs.length) {
+        applyRecords(recs); trackSrv(recs, recs);
+        try { const dm = jget('qc_drvmap', {}); let ch = false; recs.forEach(r => { if (r.k.charAt(0) === 'f' && dm[r.k.slice(2)]) { delete dm[r.k.slice(2)]; ch = true; } }); if (ch) jset('qc_drvmap', dm); } catch(e) {}
+        await wt(flushExtra(), 45000);
+      }
+      if (sc) jset(SEEN_K, trimMap(seenM, 20000));
+      bgDone(done);
+      if (!done.length && ++idle > 3) return;
+    } finally { grp.forEach(k => bgInfl.delete(k)); }
+    await new Promise(ok => setTimeout(ok, 300));
+  }
+}
+async function bgRun(){
+  if (bgOn || !getUrl()) return; bgOn = true;
+  try { await Promise.all([bgLoop(), bgLoop()]); } catch(e) { /* diam: dicoba lagi pada siklus berikutnya */ }
+  finally { bgOn = false; }
+}
+function bgKick(){ try { if (Object.keys(jget(BGQ_K, {})).length) bgRun(); } catch(e) {} }
+setInterval(bgKick, 20000);
+
+/* ---------- v15: FOTO ASLI -> Google Drive di LATAR BELAKANG (satu per satu, tidak menahan sinkron teks/thumbnail) ----------
+   Thumbnail lewat Sheet (cepat, dilihat semua inspector). Foto asli diunggah terpisah; id file Drive disinkronkan sebagai catatan 'x:<kunci foto>'. */
+let fullOn = false;
+async function fullGet(k){
+  const kind = k.charAt(0), key = k.slice(2);
+  try {
+    if (kind === 'f') return window.QCOut ? await wt(window.QCOut.photoGet(key), 15000) : undefined;
+    if (kind === 'g') return window.getPhotoData ? await wt(Promise.resolve(window.getPhotoData(key)), 15000) : undefined;
+    if (kind === 'm') return await wt(coatPhotoGet(key), 15000);
+  } catch(e) {}
+  return undefined;
+}
+async function fullRun(){
+  if (fullOn || !getUrl()) return; fullOn = true;
+  try {
+    for (;;) {
+      if (!getUrl() || document.hidden) return;
+      const q = jget(FQ_K, {}), keys = Object.keys(q);
+      if (!keys.length) return;
+      const k = keys[0], e = q[k];
+      const v = await fullGet(k);
+      if (v === TMO) return;
+      if (typeof v !== 'string' || v.indexOf('data:image/') !== 0) { delete q[k]; jset(FQ_K, q); continue; }   // foto tidak ada / bukan foto di perangkat ini
+      const sig = photoSig(v), fd = jget(FD_K, {}), cur = fd[k];
+      if (cur && cur.sig === sig && cur.id) { delete q[k]; jset(FQ_K, q); continue; }   // versi ini sudah ada di Drive
+      busySince = Date.now();
+      const j = await req(getUrl(), {method: 'POST', headers: {'Content-Type': 'text/plain;charset=utf-8'},
+        body: JSON.stringify({full: [{k, v, mt: e && e.mt ? e.mt : undefined, prev: cur && cur.id ? cur.id : undefined}]})}, 180000);
+      const nid = j && j.ids && j.ids[k];
+      const q2 = jget(FQ_K, {});
+      if (typeof nid === 'string' && nid.indexOf('drv:') === 0) {
+        const fd2 = jget(FD_K, {}); fd2[k] = {id: nid.slice(4), sig}; jset(FD_K, trimMap(fd2, 20000));
+        delete q2[k]; jset(FQ_K, q2);
+        markDirty('x:' + k);   // kirim id file Drive ke Sheet agar inspector lain tahu lokasi foto aslinya
+      } else { return; }       // gagal (mis. Drive belum diizinkan): coba lagi pada siklus berikutnya
+      await new Promise(ok => setTimeout(ok, 400));
+    }
+  } catch(e) { /* diam: dicoba lagi */ }
+  finally { fullOn = false; }
+}
+function fullKick(){ try { if (Object.keys(jget(FQ_K, {})).length) fullRun(); } catch(e) {} }
+setInterval(fullKick, 30000);
+/* semua foto yang ada di perangkat ini -> antrean unggah foto asli (untuk foto yang dikirim sebelum versi ini) */
+function fullEnqueueAll(){
+  const q = jget(FQ_K, {}), fd = jget(FD_K, {}), dm = jget('qc_drvmap', {}); let n = 0;
+  const add = (k, mt) => { if (fd[k] && fd[k].id) return; if (dm[k.charAt(0) === 'f' ? k.slice(2) : k]) return; if (!q[k]) { q[k] = {ts: 1, mt: mt || null}; n++; } };
+  for (let i = 0; i < LS.length; i++) {
+    const nm = LS.key(i); if (!nm || nm.indexOf('qcout_') !== 0) continue;
+    let o = null; try { o = JSON.parse(LS.getItem(nm)); } catch(e) {}
+    if (!o) continue; const id = nm.slice(6), mt = {p: o.proj, m: o.mod, l: o.lbl, d: o.od};
+    if (o.pb) add('f:' + id + '_b', mt); if (o.pa) add('f:' + id + '_a', mt);
+  }
+  try { const s0 = coatLoad(); ((s0 && s0.projects) || []).forEach(p => (p.out || []).forEach(x => { if (!x || !x.id) return; ['b', 'a'].forEach(sd => { const key = x.id + '_' + sd; add('m:' + key, coatMeta(key)); }); })); } catch(e) {}
+  try {
+    const S = window.state, CT = ['photoSuratJalan', 'photoPO', 'photoDokPendukung', 'photoHasil'];
+    if (S && S.workUnits) S.workUnits.forEach(w => { const ud = S.dataByWorkUnit && S.dataByWorkUnit[w.key]; ((ud && ud.incoming) || []).forEach(r => CT.forEach(c => (r[c] || []).forEach(pid => add('g:' + pid, window.QCInc && window.QCInc.metaFor ? window.QCInc.metaFor(pid) : undefined)))); });
+  } catch(e) {}
+  jset(FQ_K, q); return n;
+}
+/* klik 2x pada thumbnail (Outstanding / Incoming) = buka foto asli di Google Drive */
+document.addEventListener('dblclick', ev => {
+  try {
+    const im = ev.target && ev.target.closest ? ev.target.closest('img[data-ph], img[data-pid], [id^="inc-ph-"] img') : null; if (!im) return;
+    let key = ''; const ph = im.getAttribute('data-ph');
+    if (ph) key = 'f:' + ph; else { let pid = im.getAttribute('data-pid'); if (!pid) { const p = im.closest('[id^="inc-ph-"]'); pid = p ? p.id.slice(7) : ''; } if (pid) key = 'g:' + pid; }
+    if (!key) return;
+    const e = jget(FD_K, {})[key], dm = jget('qc_drvmap', {}), id = (e && e.id) || dm[key.charAt(0) === 'f' ? key.slice(2) : key];
+    if (id && id !== '1') window.open('https://drive.google.com/file/d/' + encodeURIComponent(id) + '/view', '_blank');
+    else if (typeof toast === 'function') toast('Foto asli belum ada di Drive (masih diunggah dari HP yang memotret)');
+  } catch(e) {}
+});
 async function pull(){
   if (!getUrl()) return;
   if (busy) return;
@@ -9244,10 +9393,11 @@ async function pull(){
     for (;;) {
       const t0 = Date.now();
       const j = await req(withQ(getUrl(), 'since=' + since + '&lite=1&drv=1&_=' + t0), null, 60000);
+      if (gen !== my) return;   // putaran ini sudah digantikan putaran baru: berhenti, jangan ikut mengunduh
       learnSkew(j.now, t0, Date.now());
       srvV = j.v || ''; srvKnown = true;
       srvNow = j.now || srvNow;
-      { const raws = j.records || [], res = await resolveDrv(raws); trackSrv(raws, res); total += applyRecords(res); }
+      { const raws = j.records || [], res = await resolveDrv(raws, my); if (gen !== my) return; bgEnqueueLazy(raws); trackSrv(raws, res); total += applyRecords(res); }
       { const fx = await wt(flushExtra(), 45000); if (fx === TMO) throw new Error('Menerapkan data terlalu lama (penyimpanan browser macet?). Tutup tab lain lalu muat ulang'); }
       busySince = Date.now();
       if (j.more) { if (!(Number(j.cursor) > since) || ++pages > 500) throw new Error('Server tidak maju (cursor sama), dicoba lagi nanti'); since = j.cursor; _set.call(LS, K.cursor, String(since)); setStatus('busy', 'Mengambil data… (' + total + ')'); }
@@ -9255,7 +9405,7 @@ async function pull(){
     }
     if (total > 0) noteChange();   // ada data dari inspector lain: tetap aktif
     _set.call(LS, K.cursor, String(Math.max(0, srvNow - 5000)));   // tumpang tindih 5 dtk agar tidak ada yang terlewat
-    okMsg();
+    okMsg(); bgKick(); fullKick();
   } catch(e) {
     setStatus('err', 'Gagal ambil data: ' + (e.message || e));
   } finally { if (gen === my) busy = false; }
@@ -9406,6 +9556,79 @@ function disconnect(){
   clearInterval(pollTimer); $('qcsUrl').value = '';
   setStatus('off', 'Belum terhubung');
 }
+/* ---------- v14: unduh SEMUA foto di perangkat ini sebagai ZIP (Outstanding, Coating, Incoming) ---------- */
+const crcT = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); t[n] = c >>> 0; } return t; })();
+function crc32(u8){ let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = crcT[(c ^ u8[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function zipBlob(files){   // ZIP tanpa kompresi (JPEG sudah terkompresi)
+  const enc = new TextEncoder(), parts = [], cen = []; let off = 0;
+  const d = new Date(), dt = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1), dd = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  files.forEach(f => {
+    const nm = enc.encode(f.name), crc = crc32(f.data), sz = f.data.length;
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(8, 0, true); lh.setUint16(10, dt, true); lh.setUint16(12, dd, true);
+    lh.setUint32(14, crc, true); lh.setUint32(18, sz, true); lh.setUint32(22, sz, true); lh.setUint16(26, nm.length, true); lh.setUint16(28, 0, true);
+    parts.push(lh.buffer, nm, f.data);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true); ch.setUint16(12, dt, true); ch.setUint16(14, dd, true);
+    ch.setUint32(16, crc, true); ch.setUint32(20, sz, true); ch.setUint32(24, sz, true); ch.setUint16(28, nm.length, true); ch.setUint32(42, off, true);
+    cen.push(ch.buffer, nm);
+    off += 30 + nm.length + sz;
+  });
+  let cs = 0; cen.forEach(p => { cs += p.byteLength; });
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true); end.setUint32(12, cs, true); end.setUint32(16, off, true);
+  return new Blob(parts.concat(cen, [end.buffer]), {type: 'application/zip'});
+}
+const zfn = s => String(s == null ? '' : s).replace(/[\\\/:*?"<>|\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 60) || '-';
+const BAYN = {comp: 'Bay 1 - FAT', fab: 'Bay 2 & 4 - Fabrikasi', nt: 'Bay 2 & 4 - Fabrikasi', coat: 'Bay 3 - Coating', inc: 'Incoming', wi: 'WI & NDT', ship: 'Pengiriman'};
+let zipBusy = false;
+async function exportZip(){
+  if (zipBusy) return; zipBusy = true;
+  const tasks = [];
+  try {
+    for (let i = 0; i < LS.length; i++) {   // Outstanding: Project / Bay / "tgl - nama [id]" / Before|After
+      const n = LS.key(i); if (!n || n.indexOf('qcout_') !== 0) continue;
+      let o = null; try { o = JSON.parse(LS.getItem(n)); } catch(e) {}
+      if (!o) continue;
+      const id = n.slice(6), dir = [zfn(o.proj || 'Tanpa Project'), zfn(BAYN[o.mod] || o.mod || 'Lainnya'), zfn((o.od ? o.od + ' - ' : '') + (o.lbl || 'Tanpa nama')) + ' [' + String(id).slice(-6) + ']'];
+      if (o.pb && window.QCOut) tasks.push({dir, fn: 'Before', get: () => window.QCOut.photoGet(id + '_b')});
+      if (o.pa && window.QCOut) tasks.push({dir, fn: 'After', get: () => window.QCOut.photoGet(id + '_a')});
+    }
+    try {   // Coating
+      const s0 = coatLoad();
+      ((s0 && s0.projects) || []).forEach(p => (p.out || []).forEach(x => { if (!x || !x.id) return; ['b', 'a'].forEach(sd => { const key = x.id + '_' + sd, mt = coatMeta(key); if (mt) tasks.push({dir: mt.path.map(zfn), fn: mt.fn, get: () => coatPhotoGet(key)}); }); }));
+    } catch(e) {}
+    try {   // Incoming: Project / Incoming / Unit / No II / kategori
+      const S = window.state, CT = ['photoSuratJalan', 'photoPO', 'photoDokPendukung', 'photoHasil'];
+      if (S && S.workUnits) S.workUnits.forEach(w => { const ud = S.dataByWorkUnit && S.dataByWorkUnit[w.key]; ((ud && ud.incoming) || []).forEach(r => CT.forEach(c => (r[c] || []).forEach(pid => {
+        const mt = window.QCInc && window.QCInc.metaFor ? window.QCInc.metaFor(pid) : null;
+        tasks.push({dir: (mt ? mt.path : ['Tanpa Project', 'Incoming']).map(zfn), fn: mt ? mt.fn : String(pid).slice(-8), get: () => window.getPhotoData ? window.getPhotoData(pid) : null});
+      }))); });
+    } catch(e) {}
+    if (!tasks.length) { setStatus('err', 'Tidak ada foto di perangkat ini.'); return; }
+    const used = {}, stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    let files = [], bytes = 0, part = 0, got = 0;
+    const flush = async () => {
+      if (!files.length) return; part++;
+      const a = document.createElement('a'); a.href = URL.createObjectURL(zipBlob(files)); a.download = 'QC_Foto_' + stamp + '_' + part + '.zip';
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 120000);
+      files = []; bytes = 0; await new Promise(ok => setTimeout(ok, 1500));
+    };
+    for (let i = 0; i < tasks.length; i++) {
+      setStatus('busy', 'Menyiapkan ZIP... ' + (i + 1) + '/' + tasks.length);
+      let v = null; try { v = await wt(Promise.resolve(tasks[i].get()), 20000); } catch(e) {}
+      if (typeof v !== 'string' || v.indexOf('data:image/') !== 0) continue;
+      const mime = /^data:(image\/[\w.+-]+)/.exec(v)[1], ext = mime.split('/')[1].replace('jpeg', 'jpg'), bin = atob(v.slice(v.indexOf(',') + 1)), u8 = new Uint8Array(bin.length);
+      for (let q = 0; q < bin.length; q++) u8[q] = bin.charCodeAt(q);
+      let nm = tasks[i].dir.join('/') + '/' + zfn(tasks[i].fn); used[nm] = (used[nm] || 0) + 1; if (used[nm] > 1) nm += ' (' + used[nm] + ')';
+      files.push({name: nm + '.' + ext, data: u8}); bytes += u8.length; got++;
+      if (bytes > 200 * 1024 * 1024) await flush();
+    }
+    await flush();
+    setStatus('ok', got ? ('ZIP selesai: ' + got + ' foto dalam ' + part + ' file (cek folder Unduhan)') : 'Tidak ada foto yang bisa diambil di perangkat ini.');
+  } catch(e) { setStatus('err', 'Gagal membuat ZIP: ' + (e.message || e)); }
+  finally { zipBusy = false; }
+}
 function openModal(){
   let m = $('qcSyncModal');
   if (!m) {
@@ -9435,6 +9658,9 @@ function openModal(){
       '<button id="qcsNow" type="button">🔄 Sinkron sekarang</button>' +
       '<button id="qcsInv" type="button">🔗 Salin link undangan</button>' +
       '<button id="qcsPerm" type="button">📌 Salin pengaturan permanen</button>' +
+      '<button id="qcsZip" type="button">Unduh semua foto (ZIP)</button>' +
+      '<button id="qcsUp" type="button">Unggah foto asli ke Drive</button>' +
+      '<button id="qcsFolder" type="button">Buka folder foto asli (Drive)</button>' +
       '<button id="qcsOff" type="button">Putuskan</button>' +
       '<button id="qcsClose" type="button">Tutup</button></div>' +
       '<div id="qcsStatus" style="min-height:1.4em;font-size:.85rem"></div>' +
@@ -9446,7 +9672,7 @@ function openModal(){
       _set.call(LS, POLL_KEY, $('qcsPoll').value);
       idleOn = false; lastAct = Date.now(); clearInterval(pollTimer); if (getUrl()) pollTimer = setInterval(tick, getPoll());   // langsung berlaku
     };
-    $('qcsNow').onclick = () => { resume(); tick(true); }; $('qcsInv').onclick = copyInvite; $('qcsPerm').onclick = copyPerm; $('qcsOff').onclick = disconnect; $('qcsClose').onclick = closeModal;
+    $('qcsNow').onclick = () => { resume(); tick(true); }; $('qcsInv').onclick = copyInvite; $('qcsPerm').onclick = copyPerm; $('qcsZip').onclick = exportZip; $('qcsUp').onclick = () => { const n = fullEnqueueAll(); setStatus('ok', n ? (n + ' foto dijadwalkan diunggah ke Drive (jalan di latar belakang)') : 'Semua foto di perangkat ini sudah ada di Drive'); fullKick(); }; $('qcsFolder').onclick = () => window.open('https://drive.google.com/drive/folders/192Ml9QckkUt7oeY5LXuzY0uOmtqyvmlZ', '_blank'); $('qcsOff').onclick = disconnect; $('qcsClose').onclick = closeModal;
   }
   m.style.display = 'flex';
   $('qcsUrl').value = getUrl();
