@@ -8947,6 +8947,18 @@ function coatMeta(key){
 /* ---------- kirim (push) ---------- */
 /* Foto diperkecil HANYA untuk salinan yang dikirim (asli di HP tetap): target <= ~240 rb karakter agar 1 request bisa membawa beberapa foto */
 const SLIM_MAX = 150000, slimCache = new Map();
+/* ---- anti kirim-ulang foto: catat tanda-tangan (sig) foto yang SUDAH diterima server ---- */
+const SENT_K = 'qc_sent_v1', SRVTS_K = 'qc_srvts_v1', SEEN_K = 'qc_drvseen', PH_RE = /^[fgmnby]:/;
+function photoSig(v){ let h = 2166136261 >>> 0; const n = v.length, step = n > 600000 ? 3 : 1; for (let i = 0; i < n; i += step) { h ^= v.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return n + ':' + h.toString(36); }
+function trimMap(o, max){ const ks = Object.keys(o); if (ks.length > max) ks.slice(0, ks.length - max).forEach(k => delete o[k]); return o; }
+function trackSrv(raws, res){   // dipanggil dari pull: catat foto yang sudah ada di server (+ waktunya) dan isi foto yang sudah dimiliki perangkat
+  try {
+    const ts = jget(SRVTS_K, {}), sn = jget(SENT_K, {}); let ch = false;
+    (raws || []).forEach(r => { if (!r || !PH_RE.test(r.k)) return; if (r.lazy || r.v !== null) { if (ts[r.k] !== r.ts) { ts[r.k] = r.ts; ch = true; } } else if (r.k in ts) { delete ts[r.k]; delete sn[r.k]; ch = true; } });
+    (res || []).forEach(r => { if (r && typeof r.v === 'string' && r.v.indexOf('data:image/') === 0 && PH_RE.test(r.k)) { sn[r.k] = photoSig(r.v); ch = true; } });
+    if (ch) { jset(SRVTS_K, trimMap(ts, 20000)); jset(SENT_K, trimMap(sn, 20000)); }
+  } catch(e) {}
+}
 async function slimPhoto(id, v){
   if (typeof v !== 'string' || v.length <= SLIM_MAX || v.indexOf('data:image/') !== 0) return v;
   const ck = id + ':' + v.length; if (slimCache.has(ck)) return slimCache.get(ck);
@@ -8981,7 +8993,7 @@ async function push(){
       const chk = jget(CHK, {}), uc = jget(UK, {}), batch = [], drop = [];
       let size = 0;
       for (const id of ids) {
-        if (batch.length >= 20 || size > 350000) break;
+        if (batch.length >= 20 || size > 600000) break;
         const kind = id.charAt(0), key = id.slice(2);
         let v = null;
         if (kind === 'b' || kind === 'y') {
@@ -9026,11 +9038,17 @@ async function push(){
             v = r;
           }
         }
+        let psig = null;
+        if (typeof v === 'string' && v.indexOf('data:image/') === 0 && PH_RE.test(id)) {
+          psig = photoSig(v);
+          if (jget(SENT_K, {})[id] === psig) { drop.push(id); continue; }                         // isi foto sama dengan yang sudah terkirim: jangan upload lagi
+          const st0 = jget(SRVTS_K, {})[id]; if (st0 && sts(cur[id]) <= st0) { drop.push(id); continue; }   // server sudah punya versi yang sama/lebih baru
+        }
         v = await slimPhoto(id, v);
         let mt; if (kind === 'f' && v) { try { const ii = key.lastIndexOf('_'), o = JSON.parse(raw('qcout_' + key.slice(0, ii)) || 'null'); if (o) mt = {p: o.proj, m: o.mod, l: o.lbl, d: o.od}; } catch(e) {} }
         else if (kind === 'g' && v) { try { if (window.QCInc && window.QCInc.metaFor) mt = window.QCInc.metaFor(key); } catch(e) {} }
         else if (kind === 'm' && v) mt = coatMeta(key);   // data item: server menyusun folder Project/Bay/Item
-        batch.push({id, k:id, ts:sts(cur[id]), lts:cur[id], v, mt});
+        batch.push({id, k:id, ts:sts(cur[id]), lts:cur[id], v, mt, psig});
         size += (v ? v.length : 0) + 40;
       }
       if (batch.length) {
@@ -9042,6 +9060,15 @@ async function push(){
         if (j.v) { srvV = j.v; srvKnown = true; }
         if (Array.isArray(j.rej)) rejected += j.rej.length; else rejected += j.skipped || 0;   // server lama: skipped = ditolak + terlalu besar
         if (Array.isArray(j.big)) j.big.forEach(k => bigWarn.add(k));
+        try {
+          const sn = jget(SENT_K, {}), ts = jget(SRVTS_K, {}), seen = jget(SEEN_K, {}), bad = new Set([].concat(j.rej || [], j.big || []));
+          batch.forEach(b => {
+            if (bad.has(b.k)) return;
+            if (b.psig) { sn[b.k] = b.psig; ts[b.k] = b.ts; if (j.ids && j.ids[b.k]) seen[b.k] = j.ids[b.k]; }
+            else if (b.v === null && PH_RE.test(b.k)) { delete sn[b.k]; delete ts[b.k]; delete seen[b.k]; }
+          });
+          jset(SENT_K, trimMap(sn, 20000)); jset(SRVTS_K, trimMap(ts, 20000)); jset(SEEN_K, trimMap(seen, 20000));
+        } catch(e) {}
       }
       const nd = jget(K.dirty, {});
       batch.forEach(b => { if (nd[b.id] === b.lts) delete nd[b.id]; try { obDel(b.id, b.ts); } catch(e) {} });
@@ -9180,6 +9207,7 @@ async function resolveDrv(recs){
   const todo = recs.filter(r => typeof r.v === 'string' && r.v.indexOf('drv:') === 0);
   if (!todo.length) return recs;
   const drop = new Set(); let i = 0, mapCh = false;
+  const seenM = jget(SEEN_K, {}); let seenCh = false;
   const worker = async () => {
     while (i < todo.length) {
       const r = todo[i++];
@@ -9194,12 +9222,14 @@ async function resolveDrv(recs){
         } catch(e) {}
         drop.add(r); continue;
       }
+      if (seenM[r.k] === r.v) { drop.add(r); continue; }   // file Drive yang sama sudah ada di perangkat ini: tidak diunduh lagi
       busySince = Date.now();
       const j = await req(withQ(getUrl(), 'photo=' + encodeURIComponent(r.k) + '&_=' + Date.now()), null, 60000);
-      if (j && typeof j.v === 'string' && j.v) r.v = j.v; else drop.add(r);
+      if (j && typeof j.v === 'string' && j.v) { seenM[r.k] = r.v; seenCh = true; r.v = j.v; } else drop.add(r);
     }
   };
   await Promise.all([worker(), worker(), worker()]);
+  if (seenCh) jset(SEEN_K, trimMap(seenM, 20000));
   if (mapCh) { try { if (window.QCOut && window.QCOut.refresh) window.QCOut.refresh(); } catch(e) {} }
   return drop.size ? recs.filter(r => !drop.has(r)) : recs;
 }
@@ -9217,7 +9247,7 @@ async function pull(){
       learnSkew(j.now, t0, Date.now());
       srvV = j.v || ''; srvKnown = true;
       srvNow = j.now || srvNow;
-      total += applyRecords(await resolveDrv(j.records || []));
+      { const raws = j.records || [], res = await resolveDrv(raws); trackSrv(raws, res); total += applyRecords(res); }
       { const fx = await wt(flushExtra(), 45000); if (fx === TMO) throw new Error('Menerapkan data terlalu lama (penyimpanan browser macet?). Tutup tab lain lalu muat ulang'); }
       busySince = Date.now();
       if (j.more) { if (!(Number(j.cursor) > since) || ++pages > 500) throw new Error('Server tidak maju (cursor sama), dicoba lagi nanti'); since = j.cursor; _set.call(LS, K.cursor, String(since)); setStatus('busy', 'Mengambil data… (' + total + ')'); }
@@ -9257,7 +9287,7 @@ async function tick(force){
   watchdog();
   if (!getUrl()) return;
   if (document.hidden && !force) return;
-  if (pendingCount()) { await push(); await pull(); } else { await pull(); }
+  if (pendingCount()) { if (!(Number(raw(K.cursor)) > 0)) await pull(); await push(); await pull(); } else { await pull(); }
   checkIdle();
 }
 /* ---------- mode istirahat: tidak ada perubahan -> berhenti sinkron berkala ---------- */
@@ -9425,7 +9455,7 @@ function openModal(){
 }
 try { if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {}); } catch(e) {}
 document.addEventListener('visibilitychange', () => { if (document.hidden && getUrl() && pendingCount()) push(); });   // pindah aplikasi/tab: langsung kirim
-window.QCSync = {mark: id => { if (getUrl()) markDirty(id); }, projChanged, open: openModal, sync: () => tick(true), state: () => ({url: !!getUrl(), pending: pendingCount(), status: st})};
+window.QCSync = {mark: id => { if (getUrl()) markDirty(id); }, seen: (id, v) => { try { if (typeof v === 'string' && v.indexOf('data:image/') === 0) { const sn = jget(SENT_K, {}); sn[id] = photoSig(v); jset(SENT_K, sn); } } catch(e) {} }, projChanged, open: openModal, sync: () => tick(true), state: () => ({url: !!getUrl(), pending: pendingCount(), status: st})};
 })();
 </script>
 <script type="text/plain" id="qcSyncGS" style="display:none">
@@ -21236,14 +21266,14 @@ body.is-wi #qoBtn{display:none}
     var u='';try{u=(localStorage.getItem('qc_sync_api_url')||'').trim();}catch(e){}
     if(!u)return Promise.resolve('');
     return fetch(u+(u.indexOf('?')>=0?'&':'?')+'photo='+encodeURIComponent('f:'+k)+'&_='+Date.now()).then(function(r){return r.json();})
-      .then(function(j){ if(j&&j.ok&&j.v){ PH[k]=j.v; pput(k,j.v).catch(function(){}); return j.v; } return ''; }).catch(function(){return '';});
+      .then(function(j){ if(j&&j.ok&&j.v){ PH[k]=j.v; pput(k,j.v).catch(function(){}); try{window.QCSync&&window.QCSync.seen&&window.QCSync.seen('f:'+k,j.v);}catch(e){} return j.v; } return ''; }).catch(function(){return '';});
   }
   function fetchPhoto(k,im){
     var u='';try{u=(localStorage.getItem('qc_sync_api_url')||'').trim();}catch(e){}
     if(!u||FETCHING[k])return; FETCHING[k]=1;
     fetch(u+(u.indexOf('?')>=0?'&':'?')+'photo='+encodeURIComponent('f:'+k)+'&_='+Date.now())
       .then(function(r){return r.json();})
-      .then(function(j){ if(j&&j.ok&&j.v){ PH[k]=j.v; pput(k,j.v).catch(function(){}); if(im&&im.isConnected)im.src=j.v; } })
+      .then(function(j){ if(j&&j.ok&&j.v){ PH[k]=j.v; pput(k,j.v).catch(function(){}); try{window.QCSync&&window.QCSync.seen&&window.QCSync.seen('f:'+k,j.v);}catch(e){} if(im&&im.isConnected)im.src=j.v; } })
       .catch(function(){})
       .then(function(){ setTimeout(function(){delete FETCHING[k];},10000); });
   }
