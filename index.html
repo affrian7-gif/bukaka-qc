@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <!-- saved from url=(0063)file:///C:/Users/affrian/Downloads/index_incoming_evaluasi.html -->
 <html lang="id"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta name="app-version" content="20261105.03">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover">
     
     <title>QC Inspection &amp; Drawing Checksheet</title>
@@ -8407,6 +8408,27 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 
+<script id="qc-cfg-invite">
+/* Link pengaturan inspector: https://.../#sync=<url-apps-script>&qccfg=<pengaturan Google Sheet>
+   Dibuka sekali di HP inspector -> URL Apps Script + daftar project/sheet terisi otomatis. */
+(function(){try{
+  var h=location.hash||'',m=/[#&]qccfg=([A-Za-z0-9_-]+)/.exec(h);if(!m)return;
+  if(!/[#&]sync=/.test(h))history.replaceState(null,'',location.pathname+location.search);
+  var b=m[1].replace(/-/g,'+').replace(/_/g,'/');while(b.length%4)b+='=';
+  var bin=atob(b),u=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
+  var j=JSON.parse(new TextDecoder().decode(u));
+  var okU=function(x){return /^https:\/\/(docs|script|drive)\.google\.com\//.test(String(x||''))};
+  var script=String(j.script||'').trim();if(script&&!/^https:\/\/script\.google\.com\/macros\/s\/[^\s]+\/exec(\?.*)?$/.test(script))script='';
+  var pr=(Array.isArray(j.projects)?j.projects:[]).filter(function(x){return x&&typeof x.project==='string'&&x.project.trim()&&x.project.length<=120&&okU(x.url)}).slice(0,30).map(function(x){return{project:x.project.trim(),url:String(x.url).trim()}});
+  var cfg={projects:pr,every:Math.min(3600,Math.max(30,+j.every||120)),script:script};
+  var cur=localStorage.getItem('qc_sl_cfg'),nw=JSON.stringify(cfg);
+  if(cur===nw)return;
+  var names=pr.map(function(x){return x.project}).join(', ')||'(tidak ada)';
+  if(cur&&!confirm('Terapkan pengaturan sinkron Google Sheet dari link ini?\nProject: '+names))return;
+  localStorage.setItem('qc_sl_cfg',nw);
+  for(var k=localStorage.length-1;k>=0;k--){var key=localStorage.key(k);if(key&&key.indexOf('qc_sl_hash_')===0)localStorage.removeItem(key)}
+}catch(e){console.warn('link pengaturan gagal',e)}})();
+</script>
 <script>window.QC_SYNC_URL='https://script.google.com/macros/s/AKfycbwA9d5Z_ktXNNFLSLcNog4vM8bDGilBARzi_F3JBT5uGg4DBwFbA31rpuKc4QHmTDdqrA/exec';</script>
 <script id="gx-boot">(function(){var h0=location.hash||'',m=/[#&]tamu(?:=([^&]*))?/.exec(h0),tt=/[#&]t=([A-Za-z0-9_-]{20,})/.exec(h0),pp=/[#&]p=([^&]*)/.exec(h0);if(!m&&!tt)return;window.__gxGuest=1;if(pp){try{window.__gxTarget=decodeURIComponent(pp[1]);}catch(e){}if(window.__gxTarget)document.documentElement.classList.add('gx-lock');}try{var u=(m&&m[1])?decodeURIComponent(m[1]):(tt?'https://script.google.com/macros/s/'+tt[1]+'/exec':''),L=localStorage,S=Storage.prototype.setItem,R=Storage.prototype.removeItem;if(/^https:\/\/script\.google\.com\/macros\/s\/[^\s]+\/exec(\?.*)?$/.test(u)&&L.getItem('qc_sync_api_url')!==u){['qc_sync_cursor','qc_sync_inited','qc_sync_inited2','qc_sync_off'].forEach(function(k){R.call(L,k);});S.call(L,'qc_sync_src','manual');S.call(L,'qc_sync_api_url',u);}}catch(e){}document.documentElement.classList.add('gx-guest');})();</script><script id="qc-sync">
 /* ===== SINKRON ANTAR INSPECTOR (Google Apps Script + Google Sheet) =====
@@ -8430,8 +8452,18 @@ const raw  = k => { try { return LS.getItem(k); } catch(e) { return null; } };
 const jget = (k, d) => { try { const v = raw(k); return v ? JSON.parse(v) : d; } catch(e) { return d; } };
 const jset = (k, v) => { try { _set.call(LS, k, JSON.stringify(v)); } catch(e) {} };
 const getUrl = () => (raw(K.url) || '').trim();
+/* ---- v6: waktu server sebagai acuan (jam HP yang salah tidak lagi membuat foto/data lama menang) ---- */
+const SKEW_KEY = 'qc_sync_skew', EXPECT_V = 'v6-2026-11-06', LBLK = 'qc_unitlabels', TYPK = 'qc_types';
+let skew = Number(raw(SKEW_KEY)) || 0, srvV = '', srvKnown = false, metaCh = false;
+const bigWarn = new Set();
+const sts = t => (t > 1e12 ? t + skew : t);          // waktu lokal -> waktu server (penanda ts=1 tidak diubah)
+function learnSkew(srvNow, t0, t1){
+  if (!srvNow || t1 - t0 > 8000) return;
+  const s = Math.round(srvNow - (t0 + t1) / 2);
+  if (Math.abs(s - skew) > 2000) { skew = s; try { _set.call(LS, SKEW_KEY, String(s)); } catch(e) {} }
+}
 const $ = id => document.getElementById(id);
-let lastChk = jget(CHK, {}), lastUnits = jget(UK, {}), lastProj = {}, lastHid = {}, projReady = false;
+let lastChk = jget(CHK, {}), lastUnits = jget(UK, {}), lastProj = {}, lastHid = {}, projReady = false, lastLbl = jget(LBLK, {}), lastTyp = jget(TYPK, {});
 const pendP = [], pendU = [], pendR = [], deferred = new Set();
 const URL_RE = /^https:\/\/script\.google\.com\/macros\/s\/[^\s]+\/exec(\?.*)?$/;
 
@@ -8480,7 +8512,8 @@ function okMsg(){
   const t = new Date().toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
   const p = pendingCount();
   _set.call(LS, K.last, t);
-  setStatus(p ? 'pending' : 'ok', 'Tersinkron ' + t + (p ? ' — ' + p + ' perubahan menunggu kirim' : ''));
+  if (bigWarn.size) { setStatus('err', bigWarn.size + ' data TIDAK tersinkron karena terlalu besar (' + Array.from(bigWarn).slice(0, 3).join(', ') + '). Kecilkan foto/data lalu simpan ulang.'); return; }
+  setStatus(p ? 'pending' : 'ok', 'Tersinkron ' + t + (p ? ' — ' + p + ' perubahan menunggu kirim' : '') + ((srvKnown && srvV !== EXPECT_V) ? ' · ⚠ kode server lama: tempel kode terbaru (tombol Salin kode) lalu Deploy ulang' : ''));
 }
 
 
@@ -8534,6 +8567,21 @@ function projChanged(){
   for (const k in lastHid) if (!hid[k]) { d['r:' + k] = now; n++; }
   lastHid = Object.assign({}, hid);
   if (n) { jset(K.dirty, d); schedulePush(); }
+}
+function diffMeta(kind, lsKey){          // label unit (l) & tipe/grup project (t): satu catatan per entri
+  const cur = jget(lsKey, {}), prev = kind === 'l' ? lastLbl : lastTyp, d = jget(K.dirty, {}), now = Date.now(); let n = 0;
+  for (const k in cur) if (JSON.stringify(cur[k]) !== JSON.stringify(prev[k])) { d[kind + ':' + k] = now; n++; }
+  for (const k in prev) if (!(k in cur)) { d[kind + ':' + k] = now; n++; }
+  if (kind === 'l') lastLbl = cur; else lastTyp = cur;
+  if (n) { jset(K.dirty, d); schedulePush(); }
+}
+function applyMeta(kind, key, v){
+  const lsKey = kind === 'l' ? LBLK : TYPK, m = jget(lsKey, {});
+  if (v === null) { if (!(key in m)) return; delete m[key]; }
+  else { const nv = kind === 'l' ? v : JSON.parse(v); if (JSON.stringify(m[key]) === JSON.stringify(nv)) return; m[key] = nv; }
+  _set.call(LS, lsKey, JSON.stringify(m));
+  if (kind === 'l') lastLbl = m; else lastTyp = m;
+  metaCh = true;
 }
 function diffUnits(){
   const cur = jget(UK, {}), d = jget(K.dirty, {}), now = Date.now(); let n = 0;
@@ -8663,7 +8711,8 @@ async function obMirror(id, ts){
 }
 function markDirty(id){
   const d = jget(K.dirty, {}), ts = Date.now(); d[id] = ts; jset(K.dirty, d);
-  obMirror(id, ts);
+  bigWarn.delete(id);
+  obMirror(id, sts(ts));
   schedulePush();
 }
 function diffChecks(){
@@ -8680,6 +8729,8 @@ Storage.prototype.setItem = function(k, v){
     k = String(k);
     if (k === CHK) diffChecks();
     else if (k === UK) diffUnits();
+    else if (k === LBLK) diffMeta('l', LBLK);
+    else if (k === TYPK) diffMeta('t', TYPK);
     else if (k.indexOf('insp_') === 0) markDirty('i:' + k.slice(5)); else if (k.indexOf('boqdwg_') === 0) markDirty('d:' + k.slice(7)); else if (k.indexOf('qcadd_') === 0) markDirty('a:' + k.slice(6)); else if (k.indexOf('qcout_') === 0) markDirty('o:' + k.slice(6)); else if (k.indexOf('qcusr_') === 0) markDirty('w:' + k.slice(6));
   }
   return r;
@@ -8740,6 +8791,10 @@ async function push(){
           v = pv;
         } else if (kind === 'k') { const ck = coatPiece(key); v = (ck === undefined) ? null : ck; } else if (kind === 'm') { const pv = await coatPhotoGet(key); if (pv === undefined) { drop.push(id); continue; } v = pv || null; } else if (kind === 'd') { v = raw('boqdwg_' + key); } else if (kind === 'a') { v = raw('qcadd_' + key); } else if (kind === 'w') { v = raw('qcusr_' + key); } else if (kind === 'c') {
           v = (key in chk) ? String(!!chk[key]) : null;
+        } else if (kind === 'l') {
+          const lb = jget(LBLK, {}); v = (key in lb) ? String(lb[key]) : null;
+        } else if (kind === 't') {
+          const tp = jget(TYPK, {}); v = (key in tp) ? JSON.stringify(tp[key]) : null;
         } else if (kind === 'u') {
           v = (key in uc) ? String(uc[key]) : null;
         } else if (kind === 'r') {
@@ -8761,7 +8816,7 @@ async function push(){
             v = r;
           }
         }
-        batch.push({id, k:id, ts:cur[id], v});
+        batch.push({id, k:id, ts:sts(cur[id]), lts:cur[id], v});
         size += (v ? v.length : 0) + 40;
       }
       if (batch.length) {
@@ -8770,14 +8825,16 @@ async function push(){
           headers: {'Content-Type': 'text/plain;charset=utf-8'},
           body: JSON.stringify({records: batch.map(b => ({k:b.k, ts:b.ts, v:b.v}))})
         });
-        rejected += j.skipped || 0;
+        if (j.v) { srvV = j.v; srvKnown = true; }
+        if (Array.isArray(j.rej)) rejected += j.rej.length; else rejected += j.skipped || 0;   // server lama: skipped = ditolak + terlalu besar
+        if (Array.isArray(j.big)) j.big.forEach(k => bigWarn.add(k));
       }
       const nd = jget(K.dirty, {});
-      batch.forEach(b => { if (nd[b.id] === b.ts) delete nd[b.id]; try { obDel(b.id, b.ts); } catch(e) {} });
+      batch.forEach(b => { if (nd[b.id] === b.lts) delete nd[b.id]; try { obDel(b.id, b.ts); } catch(e) {} });
       drop.forEach(id => delete nd[id]);
       jset(K.dirty, nd);
     }
-    if (rejected) _set.call(LS, K.cursor, '0');   // ada data server yang lebih baru: ambil ulang semuanya
+    if (rejected) _set.call(LS, K.cursor, String(Math.max(0, (Number(raw(K.cursor)) || 0) - 600000)));   // ada data server lebih baru: ambil ulang 10 menit terakhir saja (bukan seluruh data)
     if (bigProj) { const b = bigProj; bigProj = ''; setStatus('err', 'Project "' + b + '" terlalu besar untuk disinkronkan lewat Google Sheet'); } else okMsg();
   } catch(e) {
     setStatus('err', 'Gagal kirim: ' + (e.message || e) + ' (akan dicoba lagi)');
@@ -8809,13 +8866,14 @@ function applyRecords(recs){
   let chkCh = false, inspCh = false;
   const chkKeys = [];
   recs.forEach(r => {
-    if (d[r.k] && d[r.k] > r.ts) return;            // perubahan lokal yang belum terkirim lebih baru
+    if (d[r.k] && sts(d[r.k]) > r.ts) return;       // perubahan lokal yang belum terkirim lebih baru (dibandingkan dalam waktu server)
     const kind = r.k.charAt(0), key = r.k.slice(2);
     if (kind === 'b' || kind === 'y') { try { if (window.BankIR && window.BankIR.apply) window.BankIR.apply(kind, key, r.v); else (window.__birQ = window.__birQ || []).push(r); } catch(e) { console.warn('QCSync: gagal menerapkan Bank IR', key, e); } return; }
     if (kind === 'k') { coatPend.push(r); return; }
     if (kind === 'm') { coatPendM.push(r); return; }
     if (kind === 'p') { pendP.push(r); return; }
     if (kind === 'u') { pendU.push(r); return; }
+    if (kind === 'l' || kind === 't') { try { applyMeta(kind, key, r.v); } catch(e) { console.warn('QCSync: label/tipe unit gagal diterapkan', r.k, e); } return; }
     if (kind === 'r') { pendR.push(r); return; }
     if (kind === 'w') { try { if (r.v === null) { if (raw('qcusr_' + key) != null) _rem.call(LS, 'qcusr_' + key); } else if (raw('qcusr_' + key) !== r.v) _set.call(LS, 'qcusr_' + key, r.v); } catch(e) {} return; }
     if (kind === 'o') { try { if (r.v === null) { if (raw('qcout_' + key) != null) { _rem.call(LS, 'qcout_' + key); window.__qoCh = true; } } else if (raw('qcout_' + key) !== r.v) { _set.call(LS, 'qcout_' + key, r.v); window.__qoCh = true; } } catch(e) { console.warn('QCSync: penyimpanan penuh, lewati', key); } return; }
@@ -8849,6 +8907,7 @@ function applyRecords(recs){
   if (window.__qoCh) { window.__qoCh = false; try { if (window.QCOut) window.QCOut.reload(); } catch(e) {} }
   if (window.__qcAddCh) { window.__qcAddCh = false; try { if (window.QCAdd) window.QCAdd.refresh(); } catch(e) {} }
   if (window.__qcIncCh) { window.__qcIncCh = false; try { if (window.QCInc) window.QCInc.refresh(); } catch(e) {} }
+  if (metaCh) { metaCh = false; try { const U = window.QCUnits; if (U) { if (U.reloadMeta) U.reloadMeta(); if (U.refresh) U.refresh(); } } catch(e) {} }
   return recs.length;
 }
 
@@ -8910,7 +8969,10 @@ async function pull(){
     initProj();
     let since = Number(raw(K.cursor)) || 0, srvNow = 0, total = 0;
     for (;;) {
-      const j = await req(withQ(getUrl(), 'since=' + since + '&_=' + Date.now()));
+      const t0 = Date.now();
+      const j = await req(withQ(getUrl(), 'since=' + since + '&_=' + t0));
+      learnSkew(j.now, t0, Date.now());
+      srvV = j.v || ''; srvKnown = true;
       srvNow = j.now || srvNow;
       total += applyRecords(j.records || []);
       await flushExtra();
@@ -8976,11 +9038,20 @@ function start(){
       jset(K.dirty, d); _set.call(LS, 'qc_sync_inited4', '1'); schedulePush();
     } catch(e) {}
   }
+  if (!raw('qc_sync_inited6')) {   // sekali: kirim label unit & tipe/grup project yang sudah ada (ts=1: tidak menimpa data server yang lebih baru)
+    try {
+      const d = jget(K.dirty, {}), lb = jget(LBLK, {}), tp = jget(TYPK, {});
+      for (const k in lb) if (!d['l:' + k]) d['l:' + k] = 1;
+      for (const k in tp) if (!d['t:' + k]) d['t:' + k] = 1;
+      jset(K.dirty, d); _set.call(LS, 'qc_sync_inited6', '1'); schedulePush();
+    } catch(e) {}
+  }
   tick(true);
   pollTimer = setInterval(tick, getPoll());
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(true); });
 window.addEventListener('online', () => tick(true));
+window.addEventListener('focus', () => { if (getUrl()) tick(true); });
 window.addEventListener('load', () => setTimeout(start, 2500));
 
 /* ---------- antarmuka ---------- */
@@ -9090,7 +9161,7 @@ var SHEET_NAME = 'QC_Sync';   // nama tab yang berisi data sinkron (kolom key | 
 // WAJIB diisi bila script ini dibuat dari script.google.com (tidak lewat Extensions > Apps Script di dalam Sheet).
 // ID ada di alamat Sheet: docs.google.com/spreadsheets/d/<ID-INI>/edit
 var SPREADSHEET_ID = '';   // kosongkan bila script dibuat dari dalam Sheet (Extensions > Apps Script); isi ID Sheet bila dibuat dari script.google.com
-var VERSION = 'v5-2026-11-05';    // penanda: muncul di /exec?ping=1 bila kode TERBARU yang berjalan
+var VERSION = 'v6-2026-11-06';    // penanda: muncul di /exec?ping=1 bila kode TERBARU yang berjalan
 var ANS_SHEET = 'Tamu_Jawaban';   // tab jawaban tamu (dibuat otomatis saat jawaban pertama masuk)
 var CHUNK = 45000;      // batas sel Google Sheets = 50.000 karakter
 var MAX_CHUNKS = 20;    // maks ±900 KB per catatan
@@ -9139,7 +9210,16 @@ function json_(o) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+// Penanda "ada data baru" di cache: pull yang tidak ada perubahan dijawab langsung tanpa membuka Sheet
+function markCache_(st) {
+  try { CacheService.getScriptCache().put('qc_last_st', String(st), 21600); } catch (err) {}
+}
+
 // Terima perubahan dari inspector
+//  - ts dari HP dibatasi tidak boleh lebih besar dari jam server (jam HP salah tidak bisa menang selamanya)
+//  - catatan lama yang ts-nya terlanjur di masa depan dianggap bernilai waktu tulis server (st)
+//  - respons memisahkan: rej = ditolak karena server lebih baru, big = terlalu besar (tidak tersimpan!)
+//  - baris baru ditulis sekaligus (1 panggilan), bukan satu per satu
 function doPost(e) {
   var lock = LockService.getScriptLock();
   try {
@@ -9154,42 +9234,49 @@ function doPost(e) {
     var last = sh.getLastRow();
     var idx = {};
     if (last > 1) {
-      var keys = sh.getRange(2, 1, last - 1, 2).getValues();
+      var keys = sh.getRange(2, 1, last - 1, 3).getValues();
       for (var i = 0; i < keys.length; i++) {
-        idx[keys[i][0]] = { row: i + 2, ts: Number(keys[i][1]) || 0 };
+        var ots = Number(keys[i][1]) || 0, ost = Number(keys[i][2]) || 0;
+        if (ost && ots > ost) ots = ost;
+        idx[keys[i][0]] = { row: i + 2, ts: ots, ni: -1 };
       }
     }
-    var next = last + 1;
     var now = Date.now();
-    var applied = 0, skipped = 0;
+    markCache_(now + recs.length);          // dipasang SEBELUM menulis: pembaca yang lewat di tengah proses tetap memindai Sheet
+    var applied = 0, skipped = 0, rej = [], big = [];
+    var maxCols = sh.getMaxColumns(), width = maxCols;
+    var rowsNew = [], updates = [], next = last + 1;
 
     for (var j = 0; j < recs.length; j++) {
       var rec = recs[j];
       var cur = idx[rec.k];
       var ts = Number(rec.ts) || 0;
-      if (cur && cur.ts > ts) { skipped++; continue; }   // data di server lebih baru
+      if (ts > now) ts = now;
+      if (cur && cur.ts > ts) { skipped++; rej.push(rec.k); continue; }   // data di server lebih baru
       var v = (rec.v === null || rec.v === undefined) ? null : String(rec.v);
       var n = v === null ? 0 : Math.ceil(v.length / CHUNK);
-      if (n > MAX_CHUNKS) { skipped++; continue; }
+      if (n > MAX_CHUNKS) { skipped++; big.push(rec.k); continue; }       // terlalu besar: JANGAN dianggap tersimpan
 
       var row = [rec.k, ts, now + j, n];
       for (var c = 0; c < n; c++) row.push('~' + v.substr(c * CHUNK, CHUNK)); // awalan ~ agar tidak diubah jadi angka/boolean
+      if (row.length > width) width = row.length;
 
-      var r;
-      if (cur) { r = cur.row; }
-      else { r = next++; idx[rec.k] = { row: r, ts: ts }; }
-      cur = idx[rec.k]; cur.ts = ts;
-
-      var maxCols = sh.getMaxColumns();
-      if (maxCols < row.length) {
-        sh.insertColumnsAfter(maxCols, row.length - maxCols);
-        maxCols = row.length;
-      }
-      while (row.length < maxCols) row.push('');       // bersihkan sisa potongan lama
-      sh.getRange(r, 1, 1, row.length).setValues([row]);
+      if (cur && cur.ni >= 0) { rowsNew[cur.ni] = row; cur.ts = ts; }       // kunci sama dua kali dalam satu kiriman
+      else if (cur) { updates.push({ r: cur.row, row: row }); cur.ts = ts; }
+      else { idx[rec.k] = { row: next + rowsNew.length, ts: ts, ni: rowsNew.length }; rowsNew.push(row); }
       applied++;
     }
-    return json_({ ok: true, applied: applied, skipped: skipped, now: now });
+
+    if (width > maxCols) sh.insertColumnsAfter(maxCols, width - maxCols);
+    var pad = function (row) { while (row.length < width) row.push(''); return row; };   // bersihkan sisa potongan lama
+    for (var u = 0; u < updates.length; u++) {
+      sh.getRange(updates[u].r, 1, 1, width).setValues([pad(updates[u].row)]);
+    }
+    if (rowsNew.length) {
+      sh.getRange(next, 1, rowsNew.length, width).setValues(rowsNew.map(pad));
+    }
+    markCache_(now + recs.length);
+    return json_({ ok: true, v: VERSION, applied: applied, skipped: skipped, rej: rej, big: big, now: now });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   } finally {
@@ -9226,9 +9313,13 @@ function doGet(e) {
       return json_({ ok: true, k: key, v: pv });
     }
     var since = Number(e.parameter.since) || 0;
+    try {   // jalur cepat: tidak ada penulisan setelah 'since' -> jawab tanpa membuka Sheet
+      var cs = CacheService.getScriptCache().get('qc_last_st');
+      if (cs && Number(cs) <= since) return json_({ ok: true, v: VERSION, now: now, records: [], more: false, cursor: since });
+    } catch (err0) {}
     var sh = sheet_();
     var last = sh.getLastRow();
-    if (last < 2) return json_({ ok: true, now: now, records: [], more: false, cursor: since });
+    if (last < 2) return json_({ ok: true, v: VERSION, now: now, records: [], more: false, cursor: since });
 
     // hanya kolom C (st) dan D (n): ringan, tidak menyentuh isi foto
     var meta = sh.getRange(2, 3, last - 1, 2).getValues();
@@ -9270,7 +9361,7 @@ function doGet(e) {
       }
     }
     return json_({
-      ok: true, now: now, records: records, more: more,
+      ok: true, v: VERSION, now: now, records: records, more: more,
       cursor: page.length ? page[page.length - 1].st : since
     });
   } catch (err) {
@@ -9819,6 +9910,7 @@ window.QCUnits={
   unitName:unitName,
   wipe:wipe,
   reload:function(){try{cfg=JSON.parse(localStorage.getItem(CFG_KEY)||'{}')||{}}catch(e){cfg={}}return rebuild()},
+  reloadMeta:function(){try{lbl=JSON.parse(localStorage.getItem(LBL_KEY)||'{}')||{}}catch(e){lbl={}}try{typ=JSON.parse(localStorage.getItem(TYP_KEY)||'{}')||{}}catch(e){typ={}}},
   refresh:function(){
     refreshUI();
     var m=$('pmModal'),b=$('pmBody');
@@ -10137,6 +10229,7 @@ function setRowLink(kid,link,o){
     if(link){rows[x].link=link;rows[x].foto='Lihat Link →'}
     if(o&&link){nAdd({P:P,sig:sig,name:nameOf(rows[x]),kind:'manual',by:o.by||'',t:o.t||Date.now(),link:link});try{if(window.SheetLink&&SheetLink.evt)SheetLink.evt(baseOf(P),'drw',nameOf(rows[x]),o.by||'',o.t||Date.now())}catch(e){}}break}}
 window.__boqApplyDwg=function(kid,v,setF,remF,ls){
+  if(kid==='__cfg__'){if(v===null||ls.getItem(OP+kid)===v)return;setF.call(ls,OP+kid,v);try{if(window.SheetLink&&SheetLink.applyShared)SheetLink.applyShared(v)}catch(e){}return}
   var k=OP+kid,cur=ls.getItem(k);
   if(v===null){if(cur==null)return;var old=null;try{old=JSON.parse(cur)}catch(e){}remF.call(ls,k);setRowLink(kid,old&&old.orig||null,null);return}
   if(cur===v)return;var o=null;try{o=JSON.parse(v)}catch(e){return}
@@ -10923,6 +11016,9 @@ window.addEventListener('load',function(){
 (function(){
   'use strict';
   if(window.MRSSheet) return;
+  /* Sinkron MRS ke Google Sheet DINONAKTIFKAN (pakai export offline). Hapus 3 baris ini untuk mengaktifkan kembali. */
+  try{['qc_mrs_sheet_url','qc_mrs_sheet_token','qc_mrs_sheet_snap','qc_mrs_sheet_q','qc_mrs_sheet_last'].forEach(function(k){window.localStorage.removeItem(k);});}catch(e){}
+  window.MRSSheet={open:function(){},sendAll:function(){return 0;},scan:function(){},flush:function(){},state:function(){return {url:false,pending:0,status:{kind:'off',msg:'Nonaktif'}};}}; return;
   var LS=window.localStorage, KU='qc_mrs_sheet_url', KT='qc_mrs_sheet_token', KS='qc_mrs_sheet_snap', KQ='qc_mrs_sheet_q', KL='qc_mrs_sheet_last';
   var SCRIPT="/* ===== MRS Sync \u2014 QC Incoming -> Google Sheet (tambah / ubah / hapus otomatis) ===== */\nvar SHEET_ID  = '17Q4lqS7OQ3F8Q5P2wI5JPhLY_gQf_KqGvXQqsuzXA6g';\nvar GID       = 1835775614;      // angka setelah gid= pada alamat sheet\nvar TOKEN     = '';              // opsional: isi kode rahasia, samakan di aplikasi\nvar ID_HEADER = 'APP_ID';        // kolom bantu (otomatis dibuat di kolom paling kanan)\n\nvar ALIAS = {\n  no:           ['no','nomor','no urut'],\n  tgl:          ['tgl inspeksi','tanggal inspeksi','tanggal','tgl','date'],\n  iiNo:         ['incoming no','incoming no ii no','ii no','no incoming','incoming number','incoming'],\n  project:      ['kode project','project','kode proyek','project code'],\n  partDesc:     ['item description','part item description','description','item','deskripsi','part description'],\n  qty:          ['qty','quantity','jumlah'],\n  brand:        ['manufacturer','manufacturer brand','brand','merk','pabrikan'],\n  supplier:     ['supplier distributor','supplier','distributor','vendor'],\n  po:           ['nomor po','no po','po','po number','purchase order'],\n  hit:          ['hit no','hit number','hit'],\n  checkDim:     ['check dim','check dimensi','dimensi'],\n  appearance:   ['appear','appearance','appearance visual','visual'],\n  functionPerf: ['function performance','function','performance','fungsi'],\n  result:       ['inspection result','result','hasil inspeksi','hasil'],\n  keterangan:   ['keterangan','remark','remarks','catatan'],\n  mtcStatus:    ['status mtc','mtc'],\n  foto:         ['dokumentasi foto','dokumentasi','foto'],\n  namaInspektor:['nama inspektor','inspektor','inspector']\n};\nvar DEFAULT_HEADERS = [['no','No.'],['tgl','Tgl Inspeksi'],['iiNo','Incoming No'],['hit','Hit No'],['project','Kode Project'],['partDesc','Item Description'],['qty','Qty'],['brand','Manufacturer'],['supplier','Supplier / Distributor'],['po','Nomor PO'],['checkDim','Check Dim'],['appearance','Appear'],['functionPerf','Function / Performance'],['result','Inspection Result'],['keterangan','Keterangan'],['mtcStatus','Status MTC'],['namaInspektor','Nama Inspektor'],['foto','Dokumentasi (Foto)']];\n\nfunction norm_(s){ return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/^ +| +$/g, ''); }\nfunction out_(o){ return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }\nfunction sheet_(){\n  var ss = SpreadsheetApp.openById(SHEET_ID), list = ss.getSheets();\n  for (var i = 0; i < list.length; i++) if (list[i].getSheetId() === GID) return list[i];\n  throw new Error('Sheet dengan gid ' + GID + ' tidak ditemukan');\n}\nfunction layout_(sh){\n  var lc = Math.max(sh.getLastColumn(), 1), lr = Math.max(sh.getLastRow(), 1);\n  var scan = Math.min(lr, 20), vals = sh.getRange(1, 1, scan, lc).getValues();\n  var best = -1, bestN = 0, bestMap = null, any = false;\n  for (var r = 0; r < vals.length; r++) {\n    var map = {}, n = 0;\n    for (var c = 0; c < vals[r].length; c++) {\n      var h = norm_(vals[r][c]); if (!h) continue; any = true;\n      for (var k in ALIAS) { if (map[k] !== undefined) continue; if (ALIAS[k].indexOf(h) >= 0) { map[k] = c; n++; break; } }\n    }\n    if (n > bestN) { best = r; bestN = n; bestMap = map; }\n  }\n  var hdr, map;\n  if (bestN >= 3 && bestMap.iiNo !== undefined) { hdr = best + 1; map = bestMap; }\n  else if (!any) {                                  // sheet kosong: buat header standar\n    hdr = 1; map = {};\n    for (var i = 0; i < DEFAULT_HEADERS.length; i++) { map[DEFAULT_HEADERS[i][0]] = i; sh.getRange(1, i + 1).setValue(DEFAULT_HEADERS[i][1]); }\n  } else {\n    throw new Error('Baris header tidak dikenali. Pastikan ada kolom \"Incoming No\", \"Item Description\", dsb.');\n  }\n  var width = Math.max(sh.getLastColumn(), 1), hv = sh.getRange(hdr, 1, 1, width).getValues()[0], idCol = -1;\n  for (var j = 0; j < hv.length; j++) if (norm_(hv[j]) === norm_(ID_HEADER)) { idCol = j; break; }\n  if (idCol < 0) {\n    idCol = width;\n    sh.getRange(hdr, idCol + 1).setValue(ID_HEADER).setFontColor('#94a3b8');\n  }\n  return { sh: sh, hdr: hdr, map: map, idCol: idCol };\n}\nfunction fill_(row, L, r){\n  for (var k in L.map) { if (k === 'no') continue; if (r[k] !== undefined) row[L.map[k]] = r[k]; }\n}\nfunction doGet(e){\n  try {\n    var L = layout_(sheet_()), cols = [], miss = [];\n    for (var k in ALIAS) { if (L.map[k] !== undefined) cols.push(k); else miss.push(k); }\n    return out_({ ok: true, sheet: L.sh.getName(), headerRow: L.hdr, found: cols, missing: miss });\n  } catch (err) { return out_({ ok: false, error: String(err.message || err) }); }\n}\nfunction doPost(e){\n  var lock = LockService.getScriptLock(); lock.waitLock(30000);\n  try {\n    var req = JSON.parse((e.postData && e.postData.contents) || '{}');\n    if (TOKEN && req.token !== TOKEN) return out_({ ok: false, error: 'Kode rahasia salah' });\n    var L = layout_(sheet_()), sh = L.sh, ops = req.ops || [];\n    var first = L.hdr + 1, last = Math.max(sh.getLastRow(), L.hdr), nrows = last - L.hdr;\n    var width = Math.max(sh.getLastColumn(), L.idCol + 1);\n    var vals = [], fml = [];\n    if (nrows > 0) { var rg = sh.getRange(first, 1, nrows, width); vals = rg.getValues(); fml = rg.getFormulas(); }\n    var data = vals.map(function(row, i){ return row.map(function(v, j){ return fml[i][j] || v; }); });\n    var idRow = {}, iiRow = {};\n    data.forEach(function(row, i){\n      var id = String(row[L.idCol] || '').replace(/^ +| +$/g, '');\n      if (id) idRow[id] = i;\n      else if (L.map.iiNo !== undefined) { var ii = norm_(row[L.map.iiNo]); if (ii) iiRow[ii] = i; }\n    });\n    var del = {}, touched = {}, added = [], upd = 0;\n    ops.forEach(function(op){\n      if (op.op === 'delete') { if (idRow[op.id] !== undefined) del[idRow[op.id]] = 1; return; }\n      var r = op.row || {}, i = idRow[op.id];\n      if (i === undefined) { var k = norm_(r.iiNo); if (k && iiRow[k] !== undefined) { i = iiRow[k]; delete iiRow[k]; idRow[op.id] = i; } }\n      if (i === undefined) {\n        var nr = []; for (var c = 0; c < width; c++) nr.push('');\n        fill_(nr, L, r); nr[L.idCol] = op.id; data.push(nr); i = data.length - 1; idRow[op.id] = i; added.push(i);\n      } else {\n        fill_(data[i], L, r); data[i][L.idCol] = op.id; touched[i] = 1; upd++; delete del[i];\n      }\n    });\n    Object.keys(touched).forEach(function(i){ i = +i; if (added.indexOf(i) < 0) sh.getRange(first + i, 1, 1, width).setValues([data[i]]); });\n    if (added.length) {\n      var s = added[0], blk = data.slice(s, s + added.length);\n      sh.getRange(first + s, 1, blk.length, width).setValues(blk);\n    }\n    var dels = Object.keys(del).map(Number).sort(function(a, b){ return b - a; });\n    dels.forEach(function(i){ sh.deleteRow(first + i); });\n    if (L.map.no !== undefined && (added.length || dels.length)) {      // nomor urut ulang\n      var lr2 = Math.max(sh.getLastRow(), L.hdr), n2 = lr2 - L.hdr;\n      if (n2 > 0) {\n        var ch = sh.getRange(first, 1, n2, Math.max(sh.getLastColumn(), L.idCol + 1)).getValues(), nums = [], k2 = 0;\n        ch.forEach(function(row){\n          var has = String(row[L.idCol] || '') !== '' || (L.map.iiNo !== undefined && String(row[L.map.iiNo] || '') !== '');\n          nums.push([has ? ++k2 : '']);\n        });\n        sh.getRange(first, L.map.no + 1, n2, 1).setValues(nums);\n      }\n    }\n    SpreadsheetApp.flush();\n    return out_({ ok: true, added: added.length, updated: upd, deleted: dels.length });\n  } catch (err) {\n    return out_({ ok: false, error: String(err.message || err) });\n  } finally { lock.releaseLock(); }\n}\n";
   var SNAP=jget(KS,{}), Q=jget(KQ,{}), busy=false, pushT=null, st={kind:'off',msg:'Belum terhubung'};
@@ -11823,7 +11919,6 @@ function renderIncoming(){
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <button type="button" class="inc-back-btn" id="incBackBtn" onclick="showHome()" title="Kembali ke Dashboard">← Dashboard</button>
         <button type="button" class="inc-back-btn" id="incSyncBtn" onclick="window.QCSync&&QCSync.open()" title="Sinkron ke semua inspector">🔄 Sinkron <span id="incSyncDot" style="color:#94a3b8">●</span></button>
-        <button type="button" class="inc-back-btn" id="incMrsBtn" onclick="window.MRSSheet&&MRSSheet.open()" title="Sinkron ke Google Sheet MRS">📊 Sheet MRS <span id="incMrsDot" style="color:#94a3b8">●</span></button>
         <button type="button" class="inc-add-btn" id="incAddBtn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Tambah Record
@@ -26533,6 +26628,7 @@ function masterHtml(D){
     '</div>'+
     '<div class="nv-bayh"><span>Pengaturan</span><h3>Backup &amp; akses</h3></div><div class="nv-grid nv-g3">'+
       mc('pm-backup','💾','#3b82f6','#6366f1','Backup &amp; Project','Simpan backup, pulihkan, atau sembunyikan project. Data tersimpan di browser ini.','Buka →')+
+      mc('qcbk','🛟','#22c55e','#0ea5e9','Backup Otomatis &amp; Pemulihan','Salinan otomatis di HP ini, unduh/pulihkan file backup, atau ambil ulang dari server. Versi aplikasi: v'+esc(window.APP_VERSION||'?'),'Buka →')+
       mc('guest','🌐','#6366f1','#06b6d4','Link Outstanding Tamu','Salin link Outstanding hanya-baca untuk dibagikan ke tamu.','Salin →')+
       mc('inspector','👤','#0ea5e9','#8b5cf6','Akun Inspector','Daftar nama + PIN inspector (tambah, reset PIN, nonaktifkan). Nama login otomatis tercatat di hasil inspeksi.','Kelola →',inspBadge())+
     '</div>'+
@@ -26607,6 +26703,7 @@ function act(a){
   if(a==='pm-import')return pm('import');if(a==='pm-units')return pm('units');if(a==='pm-drive')return pm('drive');if(a==='pm-backup')return pm('backup');
   if(a==='add'){if(window.QCAdd&&QCAdd.open)QCAdd.open();else toast('Fitur Additional belum tersedia');return;}
   if(a==='sync'){if(window.QCSync&&QCSync.open)QCSync.open();else toast('Modul sinkron belum tersedia');return;}
+  if(a==='qcbk'){if(window.QCBackup)QCBackup.open();else toast('Modul backup belum tersedia');return;}
   if(a==='bell'){var b=$('bqBell');if(b)b.click();else toast('Belum ada pemberitahuan drawing');return;}
   if(a==='guest'){if(typeof window.gxOutLink==='function')window.gxOutLink();else toast('Link tamu belum tersedia');return;}
   if(a==='inspector'){if(window.QCUser&&QCUser.admin)QCUser.admin();else toast('Modul akun inspector belum tersedia');return;}
@@ -30179,15 +30276,26 @@ function renderPanel(keep){var b=$('slBody');if(!b)return;
   var lg=jget(KL,[]);if(lg.length)h+='<details><summary>Riwayat update ('+lg.length+')</summary>'+lg.slice(0,10).map(noticeHtml).join('')+'</details>';
   h+='<div class="sl-row"><button id="slAdd">➕ Tambah project</button><button class="primary" id="slSave">💾 Simpan &amp; sinkron semua</button></div>'+
      '<label>Cek perubahan tiap (detik)</label><input type="text" id="slEvery" value="'+esc(cfg.every)+'" style="width:120px">';
+  h+='<h4 style="margin:16px 0 4px">Bagikan ke inspector (otomatis)</h4><div class="sl-note">Setelah Anda klik <b>Simpan &amp; sinkron semua</b>, pengaturan di atas otomatis dikirim ke semua inspector lewat 🔄 Sinkron dan terpasang sendiri di HP mereka. Link di bawah hanya cadangan untuk HP yang belum tersambung Sinkron.</div><div class="sl-row"><button id="slLink">📤 Salin link pengaturan untuk inspector</button></div>';
   b.innerHTML=h;b.onclick=moreClick;
   cfg.projects.forEach(function(e){var o=stOf(e.project||'');if(o.kind!=='off')setSt(e.project,o.kind,o.msg)});
   b.querySelectorAll('.sl-st').forEach(function(el){if(!el.textContent){el.textContent='Belum disinkron';el.style.color=COL.off}});
+  $('slLink').onclick=function(){
+    var c=(readInputs()||[]).filter(function(x){return x.project&&x.url}),
+        out={script:($('slScript').value||'').trim(),every:+$('slEvery').value||120,projects:c};
+    if(!c.length){toast('⚠️ Isi minimal satu project dan link sheet dulu',1);return}
+    var bytes=new TextEncoder().encode(JSON.stringify(out)),bin='';for(var i=0;i<bytes.length;i++)bin+=String.fromCharCode(bytes[i]);
+    var b64=btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''),su='';
+    try{su=(LS.getItem('qc_sync_api_url')||'').trim()}catch(e){}
+    var link=location.href.split('#')[0].split('?')[0]+'#'+(su?'sync='+encodeURIComponent(su)+'&':'')+'qccfg='+b64;
+    var done=function(){toast('✅ Link pengaturan disalin. Kirim ke inspector, cukup dibuka sekali.')};
+    try{navigator.clipboard.writeText(link).then(done,function(){window.prompt('Salin link ini:',link)})}catch(e){window.prompt('Salin link ini:',link)}};
   $('slAdd').onclick=function(){var c=readInputs();if(c)cfg.projects=c;cfg.projects.push({project:'',url:''});renderPanel()};
   $('slSave').onclick=function(){var c=readInputs()||[],seen={},bad='';
     c=c.filter(function(x){return x.project||x.url});
     c.forEach(function(x){if(!x.project||!x.url)bad='Setiap project harus punya nama DAN URL';if(seen[x.project])bad='Nama project kembar: '+x.project;seen[x.project]=1});
     if(bad){toast('⚠️ '+bad,1);return}
-    cfg.projects=c;cfg.script=($('slScript').value||'').trim();cfg.every=+$('slEvery').value||120;saveCfg();cfg.projects.forEach(function(x){LS.removeItem(KH+x.project)});schedule();sync(true)};
+    cfg.projects=c;cfg.script=($('slScript').value||'').trim();cfg.every=+$('slEvery').value||120;saveCfg();publishShared();cfg.projects.forEach(function(x){LS.removeItem(KH+x.project)});schedule();sync(true)};
   b.querySelectorAll('.slD').forEach(function(x){x.onclick=function(){var c=readInputs();if(c)cfg.projects=c;var i=+x.getAttribute('data-i'),n=cfg.projects[i].project;
     if(n&&!confirm('Berhenti sinkron "'+n+'"? Project & data inspeksinya tetap ada di web, hanya tidak diperbarui lagi dari sheet.'))return;
     cfg.projects.splice(i,1);saveCfg();renderPanel()}});
@@ -30208,10 +30316,366 @@ function ui(){
     if(t==='drive'){var pb=$('pmBody');if(pb){pb.innerHTML='<div id="slBody" class="sl-box" style="width:auto;max-width:none;background:none;border:0;padding:0"></div>';renderPanel()}}
   }}
 
-window.SheetLink={open:function(){window.pmTab&&window.pmTab('drive')},diff:diff,evt:evt,notify:addNotice,sync:sync,convert:convert,cfg:cfg,_dnParts:dnParts,_t:{listHtml:listHtml,migrate:migrate,restoreOrphans:restoreOrphans,collect:collect}};
-function start(){ui();schedule();showPopup();setTimeout(function(){sync(false)},1500);
+/* ---------- pengaturan bersama (admin simpan sekali -> semua inspector ikut lewat Sinkron) ---------- */
+function sharedOk(o){
+  if(!o||typeof o!=='object')return null;
+  var script=String(o.script||'').trim();
+  if(script&&!/^https:\/\/script\.google\.com\/macros\/s\/[^\s]+\/exec(\?.*)?$/.test(script))script='';
+  var okU=function(x){return /^https:\/\/(docs|script|drive)\.google\.com\//.test(String(x||''))};
+  var pr=(Array.isArray(o.projects)?o.projects:[]).filter(function(x){return x&&typeof x.project==='string'&&x.project.trim()&&x.project.length<=120&&okU(x.url)}).slice(0,30).map(function(x){return{project:x.project.trim(),url:String(x.url).trim()}});
+  if(!pr.length)return null;
+  return{t:+o.t||0,script:script,every:Math.min(3600,Math.max(30,+o.every||120)),projects:pr}}
+function applyShared(v){
+  var o;try{o=sharedOk(JSON.parse(v))}catch(e){return}
+  if(!o||!(o.t>(+LS.getItem('qc_sl_cfg_t')||0)))return;
+  cfg.projects=o.projects;cfg.script=o.script;cfg.every=o.every;saveCfg();
+  try{LS.setItem('qc_sl_cfg_t',String(o.t))}catch(e){}
+  for(var k=LS.length-1;k>=0;k--){var key=LS.key(k);if(key&&key.indexOf(KH)===0)LS.removeItem(key)}
+  schedule();setTimeout(function(){sync(false)},800);
+  try{toast('🔄 Pengaturan Google Sheet diperbarui otomatis dari admin')}catch(e){}
+  try{renderPanel(true)}catch(e){}}
+function publishShared(){
+  var pr=cfg.projects.filter(function(x){return x.project&&x.url});if(!pr.length)return;
+  var t=Date.now(),by='';try{by=(window.QCUser&&QCUser.name&&QCUser.name())||LS.getItem('boq_inspector')||''}catch(e){}
+  var o={t:t,by:by,script:cfg.script||'',every:cfg.every,projects:pr};
+  try{LS.setItem('qc_sl_cfg_t',String(t));LS.setItem('boqdwg___cfg__',JSON.stringify(o))}catch(e){return}
+  try{if(window.QCSync&&QCSync.mark)QCSync.mark('d:__cfg__')}catch(e){}}
+function initShared(){
+  var raw=null;try{raw=LS.getItem('boqdwg___cfg__')}catch(e){}
+  if(raw){applyShared(raw);return}
+  var isDef=cfg.projects.length===1&&cfg.projects[0].project===DEFAULT.project&&cfg.projects[0].url===DEFAULT.url&&!cfg.script;
+  if(isDef)return;
+  /* HP admin yang sudah punya pengaturan: terbitkan otomatis sekali, tapi tunggu dulu supaya tidak menimpa pengaturan admin yang sudah ada di server */
+  setTimeout(function(){
+    try{if(LS.getItem('boqdwg___cfg__'))return;if(!(window.QCSync&&QCSync.state&&QCSync.state().url))return;publishShared()}catch(e){}},60000)}
+window.SheetLink={open:function(){window.pmTab&&window.pmTab('drive')},applyShared:applyShared,publishShared:publishShared,diff:diff,evt:evt,notify:addNotice,sync:sync,convert:convert,cfg:cfg,_dnParts:dnParts,_t:{listHtml:listHtml,migrate:migrate,restoreOrphans:restoreOrphans,collect:collect}};
+function start(){ui();initShared();schedule();showPopup();setTimeout(function(){sync(false)},1500);
   document.addEventListener('visibilitychange',function(){if(!document.hidden)sync(false)});window.addEventListener('online',function(){sync(false)})}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
+})();
+
+</script>
+<script id="qc-backup-version">
+(function(){
+'use strict';
+if(window.QCBackup)return;
+var LS=window.localStorage;
+var VER=(document.querySelector('meta[name="app-version"]')||{}).content||'?';
+window.APP_VERSION=VER;
+var SKIP_LS=/^(qc_sync_|qc_sl_|qc_bk_)/;      /* pengaturan perangkat: tidak ikut dibackup / dipulihkan */
+var BIG_DB=/photo|pdf/i;                        /* DB foto & PDF: besar, hanya ikut bila dipilih */
+var SELF_DB='qc_backup';
+var KNOWN_DB=['bir_db','bir_photos','dcs_bb_photos','iq_store','qc_incoming_od','qc_incoming_pdf','qc_incoming_photos','qc_out_photos','qc_outbox','qc_store','sl_store'];
+var DAY=86400000;
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function lg(k){try{return LS.getItem(k)}catch(e){return null}}
+function ls_(k,v){try{LS.setItem(k,v)}catch(e){}}
+function say(m,bad){var d=document.createElement('div');d.textContent=m;
+  d.style.cssText='position:fixed;bottom:calc(22px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);z-index:2147483640;padding:11px 18px;border-radius:12px;font:700 .85rem system-ui,sans-serif;color:#fff;background:'+(bad?'#be123c':'#0e3a66')+';box-shadow:0 8px 24px #0008;max-width:90vw;text-align:center';
+  document.body.appendChild(d);setTimeout(function(){d.remove()},4500)}
+function fmt(t){return new Date(t).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}
+function hashStr(s){var h=2166136261>>>0;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}return h.toString(36)+':'+s.length}
+
+/* =========================================================
+   1. VERSI APLIKASI + PERINGATAN VERSI BARU
+   ========================================================= */
+function barWrap(){var w=document.getElementById('qcBarWrap');if(w)return w;
+  w=document.createElement('div');w.id='qcBarWrap';
+  w.style.cssText='position:fixed;left:0;right:0;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:2147483500;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;padding:0 12px';
+  document.body.appendChild(w);return w}
+function bar(id,html,btns){
+  var old=document.getElementById(id);if(old)old.remove();
+  var b=document.createElement('div');b.id=id;
+  b.style.cssText='pointer-events:auto;background:#0a1a2e;border:1px solid #2d6199;color:#eaf4ff;border-radius:14px;padding:10px 12px;font:13px/1.4 system-ui,sans-serif;box-shadow:0 10px 30px #000a;max-width:560px;width:100%;box-sizing:border-box';
+  var BT='background:#13294a;border:1px solid #28466d;color:#eaf4ff;border-radius:9px;padding:8px 12px;cursor:pointer;font:inherit;font-weight:700;margin:8px 8px 0 0';
+  b.innerHTML='<div>'+html+'</div><div>'+btns.map(function(x,i){return'<button data-i="'+i+'" style="'+BT+(x.primary?';background:#1d6fb8;border-color:#38bdf8':'')+'">'+x.t+'</button>'}).join('')+'</div>';
+  b.querySelectorAll('button').forEach(function(el){el.onclick=function(){var x=btns[+el.getAttribute('data-i')];if(x.close!==false)b.remove();x.fn&&x.fn()}});
+  barWrap().appendChild(b);return b}
+
+function fetchRemoteVersion(){
+  var base=location.href.split('#')[0].split('?')[0];
+  return fetch(base+'?_='+Date.now(),{cache:'no-store'}).then(function(r){
+    if(!r.ok||!r.body)return null;
+    var rd=r.body.getReader(),dc=new TextDecoder(),buf='';
+    function step(n){return rd.read().then(function(c){
+      if(c.done)return null;
+      buf+=dc.decode(c.value,{stream:true});
+      var m=/<meta name="app-version" content="([^"]+)"/.exec(buf);
+      if(m)return m[1];
+      if(n>60||buf.length>300000)return null;
+      return step(n+1)})}
+    return step(0).then(function(v){try{rd.cancel()}catch(e){}return v},function(){try{rd.cancel()}catch(e){}return null})
+  }).catch(function(){return null})}
+function newer(a,b){return String(a).localeCompare(String(b),undefined,{numeric:true})>0}
+var shownVer='';
+function reloadNow(){
+  var d=document.getElementById('iqDirty');
+  if(d&&d.offsetParent!==null&&!confirm('Ada coretan yang belum disimpan di View Drawing. Tetap muat ulang?'))return;
+  var base=location.href.split('#')[0].split('?')[0];
+  location.replace(base+'?v='+Date.now()+(location.hash||''))}
+function checkVersion(){
+  if(document.hidden)return;
+  fetchRemoteVersion().then(function(rv){
+    if(!rv||!newer(rv,VER)||shownVer===rv)return;
+    shownVer=rv;
+    bar('qcVerBar','🆕 <b>Versi baru tersedia</b> (v'+esc(rv)+', sekarang v'+esc(VER)+'). Simpan pekerjaan Anda dulu, lalu muat ulang.',
+      [{t:'🔄 Muat ulang',primary:true,close:false,fn:reloadNow},{t:'Nanti',fn:function(){}}])})}
+function verLabel(){
+  if(document.getElementById('qcVerLbl'))return;
+  var e=document.createElement('div');e.id='qcVerLbl';e.textContent='v'+VER;
+  e.style.cssText='position:fixed;left:6px;bottom:2px;z-index:5;font:9px/1 system-ui,sans-serif;color:#8ca8c8;opacity:.55;pointer-events:none';
+  document.body.appendChild(e)}
+
+/* =========================================================
+   2. BACKUP & PEMULIHAN
+   ========================================================= */
+function lsDump(){var o={};for(var i=0;i<LS.length;i++){var k=LS.key(i);if(!k||SKIP_LS.test(k))continue;try{o[k]=LS.getItem(k)}catch(e){}}return o}
+async function dbNames(){
+  try{if(indexedDB.databases){var a=await indexedDB.databases();var n=a.map(function(x){return x.name}).filter(function(x){return x&&x!==SELF_DB});if(n.length)return n}}catch(e){}
+  return KNOWN_DB.slice()}
+function openExisting(name){return new Promise(function(ok,no){
+  var r=indexedDB.open(name);
+  r.onupgradeneeded=function(){try{r.transaction.abort()}catch(e){}};   /* DB belum ada: jangan buat DB kosong */
+  r.onsuccess=function(){ok(r.result)};r.onerror=function(){no(r.error)};r.onblocked=function(){no(new Error('blocked'))}})}
+function sz(v){if(v==null)return 0;if(typeof v==='string')return v.length;
+  if(typeof Blob!=='undefined'&&v instanceof Blob)return v.size;
+  if(v.byteLength!=null)return v.byteLength;
+  if(typeof v==='object'){try{return JSON.stringify(v).length}catch(e){return 0}}return 8}
+async function idbDump(o){
+  var out={},names=await dbNames();
+  for(var ni=0;ni<names.length;ni++){var n=names[ni];
+    if(o.skipBigDb&&BIG_DB.test(n))continue;
+    var db;try{db=await openExisting(n)}catch(e){continue}
+    var info={version:db.version,stores:{}},sn=Array.prototype.slice.call(db.objectStoreNames);
+    for(var si=0;si<sn.length;si++){var s=sn[si];
+      try{
+        var st=db.transaction(s,'readonly').objectStore(s);
+        var meta={keyPath:st.keyPath,autoIncrement:st.autoIncrement,entries:[],skipped:0};
+        await new Promise(function(done){var c=st.openCursor();
+          c.onsuccess=function(){var x=c.result;if(!x){done();return}
+            if(o.maxBytes&&sz(x.value)>o.maxBytes)meta.skipped++;else meta.entries.push([x.key,x.value]);x.continue()};
+          c.onerror=function(){done()}});
+        info.stores[s]=meta;
+      }catch(e){}}
+    try{db.close()}catch(e){}
+    out[n]=info}
+  return out}
+
+function stats(ls,idb){
+  var rows=0,projects=[];
+  try{var q=idb.qc_store&&idb.qc_store.stores.kv;
+    if(q)q.entries.forEach(function(e){if(e[0]==='projects'&&e[1]&&typeof e[1]==='object'){projects=Object.keys(e[1]);projects.forEach(function(p){rows+=(e[1][p]||[]).length||0})}})}catch(e){}
+  var insp=0;for(var k in ls)if(k.indexOf('insp_')===0)insp++;
+  return{ls:Object.keys(ls).length,insp:insp,projects:projects.length,rows:rows,pnames:projects.slice(0,8)}}
+
+/* ---- salinan otomatis di perangkat ini ---- */
+function bkDb(){return new Promise(function(ok,no){var r=indexedDB.open(SELF_DB,1);
+  r.onupgradeneeded=function(){var d=r.result;d.createObjectStore('snap',{keyPath:'id'});d.createObjectStore('meta',{keyPath:'id'})};
+  r.onsuccess=function(){ok(r.result)};r.onerror=function(){no(r.error)}})}
+function reqP(q){return new Promise(function(ok,no){q.onsuccess=function(){ok(q.result)};q.onerror=function(){no(q.error)}})}
+async function snapList(){try{var d=await bkDb(),a=await reqP(d.transaction('meta').objectStore('meta').getAll());d.close();return a.sort(function(x,y){return y.t-x.t})}catch(e){return[]}}
+async function snapGet(id){var d=await bkDb(),r=await reqP(d.transaction('snap').objectStore('snap').get(id));d.close();return r}
+async function snapDel(id){var d=await bkDb();await new Promise(function(ok){var t=d.transaction(['snap','meta'],'readwrite');t.objectStore('snap').delete(id);t.objectStore('meta').delete(id);t.oncomplete=ok;t.onerror=ok;t.onabort=ok});d.close()}
+var snapBusy=false;
+async function takeSnapshot(label,force){
+  if(snapBusy)return null;snapBusy=true;
+  try{
+    var ls=lsDump(),idb=await idbDump({skipBigDb:true,maxBytes:1048576}),st=stats(ls,idb);
+    var cnt=0;for(var n in idb)for(var s in idb[n].stores)cnt+=idb[n].stores[s].entries.length;
+    var sig=hashStr(JSON.stringify(ls)+'|'+cnt+'|'+st.rows);
+    if(!force&&lg('qc_bk_sig')===sig){ls_('qc_bk_last',String(Date.now()));return null}
+    var t=Date.now(),id='s'+t,m={id:id,t:t,label:label||'Otomatis',st:st};
+    var d=await bkDb();
+    await new Promise(function(ok,no){var tx=d.transaction(['snap','meta'],'readwrite');
+      tx.objectStore('snap').put({id:id,t:t,ls:ls,idb:idb});tx.objectStore('meta').put(m);
+      tx.oncomplete=ok;tx.onerror=function(){no(tx.error)};tx.onabort=function(){no(tx.error||new Error('abort'))}});
+    d.close();
+    ls_('qc_bk_sig',sig);ls_('qc_bk_last',String(t));
+    /* simpan 5 terbaru + 1 yang paling lengkap dari yang lebih lama (supaya salinan bagus tidak tergeser data yang sudah rusak) */
+    var all=await snapList(),keep={};all.slice(0,5).forEach(function(x){keep[x.id]=1});
+    var best=null;all.slice(5).forEach(function(x){var sc=(x.st.ls||0)+(x.st.rows||0);if(!best||sc>best.sc)best={id:x.id,sc:sc}});
+    if(best)keep[best.id]=1;
+    for(var i=0;i<all.length;i++)if(!keep[all[i].id])await snapDel(all[i].id);
+    return m;
+  }catch(e){console.warn('QCBackup: salinan gagal',e);return null}
+  finally{snapBusy=false}}
+function maybeAuto(){
+  var last=+lg('qc_bk_last')||0;
+  if(Date.now()-last>6*3600*1000)takeSnapshot('Otomatis',false)}
+
+/* ---- terapkan data (dari salinan atau file) ---- */
+function emptyLs(v){return v===null||v===''||v==='{}'||v==='[]'||v==='null'}
+function openOrCreate(name,info){return openExisting(name).catch(function(){return new Promise(function(ok,no){
+  var r=indexedDB.open(name,info.version||1);
+  r.onupgradeneeded=function(){var d=r.result;for(var s in info.stores){if(d.objectStoreNames.contains(s))continue;var m=info.stores[s],o={};if(m.keyPath!=null)o.keyPath=m.keyPath;if(m.autoIncrement)o.autoIncrement=true;d.createObjectStore(s,o)}};
+  r.onsuccess=function(){ok(r.result)};r.onerror=function(){no(r.error)}})})}
+function putEntries(db,store,meta,mode,merge){return new Promise(function(ok){
+  var n=0,tx;try{tx=db.transaction(store,'readwrite')}catch(e){ok(0);return}
+  var st=tx.objectStore(store),inline=st.keyPath!=null;
+  function put(k,v){try{inline?st.put(v):st.put(v,k);n++}catch(er){}}
+  meta.entries.forEach(function(e){var k=e[0],v=e[1];
+    try{
+      if(mode==='all'){put(k,v);return}
+      var g=st.get(k);
+      g.onsuccess=function(){var cur=g.result;
+        if(cur===undefined){put(k,v);return}
+        if(merge&&cur&&v&&typeof cur==='object'&&typeof v==='object'&&!Array.isArray(cur)){
+          var ch=false;for(var p in v)if(!(p in cur)){cur[p]=v[p];ch=true}
+          if(ch){try{inline?st.put(cur):st.put(cur,k);n++}catch(er){}}}};
+    }catch(er){}});
+  tx.oncomplete=function(){ok(n)};tx.onerror=tx.onabort=function(){ok(n)}})}
+async function applyData(data,mode){
+  var res={ls:0,idb:0},ls=data.ls||{};
+  for(var k in ls){if(SKIP_LS.test(k))continue;
+    var cur=lg(k);
+    if(mode==='all'||emptyLs(cur)){ls_(k,ls[k]);res.ls++}
+    else if(k==='qc_units'){try{var a=JSON.parse(cur),b=JSON.parse(ls[k]),ch=false;for(var p in b)if(!(p in a)){a[p]=b[p];ch=true}if(ch){ls_(k,JSON.stringify(a));res.ls++}}catch(e){}}}
+  var idb=data.idb||{};
+  for(var n in idb){
+    if(n===SELF_DB)continue;
+    var db;try{db=await openOrCreate(n,idb[n])}catch(e){continue}
+    for(var s in idb[n].stores){
+      if(!db.objectStoreNames.contains(s))continue;
+      var merge=(n==='qc_store'&&s==='kv');
+      res.idb+=await putEntries(db,s,idb[n].stores[s],mode,merge)}
+    try{db.close()}catch(e){}}
+  return res}
+async function restore(data,mode,srcLabel){
+  if(mode==='all'&&!confirm('Mode "Timpa semua": data di HP ini akan diganti dengan isi '+srcLabel+', dan perubahan itu juga bisa ikut terkirim ke inspector lain lewat Sinkron.\n\nLanjutkan?'))return;
+  say('⏳ Menyimpan salinan pengaman, lalu memulihkan…');
+  await takeSnapshot('Sebelum pemulihan',true);
+  var r=await applyData(data,mode);
+  say('✅ Selesai: '+r.ls+' data lokal + '+r.idb+' data tersimpan dipulihkan. Memuat ulang…');
+  setTimeout(function(){location.reload()},1800)}
+
+/* ---- file backup ---- */
+function b64(u8){var s='',CH=0x8000;for(var i=0;i<u8.length;i+=CH)s+=String.fromCharCode.apply(null,u8.subarray(i,i+CH));return btoa(s)}
+function u8(b){var s=atob(b),u=new Uint8Array(s.length);for(var i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u}
+async function enc(v){
+  if(v==null||typeof v!=='object')return v;
+  if(v instanceof ArrayBuffer)return{__t:'ab',d:b64(new Uint8Array(v))};
+  if(ArrayBuffer.isView(v))return{__t:'ta',c:v.constructor.name,d:b64(new Uint8Array(v.buffer,v.byteOffset,v.byteLength))};
+  if(typeof Blob!=='undefined'&&v instanceof Blob)return{__t:'bl',m:v.type,d:b64(new Uint8Array(await v.arrayBuffer()))};
+  if(v instanceof Date)return{__t:'dt',d:v.getTime()};
+  if(Array.isArray(v)){var a=[];for(var i=0;i<v.length;i++)a.push(await enc(v[i]));return a}
+  var o={};for(var k in v)o[k]=await enc(v[k]);return o}
+function dec(v){
+  if(v==null||typeof v!=='object')return v;
+  if(Array.isArray(v))return v.map(dec);
+  if(v.__t==='ab')return u8(v.d).buffer;
+  if(v.__t==='ta'){var C=window[v.c]||Uint8Array;return new C(u8(v.d).buffer)}
+  if(v.__t==='bl')return new Blob([u8(v.d)],{type:v.m});
+  if(v.__t==='dt')return new Date(v.d);
+  var o={};for(var k in v)o[k]=dec(v[k]);return o}
+async function exportFile(withBig){
+  say('⏳ Menyiapkan file backup…');
+  var ls=lsDump(),idb=await idbDump({skipBigDb:!withBig});
+  var parts=['{"app":"qc-inspection","fmt":1,"version":'+JSON.stringify(VER)+',"t":'+Date.now()+',"ls":'+JSON.stringify(ls)+',"idb":{'];
+  var firstDb=true;
+  for(var n in idb){
+    parts.push((firstDb?'':',')+JSON.stringify(n)+':{"version":'+idb[n].version+',"stores":{');firstDb=false;
+    var firstSt=true;
+    for(var s in idb[n].stores){var m=idb[n].stores[s];
+      parts.push((firstSt?'':',')+JSON.stringify(s)+':{"keyPath":'+JSON.stringify(m.keyPath)+',"autoIncrement":'+(m.autoIncrement?'true':'false')+',"entries":[');firstSt=false;
+      for(var i=0;i<m.entries.length;i++)parts.push((i?',':'')+JSON.stringify([await enc(m.entries[i][0]),await enc(m.entries[i][1])]));
+      parts.push(']}')}
+    parts.push('}}')}
+  parts.push('}}');
+  var blob=new Blob(parts,{type:'application/json'}),a=document.createElement('a'),d=new Date(),z=function(x){return String(x).padStart(2,'0')};
+  a.href=URL.createObjectURL(blob);
+  a.download='backup_QC_'+d.getFullYear()+z(d.getMonth()+1)+z(d.getDate())+'_'+z(d.getHours())+z(d.getMinutes())+'.json';
+  document.body.appendChild(a);a.click();setTimeout(function(){a.remove();URL.revokeObjectURL(a.href)},4000);
+  ls_('qc_bk_file_t',String(Date.now()));
+  say('✅ File backup diunduh ('+Math.round(blob.size/1024)+' KB)')}
+async function importFile(file,mode){
+  var j;try{j=JSON.parse(await file.text())}catch(e){say('⚠️ File bukan backup yang valid',1);return}
+  if(!j||j.app!=='qc-inspection'||!j.idb){say('⚠️ File ini bukan backup aplikasi QC',1);return}
+  var idb={};
+  for(var n in j.idb){idb[n]={version:j.idb[n].version,stores:{}};
+    for(var s in j.idb[n].stores){var m=j.idb[n].stores[s];
+      idb[n].stores[s]={keyPath:m.keyPath,autoIncrement:m.autoIncrement,entries:m.entries.map(function(e){return[dec(e[0]),dec(e[1])]})}}}
+  await restore({ls:j.ls,idb:idb},mode,'file backup ('+fmt(j.t)+')')}
+
+/* ---- pulihkan dari server ---- */
+async function fromServer(){
+  var S=window.QCSync;
+  if(!S||!S.state||!S.state().url){say('⚠️ Sinkron belum terhubung. Hubungkan lewat tombol 🔄 Sinkron.',1);return}
+  if(!confirm('Ambil ulang SEMUA data dari server (Google Sheet) ke HP ini? Data yang lebih baru di HP ini tidak ditimpa oleh data server yang lebih lama.'))return;
+  say('⏳ Mengambil ulang data dari server…');
+  await takeSnapshot('Sebelum ambil dari server',true);
+  try{ls_('qc_sync_cursor','0');await S.sync()}catch(e){say('⚠️ Gagal: '+(e&&e.message||e),1);return}
+  say('✅ Data server diambil. Memuat ulang…');setTimeout(function(){location.reload()},1800)}
+
+/* ---- antarmuka ---- */
+function closeM(){var e=document.getElementById('qcBkModal');if(e)e.remove()}
+async function openM(){
+  closeM();
+  var list=await snapList(),lastFile=+lg('qc_bk_file_t')||0;
+  var BT='background:#102743;border:1px solid #23486d;color:#eaf4ff;border-radius:10px;padding:8px 12px;cursor:pointer;font:inherit;margin:4px 6px 4px 0';
+  var H='margin:16px 0 4px;font-size:.95rem';
+  var N='color:#8ca8c8;font-size:.8rem';
+  var d=document.createElement('div');d.id='qcBkModal';
+  d.style.cssText='position:fixed;inset:0;z-index:2147483550;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;padding:12px';
+  var snaps=list.length?list.map(function(m,i){
+    return'<div style="border:1px solid #1b3552;background:#071326;border-radius:10px;padding:8px 10px;margin:6px 0"><b>'+fmt(m.t)+'</b> <span style="'+N+'">'+esc(m.label)+'</span>'+
+    '<div style="'+N+'">'+m.st.projects+' project · '+m.st.rows+' baris · '+m.st.insp+' hasil inspeksi · '+m.st.ls+' data lokal</div>'+
+    '<button data-sn="'+i+'" style="'+BT+'">♻ Pulihkan dari salinan ini</button></div>'}).join(''):'<div style="'+N+'">Belum ada salinan. Salinan pertama dibuat otomatis sebentar lagi, atau klik tombol di bawah.</div>';
+  d.innerHTML='<div style="background:#0a1a2e;border:1px solid #2d6199;border-radius:16px;color:#eaf4ff;max-width:600px;width:100%;max-height:90vh;overflow:auto;padding:14px 16px;font:14px/1.5 system-ui,sans-serif">'+
+  '<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:1.05rem">💾 Backup &amp; Pemulihan</b><button id="bkX" style="'+BT+'">✕</button></div>'+
+  '<div style="'+N+'">Versi aplikasi: <b style="color:#eaf4ff">v'+esc(VER)+'</b></div>'+
+  '<h4 style="'+H+'">Mode pemulihan</h4>'+
+  '<select id="bkMode" style="width:100%;box-sizing:border-box;background:#102743;color:#eef7ff;border:1px solid #315476;border-radius:10px;padding:8px 10px;font:inherit"><option value="missing">Hanya data yang hilang (aman, disarankan)</option><option value="all">Timpa semua data di HP ini (hati-hati)</option></select>'+
+  '<div style="'+N+'">Sebelum memulihkan, aplikasi otomatis membuat salinan pengaman.</div>'+
+  '<h4 style="'+H+'">1. Salinan otomatis di HP ini</h4>'+
+  '<div style="'+N+'">Dibuat otomatis tiap beberapa jam bila ada perubahan. Disimpan di browser ini saja, jadi tidak melindungi kalau data browser dihapus atau HP diganti. Untuk itu pakai nomor 2 atau 3.</div>'+
+  snaps+'<button id="bkNow" style="'+BT+'">➕ Buat salinan sekarang</button>'+
+  '<h4 style="'+H+'">2. File backup</h4>'+
+  '<div style="'+N+'">Terakhir diunduh: '+(lastFile?fmt(lastFile):'belum pernah')+'. Simpan file ini di tempat aman (Drive / PC).</div>'+
+  '<label style="display:block;margin:4px 0;'+N+'"><input type="checkbox" id="bkBig"> Sertakan foto &amp; PDF (file bisa sangat besar)</label>'+
+  '<button id="bkDl" style="'+BT+'">⬇ Unduh file backup</button><button id="bkUp" style="'+BT+'">⬆ Pulihkan dari file…</button><input type="file" id="bkFile" accept=".json,application/json" style="display:none">'+
+  '<h4 style="'+H+'">3. Dari server</h4>'+
+  '<div style="'+N+'">Ambil ulang semua data yang tersimpan di Google Sheet lewat 🔄 Sinkron. Cocok kalau HP ini kosong atau datanya hilang.</div>'+
+  '<button id="bkSrv" style="'+BT+'">☁ Pulihkan dari server</button></div>';
+  d.addEventListener('click',function(e){if(e.target===d)closeM()});
+  document.body.appendChild(d);
+  var g=function(i){return document.getElementById(i)},mode=function(){return g('bkMode').value};
+  g('bkX').onclick=closeM;
+  g('bkNow').onclick=async function(){g('bkNow').disabled=true;var m=await takeSnapshot('Manual',true);say(m?'✅ Salinan dibuat':'⚠️ Gagal membuat salinan',!m);openM()};
+  g('bkDl').onclick=function(){exportFile(g('bkBig').checked).catch(function(e){say('⚠️ Gagal: '+(e&&e.message||e),1)})};
+  g('bkUp').onclick=function(){g('bkFile').click()};
+  g('bkFile').onchange=function(){var f=g('bkFile').files[0];if(f){var md=mode();closeM();importFile(f,md).catch(function(e){say('⚠️ Gagal: '+(e&&e.message||e),1)})}};
+  g('bkSrv').onclick=function(){closeM();fromServer()};
+  d.querySelectorAll('[data-sn]').forEach(function(b){b.onclick=async function(){
+    var m=list[+b.getAttribute('data-sn')],md=mode();
+    var s=await snapGet(m.id);if(!s){say('⚠️ Salinan tidak ditemukan',1);return}
+    closeM();restore(s,md,'salinan '+fmt(m.t)).catch(function(e){say('⚠️ Gagal: '+(e&&e.message||e),1)})}})}
+
+function hookBtn(){
+  if(document.getElementById('qcBkBtn')){return}
+  var anchor=document.getElementById('bqBell')||document.getElementById('qcSyncBtn');if(!anchor)return;
+  var b=document.createElement('button');b.id='qcBkBtn';b.className=anchor.className;b.type='button';
+  b.title='Backup & pemulihan data (versi v'+VER+')';b.textContent='💾 Backup';b.onclick=openM;
+  anchor.insertAdjacentElement('afterend',b)}
+
+function remind(){
+  var last=+lg('qc_bk_file_t')||0,dis=+lg('qc_bk_remind_dis')||0,has=0;
+  for(var i=0;i<LS.length;i++){var k=LS.key(i);if(k&&k.indexOf('insp_')===0){has=1;break}}
+  if(!has||Date.now()-last<3*DAY||Date.now()-dis<DAY)return;
+  bar('qcBkBar','💾 '+(last?'Terakhir backup file: '+fmt(last)+'.':'Belum pernah backup file.')+' Unduh backup supaya data inspeksi aman kalau HP bermasalah.',
+    [{t:'⬇ Unduh backup',primary:true,fn:function(){ls_('qc_bk_remind_dis',String(Date.now()));exportFile(false).catch(function(e){say('⚠️ Gagal: '+(e&&e.message||e),1)})}},
+     {t:'Ingatkan besok',fn:function(){ls_('qc_bk_remind_dis',String(Date.now()))}}])}
+
+window.QCBackup={version:VER,open:openM,snapshot:function(){return takeSnapshot('Manual',true)},list:snapList,exportFile:exportFile,restoreFromServer:fromServer,_applyData:applyData,_dump:function(){return idbDump({skipBigDb:true})},checkVersion:checkVersion};
+
+function boot(){
+  verLabel();hookBtn();
+  setTimeout(hookBtn,1500);setTimeout(hookBtn,4000);
+  setTimeout(checkVersion,8000);setInterval(checkVersion,10*60*1000);
+  document.addEventListener('visibilitychange',function(){if(!document.hidden){checkVersion();hookBtn()}else maybeAuto()});
+  setTimeout(maybeAuto,25000);setInterval(maybeAuto,30*60*1000);
+  setTimeout(remind,40000)}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
 
 </script>
