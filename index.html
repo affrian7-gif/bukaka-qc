@@ -8516,7 +8516,7 @@ const jget = (k, d) => { try { const v = raw(k); return v ? JSON.parse(v) : d; }
 const jset = (k, v) => { try { _set.call(LS, k, JSON.stringify(v)); } catch(e) {} };
 const getUrl = () => (raw(K.url) || '').trim();
 /* ---- v6: waktu server sebagai acuan (jam HP yang salah tidak lagi membuat foto/data lama menang) ---- */
-const SKEW_KEY = 'qc_sync_skew', EXPECT_V = 'v11-2026-11-06', LBLK = 'qc_unitlabels', TYPK = 'qc_types';
+const SKEW_KEY = 'qc_sync_skew', EXPECT_V = 'v12-2026-11-06', LBLK = 'qc_unitlabels', TYPK = 'qc_types';
 let skew = Number(raw(SKEW_KEY)) || 0, srvV = '', srvKnown = false, metaCh = false;
 const bigWarn = new Set();
 const sts = t => (t > 1e12 ? t + skew : t);          // waktu lokal -> waktu server (penanda ts=1 tidak diubah)
@@ -9080,7 +9080,7 @@ function applyRecords(recs){
   let chkCh = false, inspCh = false;
   const chkKeys = [];
   recs.forEach(r => {
-    if (r.lazy) return;                              // foto besar: tidak diunduh saat sinkron, diambil saat dilihat
+    if (r.lazy) { if (r.k.charAt(0) === 'g') { try { if (window.QCInc && window.QCInc.noteRemote) window.QCInc.noteRemote(r.k.slice(2), ''); } catch(e) {} } return; }   // foto besar: tidak diunduh saat sinkron, diambil saat dilihat
     if (d[r.k] && sts(d[r.k]) > r.ts) return;       // perubahan lokal yang belum terkirim lebih baru (dibandingkan dalam waktu server)
     const kind = r.k.charAt(0), key = r.k.slice(2);
     if (kind === 'b' || kind === 'y') { try { if (window.BankIR && window.BankIR.apply) window.BankIR.apply(kind, key, r.v); else (window.__birQ = window.__birQ || []).push(r); } catch(e) { console.warn('QCSync: gagal menerapkan Bank IR', key, e); } return; }
@@ -9183,6 +9183,10 @@ async function resolveDrv(recs){
   const worker = async () => {
     while (i < todo.length) {
       const r = todo[i++];
+      if (r.k.charAt(0) === 'g') {   // foto Incoming: cukup catat id Drive; fotonya diambil saat dilihat
+        try { if (window.QCInc && window.QCInc.noteRemote) window.QCInc.noteRemote(r.k.slice(2), r.v.slice(4)); } catch(e) {}
+        drop.add(r); continue;
+      }
       if (r.k.charAt(0) === 'f') {   // foto Outstanding: cukup simpan id Drive, thumbnail tampil lewat link
         try {
           const key = r.k.slice(2), id = r.v.slice(4), m = jget('qc_drvmap', {});
@@ -9442,7 +9446,7 @@ var SHEET_NAME = 'QC_Sync';   // nama tab yang berisi data sinkron (kolom key | 
 var SPREADSHEET_ID = '1SRHyth8zSHVICy1B_cNdJ8Vl8H2gLvIhtp0Sd6Vfeds';   // kosongkan bila script dibuat dari dalam Sheet (Extensions > Apps Script); isi ID Sheet bila dibuat dari script.google.com
 // Opsional keamanan untuk pembaca Sheet (?id=): isi dengan ID spreadsheet yang BOLEH dibaca. Kosong = semua Sheet yang bisa diakses akun Anda bisa dibaca pemegang URL.
 var ALLOWED_IDS = [];   // contoh: ['1SRHyth8zSHVICy1B_cNdJ8Vl8H2gLvIhtp0Sd6Vfeds', '1AbC...']
-var VERSION = 'v11-2026-11-06';    // penanda: muncul di /exec?ping=1 bila kode TERBARU yang berjalan
+var VERSION = 'v12-2026-11-06';    // penanda: muncul di /exec?ping=1 bila kode TERBARU yang berjalan
 var ANS_SHEET = 'Tamu_Jawaban';   // tab jawaban tamu (dibuat otomatis saat jawaban pertama masuk)
 var CHUNK = 45000;      // batas sel Google Sheets = 50.000 karakter
 var MAX_CHUNKS = 20;    // maks ±900 KB per catatan
@@ -9779,7 +9783,7 @@ function doGet(e) {
     var hit = [];
     for (var i = 0; i < meta.length; i++) {
       var s = Number(meta[i][2]) || 0;
-      if (s > since) { var nn = Number(meta[i][3]) || 0; hit.push({ row: i + 2, st: s, n: nn, lazy: lite && nn > 0 && String(meta[i][0]).indexOf('f:') === 0 }); }
+      if (s > since) { var nn = Number(meta[i][3]) || 0; hit.push({ row: i + 2, st: s, n: nn, lazy: lite && nn > 0 && /^[fg]:/.test(String(meta[i][0])) }); }
     }
     hit.sort(function (a, b) { return a.st - b.st; });
     var cut = 0, tot = 0;
@@ -11493,7 +11497,48 @@ window.addEventListener('load',function(){
     }catch(err){}
     return undefined;
   }
-  window.QCInc={getForSync:getForSync,apply:apply,refresh:refresh,scan:scan,metaFor:metaFor};
+  /* ---- foto dari inspector lain: tidak diunduh saat sinkron; thumbnail langsung dari link Drive, foto penuh diambil saat dilihat ---- */
+  var DMK='qc_drvmap', rtT=null, FL={}, FQ=[], FA=0;
+  function noteRemote(pid,id){
+    var m=jget(DMK,{}), k='g:'+pid, val=id||'1';
+    if(m[k]===val&&PSEEN[pid]) return;
+    m[k]=val; jset(DMK,m); PSEEN[pid]=1; jset(PK,PSEEN);   // PSEEN: cegah foto ini dikirim balik
+    clearTimeout(rtT); rtT=setTimeout(function(){ try{refresh();}catch(e){} },500);
+  }
+  function remoteKnown(pid){ return !!jget(DMK,{})['g:'+pid]; }
+  function thumbFor(pid){ var v=jget(DMK,{})['g:'+pid]; return (v&&v!=='1')?'https://drive.google.com/thumbnail?id='+encodeURIComponent(v)+'&sz=w400':''; }
+  function fetchFull(pid){
+    if(FL[pid]) return FL[pid];
+    FL[pid]=new Promise(function(res){ FQ.push({pid:pid,res:res}); pump(); });
+    return FL[pid];
+  }
+  function pump(){
+    while(FA<3&&FQ.length){
+      FA++;
+      (function(j){
+        var u=''; try{u=(LS.getItem('qc_sync_api_url')||'').trim();}catch(e){}
+        (u?fetch(u+(u.indexOf('?')>=0?'&':'?')+'photo='+encodeURIComponent('g:'+j.pid)+'&_='+Date.now()).then(function(r){return r.json();}):Promise.resolve(null))
+          .then(function(o){ if(o&&o.ok&&typeof o.v==='string'&&o.v) return pPut(j.pid,o.v).then(function(){return o.v;}); return null; })
+          .catch(function(){return null;})
+          .then(function(d){ FA--; setTimeout(function(){delete FL[j.pid];},10000); j.res(d); pump(); });
+      })(FQ.shift());
+    }
+  }
+  function wrapGet(){
+    var g=window.getPhotoData; if(typeof g!=='function'||g.__drv) return;
+    var w=function(pid){ return Promise.resolve(g.apply(this,arguments)).then(function(d){ if(d||!remoteKnown(pid)) return d; return fetchFull(pid); }); };
+    w.__drv=1; window.getPhotoData=w;
+  }
+  wrapGet(); setInterval(wrapGet,2000);
+  function fillThumbs(root){
+    try{ (root.querySelectorAll?root:document).querySelectorAll('[id^="inc-ph-"] img, img[data-pid]').forEach(function(im){
+      if(im.getAttribute('src')) return;
+      var pid=im.getAttribute('data-pid'); if(!pid){ var p=im.closest('[id^="inc-ph-"]'); pid=p?p.id.slice(7):''; }
+      var t=pid&&thumbFor(pid); if(t) im.src=t;
+    }); }catch(e){}
+  }
+  try{ new MutationObserver(function(ms){ ms.forEach(function(m){ m.addedNodes.forEach(function(n){ if(n.nodeType===1) fillThumbs(n); }); }); }).observe(document.documentElement,{childList:true,subtree:true}); }catch(e){}
+  window.QCInc={getForSync:getForSync,apply:apply,refresh:refresh,scan:scan,metaFor:metaFor,noteRemote:noteRemote};
   var n=0,iv=setInterval(function(){ if(hook()||++n>40) clearInterval(iv); },250);
   setInterval(function(){ try{scan();}catch(e){} dot(); },5000);
   window.addEventListener('load',function(){ setTimeout(function(){ hook(); try{scan();}catch(e){} },3500); });
